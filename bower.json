@@ -1,5 +1,5 @@
 {
-    "name": "polymirage",
+    "name": "polymeraj",
     "version": "0.0.0",
     "authors": [
 	"Gregg Reynolds <gar@emobileink.org>"
@@ -9,7 +9,7 @@
     "main": "",
     "moduleType": [],
     "license": "BSD",
-    "homepage": "",
+    "homepage": "https://github.com/mobileink/polymeraj",
 
     "private": true,
     "dependencies": {

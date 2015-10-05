@@ -1,4 +1,4 @@
-(ns polymer.core)
+(ns polymeraj.core)
 
 (defn foo
   "I don't do a whole lot."

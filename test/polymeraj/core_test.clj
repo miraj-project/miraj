@@ -1,6 +1,6 @@
-(ns polymer.core-test
+(ns polymeraj.core-test
   (:require [clojure.test :refer :all]
-            [polymer.core :refer :all]))
+            [polymeraj.core :refer :all]))
 
 (deftest a-test
   (testing "FIXME, I fail."
