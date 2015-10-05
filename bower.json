@@ -1,0 +1,31 @@
+{
+    "name": "polymirage",
+    "version": "0.0.0",
+    "authors": [
+	"Gregg Reynolds <gar@emobileink.org>"
+    ],
+
+    "description": "",
+    "main": "",
+    "moduleType": [],
+    "license": "BSD",
+    "homepage": "",
+
+    "private": true,
+    "dependencies": {
+	"polymer": "Polymer/polymer#^1.1.4",
+	"iron-elements": "PolymerElements/iron-elements#^1.0.0",
+	"paper-elements": "PolymerElements/paper-elements#^1.0.1",
+	"platinum-elements": "PolymerElements/platinum-elements#^1.1.0",
+	"neon-elements": "PolymerElements/neon-elements#^1.0.0"
+    },
+
+    "ignore": [
+	"**/.*",
+	"node_modules",
+	"bower_components",
+	"src/main/webapp",
+	"test",
+	"tests"
+    ]
+}
