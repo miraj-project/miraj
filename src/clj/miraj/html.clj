@@ -3,14 +3,23 @@
             [clojure.string :as string]
             [clojure.pprint :as pp]))
 
-(defn- unroll
+(defn unroll
   [args]
-;;  (println "unrolling " args)
-  (string/join \newline
-    (for [arg args]
-      (if (string? arg)
-        arg
-        arg))))
+  (log/trace "unrolling " args (type args))
+  (let [result (cond
+                 (string? args)
+                 args
+
+                 (seq? args)
+                 (do (log/trace "nbr args: " (count args))
+                     (string/join "" (for [arg args] (str arg))))
+                                    ;; (do
+                                    ;;   (log/trace "ARG " arg (type arg))
+                                    ;;   (if (string? arg)
+                                    ;;     arg
+                                    ;;     (string/join \newline (str arg)))))))
+                 :else (throw (RuntimeException. (str "unexpected arg type: " (type args)))))]
+    result))
 
 (defn- make-attrs
   [attrs]
@@ -26,16 +35,21 @@
   [& args]
   (str "<style"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" (unroll (rest args)))
+      (let [unrolled (unroll (rest args))]
+        (log/trace "unrolled: " unrolled)
+        (str " " (make-attrs (first args)) ">" unrolled))
       (str ">" (unroll (first args))))
     "</style>"))
 
 ;; INLINE ELEMENTS
 (defn span
   [& args]
+  (log/trace "span: " args (count args))
   (str "<span"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" (unroll (rest args)))
+      (let [unrolled (unroll (rest args))] ; <- apply forces eval of lazy seq!
+        (log/trace "unrolled: " unrolled)
+        (str " " (make-attrs (first args)) ">" unrolled))
       (str ">" (unroll (first args))))
     "</span>"))
 
@@ -61,32 +75,33 @@
 
 (defn ul
   [& args]
-  (str "<ul"
+  (str \newline "<ul"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" \newline (unroll (rest args)))
-      (str ">" \newline (unroll args)))
+      (str " " (make-attrs (first args)) ">" (unroll (rest args)))
+      (str ">" (unroll args)))
     \newline "</ul>"))
 
 (defn li
   [& args]
-  (str "<li"
+  (log/trace "li " args)
+  (str "\n<li"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" (second args))
-      (str ">" (first args)))
+      (str " " (make-attrs (first args)) ">" (unroll (rest args)))
+      (str ">" (apply unroll args)))
     "</li>"))
 
 (defn dom-module
   [& args]
   (str "<dom-module"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" \newline (second args))
-      (str ">" args))
+      (str " " (make-attrs (first args)) ">" (unroll (second args)))
+      (str ">" (unroll args)))
     \newline "</dom-module>"))
 
 (defn template
   [& args]
-  (str "<template"
+  (str \newline "<template"
     (if (map? (first args))
-      (str " " (make-attrs (first args)) ">" \newline (unroll (rest args)))
+      (str " " (make-attrs (first args)) ">" (unroll (rest args)))
       (str ">" \newline (unroll args)))
     \newline "</template>"))
