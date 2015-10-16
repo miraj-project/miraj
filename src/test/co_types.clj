@@ -1,4 +1,4 @@
-(ns test.miraj
+(ns test.co-types
   (:require [miraj.core :refer :all]
             [miraj.html :as h :refer :all]
             [hiccup.page :refer [html5]]
@@ -14,9 +14,7 @@
             [cljs.env :as env])
   (:import [java.io StringReader]))
 
-(println "loading test.miraje")
-(log/trace "trace loading test.miraje")
-
+(log/trace "loading")
 
 (co-ns
   "dashboard"
@@ -52,7 +50,10 @@
 (println (h/span {:class "paper-font-body1"}
            "this is an " (h/i "important") " sentence."))
 
-(println (h/li (h/span {:class "paper-font-body1"}"{{item}}")))
+(println (h/li "foo"))
+
+(println (h/li (h/span {:class "paper-font-body1"}
+                       "{{item}}")))
 
 (println (h/ul {:foo 0 :bar 1}
            (h/li (h/span {:class "paper-font-body1"}"{{item}}"))
@@ -273,3 +274,64 @@
 ;;     </template>
 
 ;;   </template>
+
+
+(defmacro co-type  ;; or:  defwebtype?
+  [nm ctor & proto+mmaps]
+  ;; 1.  convert ctor to HTML + prototype map
+  ;; 2.  recur over proto+mmaps using cljs->js to get method def strings
+  ;; 3.  construct <dom-module> elt
+  ;; 4.  alter-var-root to attach fn returning dom-module
+
+  (let [ns *ns*
+        ctor (analyze-ctor ctor)  ;; convert ctor expr to js prop map + html
+        proto+mmap (partition 2 proto+mmaps)]
+    `(let [n# (def ~nm)] ;; ~args ~@body)]
+           val# (alter-var-root
+                      var#
+                      (fn [oldval#]
+                        [:head
+                         [:title ~docstr]
+                         [:meta {:charset "utf-8"}]
+                         [:meta {:name "description" :content ~docstr}]
+
+                         [:meta {:name "viewport",
+                                 :content
+                                 "width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes"}]
+
+                         ;; Web Application Manifest
+                         [:link {:rel "manifest" :href "manifest.json"}]
+
+                         ;; Chrome for Android theme color
+                         [:meta {:name "theme-color" :content "#2E3AA1"}]
+                         ;; Add to homescreen for Chrome on Android
+                         [:meta {:name "mobile-web-app-capable" :content "yes"}]
+                         [:meta {:name "application-name" :content "PSK"}]
+                         [:link {:rel "icon" :sizes "192x192"
+                                 :href "images/touch/chrome-touch-icon-192x192.png"}]
+
+                         ;; Add to homescreen for Safari on iOS
+                         [:meta {:name "apple-mobile-web-app-capable" :content "yes"}]
+                         [:meta {:name "apple-mobile-web-app-status-bar-style" :content "black"}]
+                         [:meta {:name "apple-mobile-web-app-title" :content (str ~docstr)}]
+                         [:link {:rel "apple-touch-icon" :href "images/touch/apple-touch-icon.png"}]
+
+                         ;; Tile color for Win8
+                         [:meta {:name "msapplication-TileColor" :content "#3372DF"}]
+                         ;; Tile icon for Win8 (144x144)
+                         [:meta {:name "msapplication-TileImage"
+                                 :content "images/touch/ms-touch-icon-144x144-precomposed.png"}]
+
+                         ;; Conventions
+                         [:link {:rel "stylesheet"
+                                 :href (str "styles/" (ns-to-path ~ns) ".css")}]
+                         [:link {:rel "import"
+                                 :href (str "themes/" (ns-to-path ~ns) ".html")}]
+                         ;; :href "styles/panels-theme.html"}] ;; {{project}}.css
+                         [:link {:rel "import" :href "styles/shared/style_modules.html"}]
+                         [:style {:is "custom-style" :include "shared-styles"}]
+                         [:script {:src "polymer/webcomponentsjs/webcomponents-lite.js"}]
+                         ~@reqs
+                         ]))]
+           var#))
+
