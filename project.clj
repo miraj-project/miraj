@@ -5,6 +5,8 @@
             :url "http://polymer.github.io/LICENSE.txt"}
   :source-paths ["src/clj"]
   :dependencies [[org.clojure/clojure "1.7.0"]
+                 [org.clojure/clojurescript "1.7.48"]
+                 [org.clojure/tools.analyzer.jvm "0.6.7"]
                  [org.clojure/tools.namespace "0.2.11"]
                  [hiccup "1.0.5"]
                  [org.clojure/tools.logging "0.3.1"]
