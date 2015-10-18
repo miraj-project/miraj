@@ -1,0 +1,77 @@
+# webtypes
+
+
+## syntax
+
+Option 1:
+
+[source,clojure]
+----
+(co-type my-list
+  (my-list
+    "MyList value constructor"
+    ^{:imports ["polymer/polymer/polymer.html"]
+                "styles/shared/style-modules.html"]
+      :require ["styles/shared/style-modules.html" :refer [my-style]]
+      :css ["foo.css"]
+      :js ["foo.js"]}
+    ;; Polymer prop descriptors:
+    ;;     type, default val, notify, readOnly, reflectToAttribute, observer, computed
+    [^{:type String, :default "Jones", :notify false, :read-only true, :attrsync true}
+     author
+     ^{:type Content, :default nil}
+     content]
+    (h/ul
+      (h/template {:is "dom-repeat" :items "{{items}}"}
+        (h/li (h/span {:class "paper-font-body1"}"{{item}}"))
+        (h/li :#special (h/span {:class "paper-font-body2"}"{{item}}"))
+        (h/li (h/span {:class "paper-font-body3"}"{{item}}"))
+        ))
+
+  MutationObservation ;; protocol based on MutationObserver http://www.w3.org/TR/dom/#mutationobserver
+  (author (fn [e] ...)) ;; instead of "observed" attr on "author" prop descriptor
+
+  Polymer.Gesture ;; gesture events protocol
+  (down (fn [this e] ...))
+  (up (fn [this e] ...))
+  (tap (fn [this e] ...)) ;; registers handler fn as listener for tap on the my-list elt
+  (tap (fn [#special e] ...)) ;; respond to tap event on elt with id "special"
+  (track (fn [e] ...))
+
+  DOM.Events ;; protocol
+
+  ;; behaviors are protocols
+  Polymer.PaperButtonBehavior
+  (active ...)
+  (disabled ...)
+  (toggle ...)
+  (addOwnKeyBinding ...)
+  (active ...)
+  )
+----
+
+ Alternative for protocol sections:
+
+[source,clojure]
+----
+(co-type my-list
+  ;;  ...
+  MutationObservation ;; protocol based on MutationObserver http://www.w3.org/TR/dom/#mutationobserver
+  {:author (fn [e] ...)} ;; instead of "observed" attr on "author" prop descriptor
+
+  Polymer.Gesture ;; gesture events protocol
+  {:down (fn [this e] ...)
+   :up (fn [this e] ...)
+   :tap (fn [this e] ...) ;; registers handler fn as listener for tap on the my-list elt
+        (fn [#special e] ...) ;; respond to tap event on elt with id "special"
+   :track (fn [e] ...)}
+  ;;  etc.
+  )
+----
+
+
+;;  (h/li :#special ...)  ==  (h/li {:id "special"} ...)
+
+  ;; instead of a listeners property, we use Protocols
+  ;; NOTE:  DEFINITIONS MUST BE CLOJURESCRIPT
+

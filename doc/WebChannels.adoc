@@ -1,0 +1,310 @@
+Web Channels
+============
+
+Here's how we declare webchannels:
+
+[source,clojure]
+----
+(ns foo.home)
+
+(defchannel root
+  "i am a docstring"
+  ^{:method :get
+    ;; below based on compojure-api
+    :path-params [x :- Long, y :- Long]  ;; e.g. "/foo/:x/:y"
+    :query-params [x :- Long, {y :- Long 1}] ;; e.g. "/foo/?x=1&y=2"
+    :form-params [x :- Long, y :- Long]      ;; how is this different from query-params?
+    :body-params [x :- Long, y :- Long]
+    :header-params [x :- Long, y :- Long]
+    :body     [body [{:hot Boolean}]]
+    :return long}
+    ["/"])  ;; route path
+----
+
+For every web channel there is a co-channel: put to a channel, take
+from a co-channel.  Co-channels have the same name as their channels
+with a ~ prefix.  So the form above explicitly declares web channel
+`root`, and web co-channel `~root`.
+
+This is because putting and taking are in fact sending and receiving.
+A process can send a message on a channel, but only a (remote)
+co-process can take that message off the channel.  A channel in a
+(server) process corresponds to a co-channel in a (client) co-process.
+So the server sends messages on channels, and the client receives them
+from the corresponding co-channel; the client sends messages on its
+channels, and the server receives them on the corresponding
+co-channels.
+
+== using web channels
+
+To use a channel:
+
+[source,clojure]
+----
+(go-web [req (<! root)]
+	(>! ~root "<h1>Hello World</h1>"))
+----
+
+This roughly corresponds to compojure's
+
+[source,clojure]
+----
+(defroutes app
+  (GET "/" [] "<h1>Hello World</h1>"))
+----
+
+But Compojure needs more than just this; the complete Hello World
+example reads:
+
+[source,clojure]
+----
+(ns hello-world.handler
+  (:require [compojure.core :refer :all]
+            [compojure.route :as route]
+            [ring.middleware.defaults :refer [wrap-defaults site-defaults]]))
+
+(defroutes app-routes
+  (GET "/" [] "Hello World")
+  (route/not-found "Not Found"))
+
+(def app
+  (wrap-defaults app-routes site-defaults))
+----
+
+Furthermore, this must be accompanied by configuration information in
+`project.clj`:
+
+[source,clojure]
+----
+  :ring {:handler hello-world.handler/app}
+----
+
+and to run this, a lein plugin:  `$ lein ring server`.
+
+To make web channels work we need to do something similar; see the
+Implementation section below.
+
+== REST apis
+
+
+To declare an API (i.e. a functionally coherent collection of
+web-channels), just put them all in a namespace and use them as
+follows:
+
+[source,clojure]
+----
+(go-web [req (<! root)]
+	(>! ~root "<h1>Hello World</h1>")
+
+	[req (<! admin)]
+	(>! ~admin "<h1>Hello Admin</h1>")
+
+	[req (<! admin-register)]
+	(>! ~admin-register "<h1>Hello Register</h1>")
+	)
+----
+
+We can send the api to a client by putting it to a web co-channel.
+the client can then examine it, display it as an HTML doc page, etc.
+
+This could be step one in a webapp on the server side: put the api on
+a co-channel, where it waits until a client takes it.  But it would be
+persistent, clients can take it as many times as they like.
+
+On the server side, putting an api on the ~main co-channel would have
+as a side effect doing a take on the main channel.  In other words,
+you put the api in the channel, then wait for requests.  But once you
+put stuff on a channel, you don't do anything else; the stuff just
+waits in the channel for a taker.  And since the taker will be some
+other co-process, the putting process does not need to take anything.
+
+But under the covers, putting an api on a ~main co-channel at startup
+must translate into a take on the main channel, i.e. a GET route at
+that URI, because the mechanism that makes the client take on the
+channel is just the HTTP request handling mechanism.  With core.async
+it is the runtime that is responsible for implementing the put/take
+mechanism; in a webapp, it must be implemented using http request
+handlers etc.  So a task is to hide this behind a core-async-like API;
+under the covers, our lib will have to setup up routes, handlers, etc.
+
+== implementation
+
+A `go-web` block is like a `go` block.  But instead of creating a
+thread in the local process, it coordinates with a remote co-process.
+
+A take expression `<!` in a go-web block will be translated into the
+clojure code necessary to handle incoming HTTP requests; for example,
+the above `root` example might translate into the Compojure code
+listed above.
+
+To make go-web work, we need to translate go-web blocks into code that
+handles incoming HTTP requests - possibly using `compojure` or `ring`,
+but those are not the only options.  Then we need a dispatch mechanism
+that will route the incoming request to the correct handler, based on
+URL.  Compojure does this by wrapping all handlers into a single
+handler chain, which is passed to the server startup code as the One
+True Handler for the app.
+
+Note that `ring` is only about packaging HTTP requests and responses
+in Clojure maps, on the one hand, and the user-defined functions that
+handle requests and generate responses.  It does not address "routing"
+- i.e. dispatch of requests to the appropriate handler.  The
+documentation for Ring shows only how to define a single handler and
+pass it to the server startup code.  This means the single handler
+will deal with any and all requests - to use different handlers for
+different requests, the user would have to implement some kind of
+dispatch mechanism, such as one that selects a handler based on the
+:uri field of the incoming request.
+
+This dispatch (routing) problem is what Compojure addresses.  What
+Compojure calls a "route" is effectively a predicate-handler pair:
+requests that satisfy the predicate of a handler will be sent to it
+for handling.
+
+But the doc says "[compojure r]outes return Ring handler functions".
+Note that a "Ring handler function" is just a function that takes a
+Ring HTTP request map and knows what to do with it; that is, "Ring
+handler function" means "function that handles Ring request maps".
+
+But since a Compojure route is a predicate/handler pair, it is not
+quite accurate to say that "routes return Ring handlers".  You do not
+_apply_ Compojure routes; you use their predicates to test incoming
+requests, and if they satisfy the predicate, you apply the
+corresponding handler to the request.  The docs say "Compojure uses
+the compojure.core/routes function to combine routes. Each route is
+attempted in order, until a route is found that returns a non-nil
+response to the request."  Here "attempted in order" means that the
+predicates of the routes are tested in order until one is satisfied by
+the request.
+
+The key implementation function is `make-route`, which "[r]eturns a
+  function that will only call the handler if the method and path
+  match the request", in other words, if the request satisfies the
+  predicate of the route.  The arguments to `make-route` are method
+  (e.g. :get, :put, etc.), a path (i.e. path portion of request URI),
+  and a handler (function that handles Ring request maps).
+
+The dispatcher for Compojure is the function `routing`.  The selection
+mechanism used by `routing` to dispatch the request is `(some #(%
+request) handlers))`.   But notice that "handlers" is the wrong name
+here; it should be "routes".  *Caveat:* Compojure is slightly
+off-kilter in its function names and docstrings; it sometimes uses the
+term "handler" to refer to what is in fact a "route" - a
+predicate/handler pair.
+
+Miraj needs to do something similar.  The basic requirements are:
+
+* Support ability to associate a "handler" with a web channel
+
+* Design and implement a request dispatch mechanism that:
+
+** selects a channel for every incoming request
+
+*** web channels are identified by their URI, so channel selection is
+    primarily determined by request URI
+
+** selects a handler for every selected channel
+
+*** the channel is selected by URI, but additional information in the
+    message may be used to drive selection of a handler
+
+*** for example, the request method is represented as a datum in the
+    message, and may be used to select a handler
+
+Example: given channel :foo with path "/foo", we can define both a
+:get handler and a :put handler for messages arriving on :foo.
+
+Syntactically, to associate a handler with a channel we need to
+specify the channel, the handler (function), and a predicate, just
+like compojure; the difference is that the predicate will not involve
+the URI (since the channel already selects for URI). So we need
+something like this:
+
+[source,clojure]
+----
+(defchannel foo ["/foo"])
+(go-web [req (<! foo :get)] get-foo-handler
+	[req (<! foo :put)] put-foo-handler
+----
+
+Here :get and :put are effectively sugared forms of a filter.
+
+This would work fine for the :method datum; but a truly general
+solution should make it easy to specify more complex predicates.  For
+example, if we have path parameters (like "/personnel/:dept/:id") we
+might want to have different handlers for different departments.  In
+that case, we want to dispatch based on the :dept path param (in
+addition to the :method datum).  A possble syntax:
+
+[source,clojure]
+----
+(defchannel foo ["/foo"])
+(go-web [req (<! foo :get
+	     	     (= "accounting" (-> :path-parms :dept)))]
+		     get-foo-accounting-handler
+(go-web [req (<! foo :get
+	     	     (= "engineering" (-> :path-parms :dept)))]
+		     get-foo-engineering-handler
+
+;; or maybe use the :dept value directly:
+(go-web [req (<! foo :get)]
+	(get-foo-dept-hander (-> req :path-parms :dept)))
+;; which assumes that get-foo-dept-handler is a multi-method with appropriate dispatch
+----
+
+Actually, Clojure's multi-methods already solve this problem, so we do
+not need to implement a fancy dispatch mechanism for web channel.
+Support for http :method dispatching is enough.  Well, even for that
+we could use multi-methods:
+
+[source,clojure]
+----
+(defchannel foo ["/foo"])
+
+(defmulti foo-handler :request-method)
+(defmethod foo-handler :get ...)
+(defmethod foo-handler :put ...)
+
+(go-web [req (<! foo)] (foo-handler req))
+
+;; even better!
+(go-web (foo-handler (<! foo)))
+----
+
+Here the defmulti dispatcher is a keyword, `:request-method`; this is
+enough, since keywords are functions, and :request-method is one of
+the standard keys in every Ring request map.
+
+=== Differences from Compojure
+
+* Compojure combines method, URI, and handler in the form of a
+  "route", and uses method and URI to drive dispatch.  The web channel
+  approach keeps these elements separate and lacks the concept of
+  "route".  It treats the URI as a channel identifier, and uses
+  message content to drive dispatch.
+
+* Compojure apps commonly use `routes` or `defroutes` to combine
+  routes in a single list, which is examined by the dispatcher.  Web
+  channels do not need to be aggregated syntactically in this way.
+  You can define web channels anywhere, and you can put go-web blocks
+  with web-channel send/receive anywhere.  The implementation will
+  take care of organizing things.
+
+* Web channels may be extended to support push apis (websockets, etc.).
+
+* Web channels can support genuine co/go-routine like semantics.  That
+  is, the ability to yield to a remote process, and then resume where
+  the yield occured.  Maybe.  I'm just guessing.
+
+
+=== co-routine support
+
+The idea is that either side can "yield" to the other side, and then
+"resume" when the other side in turn yields.
+
+This will involve sessions in some way.
+
+== misc
+
+* web chan expressionsa are macros - compile time only?  not necessarily?
+
