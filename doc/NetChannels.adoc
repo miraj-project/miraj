@@ -1,7 +1,10 @@
-Web Channels
+Net Channels
 ============
 
-Here's how we declare webchannels:
+
+== setting up netchannels
+
+Here's how we declare netchannels:
 
 [source,clojure]
 ----
@@ -21,10 +24,10 @@ Here's how we declare webchannels:
     ["/"])  ;; route path
 ----
 
-For every web channel there is a co-channel: put to a channel, take
+For every net channel there is a co-channel: put to a channel, take
 from a co-channel.  Co-channels have the same name as their channels
-with a ~ prefix.  So the form above explicitly declares web channel
-`root`, and web co-channel `~root`.
+with a ~ prefix.  So the form above explicitly declares net channel
+`root`, and net co-channel `~root`.
 
 This is because putting and taking are in fact sending and receiving.
 A process can send a message on a channel, but only a (remote)
@@ -35,13 +38,13 @@ from the corresponding co-channel; the client sends messages on its
 channels, and the server receives them on the corresponding
 co-channels.
 
-== using web channels
+== using net channels
 
 To use a channel:
 
 [source,clojure]
 ----
-(go-web [req (<! root)]
+(go-net [req (<! root)]
 	(>! ~root "<h1>Hello World</h1>"))
 ----
 
@@ -81,19 +84,19 @@ Furthermore, this must be accompanied by configuration information in
 
 and to run this, a lein plugin:  `$ lein ring server`.
 
-To make web channels work we need to do something similar; see the
+To make net channels work we need to do something similar; see the
 Implementation section below.
 
 == REST apis
 
 
 To declare an API (i.e. a functionally coherent collection of
-web-channels), just put them all in a namespace and use them as
+net-channels), just put them all in a namespace and use them as
 follows:
 
 [source,clojure]
 ----
-(go-web [req (<! root)]
+(go-net [req (<! root)]
 	(>! ~root "<h1>Hello World</h1>")
 
 	[req (<! admin)]
@@ -104,7 +107,7 @@ follows:
 	)
 ----
 
-We can send the api to a client by putting it to a web co-channel.
+We can send the api to a client by putting it to a net co-channel.
 the client can then examine it, display it as an HTML doc page, etc.
 
 This could be step one in a webapp on the server side: put the api on
@@ -129,15 +132,15 @@ under the covers, our lib will have to setup up routes, handlers, etc.
 
 == implementation
 
-A `go-web` block is like a `go` block.  But instead of creating a
+A `go-net` block is like a `go` block.  But instead of creating a
 thread in the local process, it coordinates with a remote co-process.
 
-A take expression `<!` in a go-web block will be translated into the
+A take expression `<!` in a go-net block will be translated into the
 clojure code necessary to handle incoming HTTP requests; for example,
 the above `root` example might translate into the Compojure code
 listed above.
 
-To make go-web work, we need to translate go-web blocks into code that
+To make go-net work, we need to translate go-net blocks into code that
 handles incoming HTTP requests - possibly using `compojure` or `ring`,
 but those are not the only options.  Then we need a dispatch mechanism
 that will route the incoming request to the correct handler, based on
@@ -194,13 +197,13 @@ predicate/handler pair.
 
 Miraj needs to do something similar.  The basic requirements are:
 
-* Support ability to associate a "handler" with a web channel
+* Support ability to associate a "handler" with a net channel
 
 * Design and implement a request dispatch mechanism that:
 
 ** selects a channel for every incoming request
 
-*** web channels are identified by their URI, so channel selection is
+*** net channels are identified by their URI, so channel selection is
     primarily determined by request URI
 
 ** selects a handler for every selected channel
@@ -223,7 +226,7 @@ something like this:
 [source,clojure]
 ----
 (defchannel foo ["/foo"])
-(go-web [req (<! foo :get)] get-foo-handler
+(go-net [req (<! foo :get)] get-foo-handler
 	[req (<! foo :put)] put-foo-handler
 ----
 
@@ -239,21 +242,21 @@ addition to the :method datum).  A possble syntax:
 [source,clojure]
 ----
 (defchannel foo ["/foo"])
-(go-web [req (<! foo :get
+(go-net [req (<! foo :get
 	     	     (= "accounting" (-> :path-parms :dept)))]
 		     get-foo-accounting-handler
-(go-web [req (<! foo :get
+(go-net [req (<! foo :get
 	     	     (= "engineering" (-> :path-parms :dept)))]
 		     get-foo-engineering-handler
 
 ;; or maybe use the :dept value directly:
-(go-web [req (<! foo :get)]
+(go-net [req (<! foo :get)]
 	(get-foo-dept-hander (-> req :path-parms :dept)))
 ;; which assumes that get-foo-dept-handler is a multi-method with appropriate dispatch
 ----
 
 Actually, Clojure's multi-methods already solve this problem, so we do
-not need to implement a fancy dispatch mechanism for web channel.
+not need to implement a fancy dispatch mechanism for net channel.
 Support for http :method dispatching is enough.  Well, even for that
 we could use multi-methods:
 
@@ -265,10 +268,10 @@ we could use multi-methods:
 (defmethod foo-handler :get ...)
 (defmethod foo-handler :put ...)
 
-(go-web [req (<! foo)] (foo-handler req))
+(go-net [req (<! foo)] (foo-handler req))
 
 ;; even better!
-(go-web (foo-handler (<! foo)))
+(go-net (foo-handler (<! foo)))
 ----
 
 Here the defmulti dispatcher is a keyword, `:request-method`; this is
@@ -278,21 +281,21 @@ the standard keys in every Ring request map.
 === Differences from Compojure
 
 * Compojure combines method, URI, and handler in the form of a
-  "route", and uses method and URI to drive dispatch.  The web channel
+  "route", and uses method and URI to drive dispatch.  The net channel
   approach keeps these elements separate and lacks the concept of
   "route".  It treats the URI as a channel identifier, and uses
   message content to drive dispatch.
 
 * Compojure apps commonly use `routes` or `defroutes` to combine
-  routes in a single list, which is examined by the dispatcher.  Web
+  routes in a single list, which is examined by the dispatcher.  Net
   channels do not need to be aggregated syntactically in this way.
-  You can define web channels anywhere, and you can put go-web blocks
-  with web-channel send/receive anywhere.  The implementation will
+  You can define net channels anywhere, and you can put go-net blocks
+  with net-channel send/receive anywhere.  The implementation will
   take care of organizing things.
 
-* Web channels may be extended to support push apis (websockets, etc.).
+* Net channels may be extended to support push apis (netsockets, etc.).
 
-* Web channels can support genuine co/go-routine like semantics.  That
+* Net channels can support genuine co/go-routine like semantics.  That
   is, the ability to yield to a remote process, and then resume where
   the yield occured.  Maybe.  I'm just guessing.
 
@@ -306,5 +309,5 @@ This will involve sessions in some way.
 
 == misc
 
-* web chan expressionsa are macros - compile time only?  not necessarily?
+* net chan expressionsa are macros - compile time only?  not necessarily?
 
