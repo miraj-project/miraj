@@ -1,0 +1,331 @@
+functions considered harmful
+============================
+
+abstract: in practical computing, the standard mathematical notion of
+function gets in the way of a more general notion of computation based
+on the core concepts of interaction and behavior.  Milner: "Every
+basic model [of computation] rests upon a small number of primitive
+notions; the pi-calculus [of communicating and mobile systems] rests
+upon the primitive notion of _interaction_, just as Turing machines
+and register machines rest upon the notion of reading and writing of a
+storage medium, and just as recursive equations and the lambda
+calculus rest upon mathematical functions." (p. 77) In this document I
+argue that in practical computing the notion of function (esp. "pure"
+function) is over-emphasized, especially wrt functional languages, and
+should be replaced (or at least complemented) by a notion of
+_co-function_ based on Milner's (and other thing/co-thing) work.
+Mathematical functions are fine in theoretical _models_ of
+computation, but in real-world computational systems there are no
+genuine functions, only approximations of functions, and
+non-functional operations probably outnumber them.  I discuss a number
+of popular myths regarding functions in programming (the Myth of Pure
+Functions, the Myth of Functional IO) I argue further that a notion of
+co-function based on an interactional structure pairing activation and
+observation is actually more fundamental than the notion of function;
+physical functions (practical approximations to mathematical
+functions) can be explicated in terms of co-functions, but not
+vice-versa.  The practical implications of this shift are significant;
+a clean and simple notion of co-function leads to more transparent and
+simpler code in many situations, especially those involving unreliable
+communication channels (networking, serial ports, etc.)  Finally, I
+give some examples in Clojure, whose core.async can be viewed as a
+(partial) practical implication of the concepts discussed here.
+
+There are no functions in real-world computation.  With a little
+thought this should be obvious: real-world computers are finite, so it
+is not possible even in principle for them to compute infinite
+functions.  They best we can do with them is _approximate_ genuine,
+mathematical functions.  Well, _computable_ mathematical functions, of
+course.
+
+Infinity is not the only problem.  Functions computed by real-world
+machines - we'll call them _physical_ functions, in contrast to
+_mathematical_ functions - are always, ineluctably, unreliable.  That
+is, the physical computation itself will always be unreliable, even if
+the mathematical function it models is not.  Machines have defects;
+they break; they can be used incorrectly.  We can never be 100%
+certain that a given machine will compute correctly, simply because it
+is not possible to build a perfect machine; again, the best we can do
+is approximate a perfect machine, by engineering one whose correct
+functioning is very likely.
+
+Even if we have - as we do - very reliable machines, program
+  translation is another source of uncertainty.  In practice program
+  translation - compilation - is an essential step in machine building
+  (programming).  It is inconceivable that the complex software we use
+  today could be built without it.  But like physical machines,
+  compilers can never be 100% reliable.  We can try to formally prove
+  their correctness, but this just moves the problem: the tools we use
+  to prove the correctness of a compiler must themselves be proven
+  correct, so we inevitably enter an infinite regress.  Again the best
+  we can do is approximate proof by minimizing uncertainty.
+
+It follows that all physical functions -- the "functions" we define
+and use in programming languages -- are in fact black box devices:
+function-like, perhaps, but ultimately a very different kind of beast.
+This is true even if their source code is available for inspection and
+verification, for the reasons adduced above.  If we do have the source
+code, we can greatly reduce our uncertainty by inspecting it and
+convincing ourselves it is correct, but we can never eliminate it
+altogether.  If we do not have the source code then the only means at
+our disposal for reducing uncertainty is _observation_.
+(Documentation?  Faugh!)  This applies not only to closed-source
+libraries but also to devices that may be represented in software,
+such as serial ports, IO peripherals, sensors we may try to read, etc.
+Lacking direct evidence of their meaning (via inspection of their
+internals) and therefore deductive proof of their correctness, we have
+no choice but to rely on inductive reasoning: use them, observer the
+results, and drawn inferences as to their meaning and use.  The notion
+of behavior observation is the critical point of contrast with the
+concept of function.  As will become clear in what follows, it allows
+us to subsume the notion of a physical function under a more general
+concept that also covers interactivity and thus many of the critical
+real-world problems associated with distributed, parallel, concurrent,
+etc. computing.
+
+A third problem - call it the Myth of the Pure Function - is that
+physical functions _always_ have side effects.  At the very least,
+they consume time, space, and energy.
+
+That the notion of a function in real-world computing is a fiction
+should be obvious, perhaps to the point of triviality; but I argue
+that it is in fact harmful, insofar as it distracts us from another,
+better model of real-world computing.
+
+A co-function is a black box.  Its internal state and computational
+processes are completely hidden; we can only do two things with it:
+_activate_ it, and _observe_ it.
+
+A (physical) function can be viewed as a co-function whose associated
+algorithm (implementation) and activate/observe mechanisms are
+reliable.
+
+To see this, think about what happens when we "call" a function in a
+programming language.
+
+[source,clojure]
+----
+(defn f [n] (* 2 n))
+(def result (f 2))   ;; => 4 bound to `result`
+----
+
+This form is intuitive enough, but it leaves several critical bits of
+logic implicit.  One is the _application_ of f to its argument a;
+another the _assignment_ (or binding, if you prefer) of the result of
+the application to the symbol `result`.  We can use pseudo-code to
+make these explicit:
+
+[source,clojure]
+----
+;; infix notation:
+(def result bind (apply f a))
+;; prefix notation
+;; bind binds the value of its second arg to its first, then returns the first
+(def (bind result (apply f a)))
+----
+
+Readers familiar with core.async will recognize the `<!` symbol; the
+choice is intentional for reasons that will become evident, but here
+the symbol should _not_ be interpreted as `core.async/<!`.
+
+As an aside: of course, this does not cleanse our form of implicit
+meanings; `bind` and `apply` must themselves be "applied", and the
+operators that carry out that second level of application must
+themselves be applied at a third level, and so on ad infinitum.  There
+is no way even in principle to make the semantics of such a form 100%
+explicit.  But that's not a problem because for our purposes we just
+want to make the first level apply/assign operations explicit.
+
+So this is a little more clear; we've explicitly indicated two of the
+operations implicit in function application.  We can think of `bind` and
+`apply` as meta-operations made explicit - they represent operations
+the runtime environment is reponsible for carrying out.  By making
+them explicit we move them from the meta level into our object
+language.
+
+A third implicit bit involves the notion of function _evaluation_.
+This involves the usual lambda calculus stuff like substituting the
+value of `a` for the bound variable `n` in the definition body of f,
+and then _reducing_ f to normal form.  But that's not all; to see how
+the notion of function relates to that of co-function we need to focus
+on how the whole process gets kicked off and how it ends.
+
+Let's start with an obvious observation: the `apply` operator will
+have to deliver `a` to `f`; how this actually happens will of course
+be implementation-dependent, but conceptually it's something any
+`apply` must do.  Symmetrically, `f` must be prepared to "accept" the
+value of `a` as its argument before it can proceed with computation.
+Let's call this operation as a whole "argument delivery".
+
+*TODO* the critical point is that f must _take_ its argument, not
+ passively receive it.  This, to establish isomorphism with the
+ action-reaction structure of cooperating concurrent processes.
+
+A final bit of implicit logic concerns `bind`; we'll call this operation
+"result delivery".  As in the case of `apply`, we can break down the
+operation of `bind` into several conceptual pieces.  First, the `bind`
+operator must be prepared to "accept" the value of its (second)
+argument - the value of `f` at `a` (the result of evaluating `f` at
+`a`) just as `f` must be prepared to accept the value of _its_
+argument.  That implies that `bind` is like `f` - function-like, but not
+a function, since it has the side-effect of binding its second
+argument to its first.  Second, like `apply`, `bind` must make a
+delivery.  `apply` delivers its second argument to its first argument;
+`bind` delivers _its_ second argument to its first argument.
+
+Note that we here treat the first argument to `bind` as a function.
+This is in rather stark contrast to the usual practice of treating as
+a symbol to which the result of the computation will be bound.  But
+arguably it is more sensible and indeed simpler to treat it as a kind
+of nullary, self-evaluating function:
+
+[source,clojure]
+----
+(defn' result [res] (fn [] res))
+----
+
+Here we use `defn'` to indicate that this is just like any other
+function definition except that syntactically the defined function is
+self-evaluating - you get its value by writing `result` rather than
+`(result)`.  (We can think of all constant symbols, like '3', as
+predefined functions of this kind).
+
+The advantage of this is that it allows us to do away with the
+somewhat mysterious notion of binding the result of a function to a
+symbol.  Our "result delivery" operation `bind` is thus a high-level
+function just like any other: it applies its first argument to its
+second.  Which is exactly what `apply` does.  We've ended up with a
+perfectly symmetrical explicitation of function application.  The
+beauty of this is that it also matches exactly the structure of
+_interactional computation_ involving concurrent sequential processes.
+
+But the problem is that we have just entered into a vicious circle.
+We don't want `apply` to "apply" anything; we want to understand what
+`apply` means, and we cannot do that but just appealing to the
+selfsame concept.  "It applies stuff" is not a good answer to the
+question "what does `apply` do?"  Ditto for `bind`.
+
+Key observations:
+
+* body of a defn is a template
+
+* the beginning of wisdom is to always think of fns as devices; we
+  don't "apply" devices to input, we configure them (set them up) and then
+  activate them
+
+* "apply a function to an arg" is *not* synonymous with "evaluate a function at a value".
+
+** "apply a function to an arg" means _make_ delivery of arg to fn, then _activation_ of fn (qua device)
+
+** "eval a function at a value" is (arguably) what you do _after_ you have taken delivery of an arg and completed alpha conversion of the body template.
+
+** "bind result to sym" means to _observe_ result, _take_ delivery of
+   it - which means symmetrically that the fn makes (co-)delivery of result
+   to observer, then (co-)activates observer
+
+* activate = make delivery, observe = take delivery
+
+** we want to discard notion of delivery, since it implies messaging,
+   which breaks the fiction of quantum entanglement, simultaneous
+   activation/observation.  instead: we _use_ arg to activate, and we
+   observe arg/result
+
+** to activate a fn using arg is to be observed (but it is the arg
+   that is observed); to observe an arg or result is to be activated
+
+** activation must be limited to deliverying arg/result, since we
+   cannot act at a distance. so arg delivery presents arg for
+   observation; observation is activation (to observe is to be
+   affected by the thing observed?)
+
+* traditionally: we call a function, and then get/wait for its result.
+  here: we activate function, then observe, waiting for it to activate
+  us with result.  a fn return is a (co-)call back to the callee as
+  co-fn.  remember fns have entry points; to call a fn is to start it
+  at the beginning; for a fn to to co-call a callee is to resume it
+  just after the call site
+
+* caller and callee are mutual activators/observers - to activate is to be observered, and to observe is to be activated
+
+* application involves more than just the lambda rules (its not eval, it doesn't handle conversion, reduction, etc.)
+
+* apply may be viewed as overhead - a process that is distinct from the eval process
+
+* ditto for bind
+
+* insofar as bind is a kind of function like apply, same
+  considerations apply - it does not mean evaluate
+
+* apply/bind mutually implicated: to apply f to a, f must bind (take) a; to
+  bind (f a) (i.e. result of evaluating f at a) to result, `bind` must
+  apply (f a) to result, which must bind (take) it.
+
+* in sum: apply and bind are symmetric, same thing in opposite
+  directions: put arg to f, which must take it
+
+* summary:  replace apply/bind with make/take
+
+* make/take is symmetric across cooperating processes;
+
+So we're not done.  Both `apply` and `bind` actually involve two parts.
+Think of apply as activation of a remote device, and `bind` as
+observation of the device's behavior.  Now the device is remote, so a
+local `apply` can have no direct effect on it.  The fiction is that
+the remote device observes the activation action and responds
+appropriately.  So we have activation-observation pairs _between_
+processes, not within.  The one side does not observe _its own_
+behavior, it observe's its partner's behavior.  To make the fiction of
+action-at-a-distance convincing, we need a communication mechanism,
+one the one hand, and we need the corresponding activation-observation
+operations with respect to that channel.  So if A activates (puts to
+the channel), then B observes (takes from the channel).
+
+Translated to function application as a special case, this means that
+the function implementation must _take_ its argument, just as a remote
+device must take input from the comm channel.  IOW, we can think of
+the operation of `apply` as relying on a channel mechanism.
+
+
+== put and take
+
+put and take are not functions.  they are io ops.
+
+The difference between the interaction-oriented view and the
+functional view comes out clearly if we compare them using a very
+basic operation.
+
+(defn dbl [a] (* 2 a))
+
+Here we can inspect the code and convince ourselves that it does
+indeed double its argument; we use deductive logic to do this.  So
+when we use the function we do not need to "observe" anything; the
+result just *is* what the application denotes.
+
+But suppose we didn't have the source code; all we have is a black
+box.  How would we know what it does?  We cannot use deductive logic,
+since we cannot inspect the source; the best we can do is use
+inductive logic: run a suitable selection of test cases through the
+black box and draw an inference as to the meaning of its operation,
+based on its behavior.  Here the key notion is _observation of
+behavior_: we operate the black box and observe the resulting
+behavior.  Note that ordinary function application does not involve
+observation in this sense; _we_ can observe the result - the value of
+the function - but this kind of observation is not explicitly
+expressed by the code itself.  With interactional computation we make
+it explicit:
+
+[source,clojure]
+----
+;; hidden:
+(def black-box (chan))
+(go (while true (let [arg (<! black-box)] (>! black-box (dbl arg)))))
+;; exposed:
+(>!! black-box 2)
+(let [result (<!! black-box)]
+     (println "result: " result))
+----
+
+Here `(<!! black-box)` counts as making an observation; you can think
+of `(>!! black-box 2)` as applying a stimulus.  Rather than "calling"
+a "function" - we don't know if dbl is a function or not - we treat
+this as performing a kind of behavioristic, Pavlovian experiment.
