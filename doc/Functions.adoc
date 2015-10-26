@@ -285,6 +285,79 @@ the function implementation must _take_ its argument, just as a remote
 device must take input from the comm channel.  IOW, we can think of
 the operation of `apply` as relying on a channel mechanism.
 
+== fictions and myths
+
+* The Myth of Pure Functions
+
+* The Mathematical Fiction
+
+** Function computation is instantaneous, or more accurately,
+   atemporal. `(def x (dbl 2))` and `(def x 4)` are synonymous.
+
+** Function application is atomic
+
+** Principle of Semantic Conservation - "pure" functions do not change
+   the meaning of the text: the symbols have the same denotation
+   "before" and "after" the function call.  This obviously rules out
+   "imperative" functions that, for example, change global variable
+   values.  But it also rules out coroutines - they change system
+   state, because yielding changes the entry point of the routine.
+   "Pure" functions do not do this - they only ever have one entry
+   point, so the next time they are called they behave the same way.
+   Co-routines, by contrast, may have different entry points the next
+   time they are called.  (Don't be fooled by special syntax in your
+   favorite programming language - for example, "resume" in Lua really
+   just means "call", without the sense of "start at the beginning
+   (main) entry point of the function".  In other words, the implicit
+   assumption is that the function knows where to start, and that may
+   be different on different occassions, but the client doesn't have
+   to know that - it just calls the function and the function knows
+   what to do.
+
+The Mathematical Fiction is that our physical functions are "pure"
+mathematical functions.  So a function application expression is _ipso
+facto_ equal to - the same as - the value of the expression, that is,
+such an expression is by definition the same as its normal (reduced)
+form.
+
+A second, related aspect of the Mathematical Fiction is that function
+calls are atomic.  Calling a function and "getting" its result amount
+to the same thing.
+
+The interactionist model of computation replaces (or perhaps augments)
+the Mathematical Fiction with a fiction from physics: quantum
+entanglement.  Activation and observation are treated as symmetric
+aspects of a single system state; the key fiction is that these
+aspects are _not_ linked by any causal mechanism.
+
+So interactionist computation breaks the atomicity of function
+appliction into two distinct actions: activation and observation.  It
+reifies the caller of the function as well as the function, as
+distinct aspects of a single system.  The actual mechanisms involved
+in an expression like `let x = sqrt(4)` are glossed over.  This works
+just fine for an isolated, offline, non-interactive system, but not
+for online, interactive systems.
+
+Howerer, the interactionist model retains the Mathematical Fiction
+with respect to function evaluation; but evaluation only occurs on one
+side of the entanglement.  It's just the mechanisms involved in
+calling a function are receiving are result that are reorganized and
+reconceptualized by the interactionist model.
+
+Caveat: activation-observation pairs are on opposite sides of the
+entanglement.  So activation of a function by the client is entangled
+with the corresponding observation by the server; it is _not_
+entangled with observation, by the client, of the result of the
+function.  Entanglement of client activation of a function and client
+observation of a result is the standard interpretation described
+above: the Mathematical Fiction of the atomicity of function
+application.  Under the interactionist model, client observation is
+entangled, not with client observation, but with server activation.
+So "calling" a function under the interactionist model involves a pair
+of (oriented) entanglements: one entangles client activation and
+server observation, the other entangles server activation and client
+observation.
+
 
 == put and take
 
@@ -329,3 +402,84 @@ Here `(<!! black-box)` counts as making an observation; you can think
 of `(>!! black-box 2)` as applying a stimulus.  Rather than "calling"
 a "function" - we don't know if dbl is a function or not - we treat
 this as performing a kind of behavioristic, Pavlovian experiment.
+
+= co-routines
+
+Another metaphor: throw an activation, catch an observation.  See the
+chapter on co-routines in Lua manual: a yield far down in the call
+stack of a resumed coroutine effectively "throws" control back to the
+whatever called resume, but it's a boomerang throw, or a yo-yo, a throw with a
+string attached so that the next resume will pick up the continuation
+after yield.
+
+Lua's co-routines are not really asymmetric; on the contrary, resume
+and yield are perfectly symmetric.  Resume means co-yield, and yield
+means co-resume.  Or more accurately, each means "yield here and
+resume there".  But the natural language semantics of the words
+obscures that fact; "yield" suggests only that the thread is
+surrendering control, with no explicit indication as to where control
+ought to resume.
+
+We can think of every routine as having an implicit "current
+continuation" variable.  Think of it in terms of instruction pointers.
+We always have an IP pointing at the next instruction to execute; that
+is, from the perspective of the routine, the "current" continuation.
+But once execution of that instruction has begun, the cc becomes the
+following instruction.  In other words, from the perspective of the
+routine, the IP instruction is the cc; but from the perpective of the
+IP instruction itself, the following instruction is the cc.  So we can
+reify this as a "Continuation Pointer" to complement "instruction
+Pointer", and just call it the cc.
+
+Or maybe we don't need a CP; an IP is enough.  The IP always points at
+the cc instruction.  So long as we stipulate that execution of the IP
+instruction and incrementation of the IP go together this will work.
+Or, we can keep one IP, but call it the current continuation
+instruction pointer (CCIP)?  Parsed "current [continuation
+instruction] pointer", counting every instruction as equivalent to a
+continuation, a proxy for "the rest of the computation", i.e. the head
+of a list of instructions rather than a single isolated instruction.
+So the CCIP is to be thought of as pointing to the head of a list
+rather than to a particular instruction.
+
+
+Co-routines also implicitly retain (as part of their state), a
+"co-CP", which is equal to the CP of the routine from which they were
+resumed.  When they yield, they transfer control to that co-CP
+instruction, which is in their co-routine.
+
+So we can make all of the semantics quite explicit at a conceptual
+level with a few simple reifications.
+
+goblocks allow us to implement event-driven structures without
+callbacks.  that's because gochannels act as intermediaries - we never
+"call" co-functions directly, we only activate them.  We never observe
+them directly either; what we observe is behavior, mediated via a
+gochannel.
+
+Co-functions oberve and behave.  To "call" a co-function is to behave
+such that the co-function may observe the activation; to "return" is
+to behave in such a manner that the co-function may observe the
+result.
+
+So observation and behavior always involve a pair of actions, one by
+each party.  This gives us two options for each action: we can wait
+for the co-function to execute the paired action, or we can move on
+without waiting.  For example, when we activate a co-function, the
+interaction is complete only when both actions complete - our
+activation plus the co-function's observation of the activation.  With
+standard, single-threaded functions, this is a monolithic, atomic
+event: call the function, then wait for its result.  Multithreading
+allows us to decouple these actions by using callbacks - call the
+function, passing a callback, and then continue without waiting for
+the function result.
+
+When activating a co-function, we do not have the option of waiting
+for the result; observation is a separate action.  But we do have the
+option of waiting or not for the activation to be observed by the
+co-function.  The situation is analogous to a communications protocol
+where a sender may or may not wait for an ACK before proceeding with
+its own work.
+
+When observing, we have the option of waiting for the observation or
+moving on and trying again later.

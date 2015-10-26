@@ -1,6 +1,297 @@
 Net Channels
 ============
 
+*FIXME:* we should follow the pi calc, and shun the idea of channels
+ in favor of instantaneous/simultaneous interactions (quantum
+ entaglement?)
+
+The concept of a netchannel represents an application protocol one
+layer above the HTTP application protocol.  It hides the
+implementation details involved in the message-based call-return model
+upon which HTTP applications are based.
+
+For example, to fetch a help page, a client might send an HTTP GET
+request to `http://example.org/help.html`.  The server will receive
+the request and route it to a handler, which will return an HTTP
+response to the client.  This is all function based: each step
+involves calling a function and then waiting for it to return a
+response.  Callers who do not want to wait around must register a
+callback, etc.
+
+This is a reasonably straightforward model, but it does involve
+protocol details that the application programmer should not need to
+bother with.  For example, routing of messages to handlers should be
+treated as a lower-level protocol detail, just like DNS and ARP.  It
+also relies on a synchronous notion of function call that is
+unsuitable for applications distributed across a network.
+
+The netchannel concept replaces the HTTP application model with a
+simple channel-based one.  A mono-directional channel (drawing on
+core.async) has one input port and one output port; one `puts` data on
+the channel using the input port, and `takes` data from the channel
+via the output port.  A netchannel is channel that has a pair of
+input/output ports at either end.  They form a pair of port/co-port
+pairs: the input port at one end is connected to the output port at
+the other end, and vice-versa.  The "co-port" of an input port is the
+output port at the other end of the netchannel, and the co-port of an
+output port is the input port at the other end.  (So the port/co-port
+distinction is relative.  The term "co-port" just makes exposition a
+little easier; if p is a port, we can refer to p's co-port without
+having to say explicitly that we mean the output port at the other end
+in case p is an input port, etc.
+
+We can also think of a netchannel as consisting of a pair of
+mono-directional channels running in opposite directions between two
+process.  But I think using the concept of a port on a channel is less
+confusing, even though core.async does not use the concept.  We just
+need to be clear that "putting a datum on a channel" can only be done
+on via the input port of the channel.
+
+NB: the notion of a "port" is really a terminological convenience.
+Ports are not first-class objects; we just use the terms "port" and
+"co-port" as convenient means of refering to the "ends" of a channel.
+But core.async sometimes refers to ports, and also mentions "channel
+endpoints", but does not discuss in any detail.  In any case, we
+definitely need terminology that allows us to refer to the "endpoints"
+of any channel.  Conceptually necessary too; a channel with no means
+of IO would be useless.  The endpoints of a channel are effectively
+its IO ports.
+
+Netchannels are shared by a pair of cooperating processes - we use the
+term "co-process" the way we use "co-port", on grounds that it is more
+precise than refering to e.g. the "other" or "opposite" process.
+
+(Or: each netchannel has an input port at one process and an output
+port at the other.  So we can think of a netchannel as one channel
+with two port/co-port pairs?)
+
+Cooperating processes put data on their output port, and their
+partners take data from the corresponding input co-port.  The fiction
+netchannels try to sustain is that the port/co-port pairs conceal the
+fact that the netchannel spans a network connection.
+
+NB: I'm using channel and "co-channel" to refer to opposite ends of a
+single mono-directional channel.  It's an abuse of language, since
+conceptually they are not different channels.  Maybe we should instead
+us the thing/co-thing language to refer to the pair of
+opposite-directed channels that make up a netchannel: each is
+co-channel to the other.
+
+NB: the notions of input and output are orthogonal to direction: a
+mono-direction channel from A to B is an output channel for A but an
+input channel for B.  So if we have a pair of channels, one from A to
+B and the other from B to A, it makes no sense to say, e.g. "the"
+output channel.  Maybe we need the notion of "port" (and so
+"co-port"), so we can say, e.g. that a channel has an input port at A
+and an output (co-)port at B.  Or: "A puts a datum on a netchannel and
+B takes
+
+This channel-based model can be viewed as an abstraction of the notion
+of a function call.  A function call may seem to involve a single
+operation - call it application, invocation, or whatever - but
+conceptually there are two distinct operations involved: function
+application and function evaluation (reduction).  This becomes evident
+when asynchronous function calls enter the picture.  For a synchronous
+call, the caller "invokes" the function on its arguments and waits for
+function evaluation to complete and "return" a result: function
+invocation, evaluation, and the handling of the returned result are
+tightly coupled.  For an asynchronous call, we need to decouple these
+things.  In particular, we need to be able to explicitly specify a
+handler for the result of function evaluation.  The concept of a
+channel is perfect for this: we think of a function as a pair of
+channels, one for input (invocation) and one for output (result).  So
+invoking a function asynchronously translates to putting its arguments
+on its input channel and - separately - taking the result from its
+output channel.  A major virtue of this model is that it allows us to
+separate the caller and callee and put them in different processes,
+possibly located at opposite ends of a network connection.  The caller
+puts arguments on a netchannel (which functions as the callee's output
+channel), the callee (the function) takes arguments from the
+netchannel (which functions as its input channel, and is co-channel to
+the caller's output channel), computes a result, and puts it on its
+output channel.  The calling process then takes the result from the
+(local) input channel that corresponds to the function's output
+channel (i.e. the client co-channel to the server function's output
+channel).
+
+This allows the programmer to write simple put/take operations on
+netchannels instead of configuring routing and handlers etc.
+
+It's important to understand the fiction here: putting a datum on an
+output channel makes it directly available for taking from the
+corresponding input co-channel by the cooperating process across the
+network, just as putting a datum on a core.async channel makes it
+available for taking elsewhere in the same process.  Of course, what
+actually happens behind the scenes is standard HTTP message sending,
+receiving, routing, etc., but the netchannels implementation makes all
+that happen automatically and invisibly, by using Clojure macros to
+rewrite netchannels expressions as, e.g. Compojure code.
+
+
+== uri considered harmful
+
+URIs are a lower-level implemenation detail.  The application
+programmer should not have to bother with them.  All she needs to know
+is the netchannel and its parameters.  Whether those parameters are
+path, query, or body params is an implementation detail.
+
+For example, suppose we have a Clojure route like
+`/employees/:lname/:fname`.  We treat URIs of this form as predicates.
+Actually we treat every URI as a predicate.  A request satisfying this
+predicate would look like `employees/Smith/John`; with HTTP the
+programmer must construct this URI.  Of course there are libraries
+that make this easy and hide the URI details, but with netchannels we
+want to completely remove the notion of URI from the application
+protocol.  In this example, we would write something like the
+following:
+
+[source,clojure]
+----
+;; server side: put the datum (fn) that makes the datum satisfying the predicate
+(>! >employees (fn [fname lname] ...))  ;; add a request param? called e.g. `env`?
+;; client side: take the datum satisfying the predicate
+(<! <employees {:fname "John" :lname "Smith"})
+----
+
+Neither the client nor the server application programmer needs to know
+how the parameters are packaged in the HTTP request.
+
+== request parameters
+
+Netchannel definitions serve to configure the lower level HTTP
+application protocol implementation.  That is where the programmer
+specifies where parameters go with respect to HTTP Requests.
+
+In this example, the netchannel definition would provide the specifics
+about the relation between the programmatic parameters and the URI, by
+specifying `/employees/:lname/:fname` together with a regex
+interpretation of the keyword params.  All parameters must be
+specified as keywords; mapping of keyword parameters to function
+argument names is automatic.  For example, if you want fname and lname
+to be query parameters, you would define the netchannel with something
+like this:
+
+[source,clojure]
+----
+(defnetchan employees ["/employees" {:query [:lname :fname]}] ...)
+----
+
+Summary:
+
+[source,clojure]
+----
+;; Compojure:
+(GET "/employees/:lname/:fname" [lname fname] ...)
+;; netchan:
+(defnetchan employees ["/employees/:lname/:fname"]  ;; will bind lname, fname
+;; Compojure:
+(GET "/employees" [lname fname] ...) ;; query params, I think, ???
+;; netchan:
+(defnetchan employees ["/employees" {:query [:lname :fname]}] ...)
+----
+
+== elaborating request and response maps
+
+With netchannels there are no HTTP requests and responses; there are
+only channels, command processors, and data producers(?).  But often
+we need to elaborate incoming requests and/or outgoing responses.  For
+example, we might want to add headers to responses.  There are two
+ways to handle this: we can design our data producers to add the
+headers, or we can use channel "transducers".  The former method is
+fine for limited use, but if we wanted to add headers to every
+response we would have to repeat code for every data producer.  Well,
+actually putting transducers on channels just moves the problem.  We
+want to support that, but what we really need to do is put transducers
+at the HTTP level, so requests get munged etc. before they reach the
+app layer, and responses get munged after they leave the app layer.
+
+Conceptually, specifying transducers in this way will be just like
+configuring a server or one of the lower network layers.
+
+Channel transducers are transformers attached to channels that operate
+on any data put to a channel.  They are specified as part of the
+channel definition.  They correspond to Ring's middleware, but they do
+not (conceptually) "wrap" anything.  Instead of the nesting structure
+implied by a chain of wrappers, we use a pipeline metaphor.
+
+*Question:* if we're thinking of transducers as operating on the HTTP
+ level then shouldn't we be talking about requests and responses
+ instead of channels?  It's only at the (netchannel) app layer that we
+ want to drop talk of requests and responses in favor of put/take on
+ channels, so there's no reason why we should not specify "HTTP
+ message transducers" as part of the (way we talk about) the relation
+ between the netchan app layer and the HTTP app layer.  So we need to
+ distinguish between "channel transducers" and "http transducers".
+
+Now the question arises as to how we specify http transducers - what's
+the syntax and where do we put it in order to maintain clean
+conceptual separation while supporting programmer convenience?
+
+One way to think of this: we treat Compojure as an implementation of
+the lower-level HTTP app protocol, in particular the request routing
+mechanism.  But a Compojure app mixes up that lower level and the app
+level we're talking about.  Still we can think of our app code
+(channel defs and puts/takes) as configuring the lower-level Compojure
+component.  And of course we will implement our own stack using
+core.async.  But for Compojure we can compare with the way it/Ring
+relate to the server: you run a `start` or `run` command of some kind,
+with parameters.  Can we do something similar to `start` the HTTP app
+level?  Or we might have a `config` command, or even a config map for
+leiningen.  Compare this with the Jetty configuration hairball.
+
+A critical point is that these things are application-independent.
+You write them and package them separately.  So using them really is a
+configuration matter.
+
+Also compare with Servlet configuration and filters.  In fact, we
+should support both use cases - for servlet-based applications,
+request/response elaboration should be implemented using filters.  And
+actually for the most part Ring "middlewares" are just the equivalent
+of Servlet filters.
+
+What about elaborating incoming requests?  For example, Ring uses
+`wrap-params` to restructure incoming requests, adding :query-params,
+:form-params, and :params keys to the request map.  This wrapper does
+add or remove any data, it just destructures some data in the original
+request and makes it available via a more convenient set of keys.
+
+A similar example is provided by
+link:https://github.com/rahcola/ring-request-headers-middleware[ring-request-headers-middleware],
+which parses headers on incoming requests and makes them more easily
+accesible to the programmer.
+
+Another common use pattern is to use middleware for side-effects; for
+example, a middleware wrapper might log information about incoming
+requests (see link:https://github.com/nberger/ring-logger[ring-logger]
+for an example).
+
+Ring middleware, since it "wraps" handlers, can work both ends of the
+street: it may modify the incoming request, the outgoing response, or
+both.
+
+In netchannels we prefer the concept of transducers to that of "middleware".
+
+*Design goal* it must be at least as easy to do this sort of thing
+ with netchannels as it is with Ring.  Ideally it should be even more
+ transparent.
+
+*Design goal* support as much reuse of Ring middleware as possible.
+ Since ring middleware operates on handlers this may be difficult if
+ we want to operate on request/response maps.
+
+*NB* netchan always does the equivalent of Ring's `wrap-params`: it
+ puts every param in a :params map.  That way the programmer does not
+ need to bother with the overhead of destructuring.
+
+The way we will do this is to put the transducers in the HTTP level
+rather than include them in the channel definitions.  We will support
+the latter, but since usually we will want to apply transducers
+independent of channels (i.e. no matter which handler deals with the
+request), they really belong at the lower level.
+
+Contrast the approach of Ring/Compojure.  Ring itself is low-level;
+wrappers, however, apply to handlers, which are application-level.
+
 
 == setting up netchannels
 
@@ -24,6 +315,40 @@ Here's how we declare netchannels:
     ["/"])  ;; route path
 ----
 
+Alternative: "channel spaces", just like Clojure's namespaces:
+
+[source,clojure]
+----
+(defnetchan nil)  ;; "/"
+(defnetchan index.html) ;; "/index.html"
+(defnetchan foo.bar)  ;; "/foo/bar"
+(defnetchan foo.bar/hello.html)  ;; "/foo/bar/hello.html"
+----
+
+The problem with this is it doesn't seem to allow for keyword bound
+vars, e.g. "/foo/:bar/:baz".  Or does it?  Is "foo.:bar.:baz" a valid
+namespace?
+
+We can think of a channel as an oriented space rather than a mere
+conduit or pipeline.  Come to think of it, "oriented space" is a
+pretty good abstract description of notions like conduit, pipeline,
+channel, etc.  Note that it is not necessary that everything in a
+channel space move from one end to the other; the concept allows for
+the idea of a stable artifact within the channel, just like a buoy in
+a stream or the like.  In other words, don't confuse the concept of
+"channel" and that of "stream".
+
+What goes "in" a channel space?  Well, data is the obvious candidate.
+Other possibilities: filters, metadata, what else naturally fits?
+"Guards", predicates that constrain what data may be put in a channel?
+
+(Off topic: we can think of params e.g. /foo/:bar/:baz as (partially)
+specifying a "put signature": only functions whose signature matches
+the put sig may enter the channel.  Symmetrically, for the client they
+act as a "take signature": only takers who specify the correct
+predicate (e.g. {:bar 1 :baz 2}) may take.)
+
+(*FIXME* replace chan/co-chan with port/co-port language)
 For every net channel there is a co-channel: put to a channel, take
 from a co-channel.  Co-channels have the same name as their channels
 with a ~ prefix.  So the form above explicitly declares net channel
@@ -38,26 +363,263 @@ from the corresponding co-channel; the client sends messages on its
 channels, and the server receives them on the corresponding
 co-channels.
 
+== channel composition
+
+*TODO* support hierarchical structure of channels, similar to what
+ link:http://caribou.github.io/caribou/docs/routes.html[Caribou
+ supports].  But instead of tree syntax, allow some kind of chaining.
+
+[source,clojure]
+----
+(defnetchan foo ...)
+(defnetchan foo.bar ...)
+;; or
+(defnetchan foo [bar [baz]] ...) ;=> foo, foo.bar, foo.bar.baz
+(defnetchan foo [bar baz] ...) ;=> foo, foo.bar, foo.baz
+(defnetchan [foo [bar baz]] ...) ;=> foo.bar, foo.baz
+;; etc.
+----
+
+*Design Point* do we need to have both a name and a channelspace name?
+ we probably do not want to have to name every channel, in cases where
+ we have lots of them; better to let the path serve as a
+ (channelspace) name.  But do we want the option of naming them anyway?
+
+*Design Point* what about naming sets of channel spaces? just use def?
+
+== port ins and outs
+
+A channel without some means of IO would be useless; we need a way to
+put data into and take data out of a channel.  If we think in terms of
+a pipeline metaphor: a completely sealed pipe would be useless.  So we
+need the notion of a "port".  A channel has a port at either end.
+
+A netchannel has two ports at either end, an in port and an out port.
+The ports are paired across the channel: the in port at one end is
+paired with the out port at the other, and vice-versa.  Paired ports
+are "co-ports"; the co-port of any port is the port at the other end
+of the channel with which it is paired.  So the co-port of the in port
+at one end of a netchannel is the out port at the other end.
+
+Every port serves both roles.  The inport of a channel serves as an
+outport for the app using the channel, and vice-versa.  An app puts
+data on a netchan outport, which is the inport of the (sub)channel.
+You can think of this in terms of internal and external perspectives:
+viewed internally, from the perspective of the channel, the port that
+recieves data is an inport; viewed externally, the same port is an
+outport, since it is the port to which the app puts (sends) data.
+
+When a netchannel is defined, the associated ports are named using the
+name of the netchannel and a prefix decoration: `>` for outports, `<`
+for inports.  So if `home` is a netchannel, we put to `>home` and we
+take from `<home`:
+
+[source,clojure]
+----
+(http-go (>! >home "hello world"))
+(http-go (let [req (<! <home)] ... process req ...))
+----
+
+*Note:* you cannot take from an inport, nor can you put to an outport.
+When process puts a datum to an outport, it can only be retrieved by
+the co-process, which may take it from the outport's co-port (which is
+the inport for the co-process).  In other words, if the server puts a
+datum to the outport of the `home` netchannel --- e.g. `(>! >home "hi
+world")` --- then the client may retrieve it from the co-port `<home`,
+e.g.  `(let [resp (<! <home)]...)`.  So `>home` on the server and
+`<home` on the client are co-ports, and so are `<home` on the server
+and `>home` on the client.  But `<home` and `>home` _on the server_
+(or on the client) are not co-ports.  So we can think of co-port pairs
+as forming a subchannel: `>home` and `<home` on _opposite_ ends of the
+netchannel represent the same subchannel; on the _same_ end, they
+represent different subchannels
+
+----
+Server		'home'		Client
+ports		Channel		ports
+>home		---->		<home		;; Server-to-Client subchannel
+<home		<----		>home		;; Client-to-Server subchannel
+----
+
+*NB*  our subchannels are similar to pub topics in core.async?
+
+Now obviously for this to work the channels/ports must be defined
+appropriately for both server and client.  The Netchannels library
+handles this by generating the necessary code for both Clojure
+(server) and Clojurescript (client) from one set of `defnetchan`
+declarations.
+
+== immutable channels
+
+Well, not really immutable; we need to be able to put data on a
+channel.  But we need channels from which data can be read but not
+removed (taken).
+
+A web app that delivers data (web pages) on a URI can simply put the
+data on a netchannel and be done with it.  No need to service incoming
+HTTP requests at the URI; netchannels eliminates the very idea.  Once
+the server has put data on the channel, clients can just take it, without
+needing to send a request to the server and await the response.
+
+This works for any URI that delivers data, including parameterized
+URIs (like `/foo/:bar/:baz` in Compojure).  That's because such
+parameterized URIs actually represent a set of URIs.
+
+== data are functions!
+
+Data and functions are indistinguishable.  Every datum is a function;
+"primitive" data like the natural numbers are construed as constant
+functions with arity zero.  For example, we treat the "value" _3_ as a
+constant nullary function, and the _expression_ `3` as syntactic sugar
+for `(3)` -- the application of the function _3_.
+
+This view on data as functions is critical to the conceptual structure
+of netchannels.  It means that we put functions rather than data on
+netchannels.  That includes defined functions - data that are
+explicitly expressed as function forms, using `defn` or `(fn ...)` or
+similar.  This enables a radically different view of the relation
+between HTTP requests and request handlers in a web app.
+
+In a standard HTTP-protocol web app, we pass data to clients by using
+functions as "handlers" for incoming requests.  In a netchannel app,
+we pass data to clients by putting it on channels - and since data are
+functions and functions are data, we can put data-producing functions
+directly on channels.  Instead of "handlers" for "requests", we just
+have data functions on channels.  Since netchannels have an associated
+URI, our data functions can use that URI as input to determine what
+data to produce.  So we don't even need to think of the bits of the
+URI as "parameters" or function arguments; they are just data, and
+they are available for inspection by our data producing functions,
+which may use them to determine what data to produce.
+
+*NB* what about the rest of the request map?  We surely cannot discard
+ that concept.  In the case of a simple GET e.g. for a help page, we
+ ignore the request object, the only thing that matters is the URI.
+ But in other cases what we do will depend on other information in the
+ request map.  So don't we need to "take" the request map, use it to
+ determine data production, and then "put" the result?  In other
+ words, in some cases it is enough to identify channel and URI, but in
+ other cases we need the concept of the request message as a datum
+ delivered through the channel.
+
+Conceptually this perspective requires that we think of taking a datum
+from a channel as involving evaluation of the data/function.  Or we
+can think of putting data on a channel as doing the same thing.  The
+key point is that we put functions, but we take results (of evaluating
+a function).  Or, we put data-as-functions, and take
+functions-as-data.  So it's nicely symmetrical.
+
+So we think about the relation of URIs and handlers very differently
+than the HTTP model does.  There, handlers are tightly bound with the
+URI (and method) as a "route" to be used by the request dispatcher.
+With netchannels we treat routing as a low-level detail; we decouple
+handlers from URIs, thinking of the former as a data producer
+functions and the latter as a channels.  We put data (functions) on
+channels; the netchannel protocol translates down to the HTTP model of
+URI/handler bindings and route dispatching, but the critical point is
+that the application programmer doesn't have to bother with that level
+of procedural detail.  It's just data/functions on the one hand, and
+channels on the other.
+
+Conceptually the data producer does not service (handle) requests; it
+just produces the data determined by the channel's URI.  This bears
+repeating: the URI is construed as identifying a channel, in contrast
+to the (RESTful) HTTP app model, where it is construed as a a kind of
+function call.
+
+For data-producing channels (URIs), the server _never_ needs to
+monitor the input channel for incoming "requests", because there are
+no requests, there are only channels.  But some URIs do not return
+data; they represent "commands" and direct the server to do something,
+such as upload a file or updata a database.  In that case, the server
+must monitor its the input ports of its netchannels and respond
+appropriately when commands arrive.
+
+To some extent this distinction is arbitrary; we could treat every
+request as a netchannel.  But that really would not work conceptually
+for commands.  It makes intuitive sense to `put` data (in the form of
+a function) on a channel, because data functions are in a sense
+constant functions - a function that takes parameters and returns
+different data for different input only appears to involve
+variability.  We can treat it as a _family of constant functions_ with
+equal justice, so putting such a data function on a channel is
+equivalent to putting every constant function in the family on the
+channel.
+
+But it does not make sense to put the results of a command on a
+channel until we know what the command is.  Delivering data, as
+construed above, does not involve any changes or "side effects" on the
+server side, since such data functions are really families of constant
+functions.  But since commands may have side effects, it behooves us
+to wait until we receive and process a command before we put its
+result on the channel.  Of course we _could_ put a kind of command
+result function to the channel; it would represent all possible
+commands and their results as a family of constant functions.  And
+that would not be so different than the case of data functions; in
+both cases the function put to the channel represents all _possible_
+results, and is only made actual (evaluated) when the other side takes
+data from the channel.  This works for genuine constant functions with
+no side effects, but the family of commands with side effects is not
+like this, since they render prediciion impossible.
+
+*NB* side-effecting commands also screw up the constant data
+ functions, since the latter may return different data after commands
+ have changed things.  So maybe we should not call them constant but
+ only side-effect free?  They are procedurally constant but not value
+ constant.
+
+So the distinction must be drawn between channel actions that do and
+those that do not have side effects.  If a client puts a datum on a
+channel and the server takes it and changes stuff, we call what the
+client did a side-effectful channel action.  Client `take` actions
+never have side effects.
+
+The general rule: `put` is for the client to effect changes; `take` is
+for the client to read data without side effects.
+
+
+
+== http-go
+
+[source,clojure]
+----
+(http-go (>! >home (fn [] "hello world")))
+----
+
+Corresponds to `go`, but picks out HTTP as the underlying application
+protocol and does not necessarily spawn a thread (though it may,
+e.g. by running a go block).
+
 == using net channels
 
 To use a channel:
 
 [source,clojure]
 ----
-(go-net [req (<! root)]
-	(>! ~root "<h1>Hello World</h1>"))
+(http-go [req (<! <root)]
+	(>! >root "<h1>Hello World</h1>"))
 ----
+
+Notice that the handling here is explicitly split into a pair of
+symmetric operations: take and put.  There is no notion of this being
+a function that is "called" from somewhere else.  It just waits until
+a request is put on the `root` input netchan and then puts a result on
+the `root` output netchan.  It doesn't care how, when, or where the
+request was put on the channel, nor does it care who, when, or where
+the result will be taken from the channel.  Netchans decouple function
+invocation, evaluation, and return.
 
 This roughly corresponds to compojure's
 
 [source,clojure]
 ----
-(defroutes app
-  (GET "/" [] "<h1>Hello World</h1>"))
+(GET "/" [] "<h1>Hello World</h1>"))
 ----
 
-But Compojure needs more than just this; the complete Hello World
-example reads:
+This represents a monolithic function call, without the explicit split
+into take and put: it is (indirectly) called by the server, which must
+wait until it returns a result.  But Compojure needs more than just
+this; the complete Hello World example reads:
 
 [source,clojure]
 ----
@@ -84,8 +646,33 @@ Furthermore, this must be accompanied by configuration information in
 
 and to run this, a lein plugin:  `$ lein ring server`.
 
-To make net channels work we need to do something similar; see the
-Implementation section below.
+To make net channels work we need to do something similar; perhaps:
+
+[source,clojure]
+----
+(defnetchan root ["/"])
+(http-go (let [req (<! <root)]
+	 (>! >root  "<h1>Hello World</h1>")))
+----
+
+Notice: no "routes", no "app" fed to the server; all that is handled
+automatically by the lower level protocol.  The equivalent of the
+`wrap-defaults` bit is specified as a configuration stanza in a
+leiningen project file.
+
+See the Implementation section below for more details.
+
+
+== webapps without functions!
+
+With a netchannels server app, do not need to have functions sitting
+around waiting for incoming requests and then returning a response.
+That's the old, synchronous functional call-return model.  With
+netchannels, we just `put` data (functions) to the (possibly
+immutable) output channel and we're done.  The client can then
+read/take the data at will, without needing to send a request to the
+server.
+
 
 == REST apis
 
@@ -96,7 +683,7 @@ follows:
 
 [source,clojure]
 ----
-(go-net [req (<! root)]
+(http-go [req (<! root)]
 	(>! ~root "<h1>Hello World</h1>")
 
 	[req (<! admin)]
@@ -132,15 +719,18 @@ under the covers, our lib will have to setup up routes, handlers, etc.
 
 == implementation
 
-A `go-net` block is like a `go` block.  But instead of creating a
+Two implementations of the "chibi-chan" protocol: compojure and gochan
+(core.async).
+
+A `http-go` block is like a `go` block.  But instead of creating a
 thread in the local process, it coordinates with a remote co-process.
 
-A take expression `<!` in a go-net block will be translated into the
+A take expression `<!` in a http-go block will be translated into the
 clojure code necessary to handle incoming HTTP requests; for example,
 the above `root` example might translate into the Compojure code
 listed above.
 
-To make go-net work, we need to translate go-net blocks into code that
+To make http-go work, we need to translate http-go blocks into code that
 handles incoming HTTP requests - possibly using `compojure` or `ring`,
 but those are not the only options.  Then we need a dispatch mechanism
 that will route the incoming request to the correct handler, based on
@@ -226,7 +816,7 @@ something like this:
 [source,clojure]
 ----
 (defchannel foo ["/foo"])
-(go-net [req (<! foo :get)] get-foo-handler
+(http-go [req (<! foo :get)] get-foo-handler
 	[req (<! foo :put)] put-foo-handler
 ----
 
@@ -242,15 +832,15 @@ addition to the :method datum).  A possble syntax:
 [source,clojure]
 ----
 (defchannel foo ["/foo"])
-(go-net [req (<! foo :get
+(http-go [req (<! foo :get
 	     	     (= "accounting" (-> :path-parms :dept)))]
 		     get-foo-accounting-handler
-(go-net [req (<! foo :get
+(http-go [req (<! foo :get
 	     	     (= "engineering" (-> :path-parms :dept)))]
 		     get-foo-engineering-handler
 
 ;; or maybe use the :dept value directly:
-(go-net [req (<! foo :get)]
+(http-go [req (<! foo :get)]
 	(get-foo-dept-hander (-> req :path-parms :dept)))
 ;; which assumes that get-foo-dept-handler is a multi-method with appropriate dispatch
 ----
@@ -268,10 +858,10 @@ we could use multi-methods:
 (defmethod foo-handler :get ...)
 (defmethod foo-handler :put ...)
 
-(go-net [req (<! foo)] (foo-handler req))
+(http-go [req (<! foo)] (foo-handler req))
 
 ;; even better!
-(go-net (foo-handler (<! foo)))
+(http-go (foo-handler (<! foo)))
 ----
 
 Here the defmulti dispatcher is a keyword, `:request-method`; this is
@@ -289,7 +879,7 @@ the standard keys in every Ring request map.
 * Compojure apps commonly use `routes` or `defroutes` to combine
   routes in a single list, which is examined by the dispatcher.  Net
   channels do not need to be aggregated syntactically in this way.
-  You can define net channels anywhere, and you can put go-net blocks
+  You can define net channels anywhere, and you can put http-go blocks
   with net-channel send/receive anywhere.  The implementation will
   take care of organizing things.
 
@@ -309,5 +899,62 @@ This will involve sessions in some way.
 
 == misc
 
-* net chan expressionsa are macros - compile time only?  not necessarily?
+* net chan expressions are macros - compile time only?  not necessarily?
+
+Milner warns against thinking of b-b' pairs as communication channels
+or buffers with some capacity.  They are just interaction structures;
+we should call the protocol something like "net application
+interaction protocol".  For the lib, we could use "entanglement" in
+some way.
+
+The critical idea is that action/co-action pairs form an interaction
+structure.  Actions and their co-actions always occur simultaneously;
+or perhaps it would be better to think of them as atemporal.
+Following the notion of quantum entanglement, we think of them not as
+two distinct things (ports), but as two different aspects of one and
+the same system.  Observe an action, and you observe the co-action.
+Or perhaps, the act of observing an action changes the system so that
+the co-action is there too.  "Simultaneous" implies temporality, but
+its better to think of this as an atemporal structure, etc.
+
+So instead of netchans, we define net interaction structures -
+"entanglements"?  Notice that the first three letters are an anagram
+of "net".
+
+We can define them in code, or in a config file.  Either way, the
+definitions serve to configure the lower-level app protocol
+implementation.  If we're using Ring with core.async, then
+initialization will involve reading the "netanglement" definitions and
+setting up a request dispatcher to distribute incoming responses to
+the appropriate netanglement gochannel.  If we're using Compojure
+without core.async, then initialization will involve setting up routes
+in some way to be determined.  In that case, we will have to translate
+action syntax (put/take on channels) into functions in some way.
+
+The problem with "netanglement" is that it's hideous.  People are
+going to say "channel" anyway, might as well stick with "netchannel"
+and just explain that they are not really channels, but interaction
+structures.  Maybe "netports"?  No, "port" already has a lot of
+technical uses; a socket has a port, for example, which could be
+called a kind of net port.
+
+Howsabout "Agere, Wrath of God"?  We're searching for the El Dorado of
+web app development, after all.
+
+What if we want to use URIs in our code?  For example, in an `href`
+attribute?  One option: treat netchans as functions that return their
+URIs.  This is no different than treating keywords as functions; it
+all depends on context.
+
+What if we want to use external URIs?  Is a netchannel still
+appropriate?  Example: point to a twitter feed.  We can define it as a
+net channel `twitter` and then refer to (twitter); but that adds a lot
+of overhead if we're not actually going to put/take on the channel.
+But we're not forced to turn every URI into a channel, only the ones
+we want to service.
+
+One advantage of defining channels in a config file is that it can be
+shared across apps, and when URIs change all we have to do is edit the
+config file, and everything will just work with the new URIs, since
+they are completely hidden from the programmer.
 
