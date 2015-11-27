@@ -1,7 +1,32 @@
-# webtypes
+webtypes
+========
 
+abstractly:
 
-## syntax
+[source,clojure]
+----
+(co-type <type-name>
+  (ctor ...)
+  <protocol-name>
+    <method-impl>
+    <method-impl>
+    ...
+  <protocol-name>
+    <method-impl>
+    <method-impl>
+    ...
+  ...
+  )
+----
+
+Note: here the `ctor` function constructs the HTML; it is _not_ a
+javascript constructor/function.  The javascript functions/methods
+involved in defining a component are expressed here as implementations
+for the methods of the `Polymer` protocol.  In other words we treat
+the properties and methods of the Polymer prototype (object? class?)
+as methods of a Clojure-like protocol.
+
+= syntax
 
 Option 1:
 
@@ -37,6 +62,7 @@ Option 1:
   (tap (fn [this e] ...)) ;; registers handler fn as listener for tap on the my-list elt
   (tap (fn [#special e] ...)) ;; respond to tap event on elt with id "special"
   (track (fn [e] ...))
+  ...
 
   DOM.Events ;; protocol
 

@@ -21,6 +21,7 @@
 (co-ns
   "dashboard"
   (:require [polymer.iron :as iron :refer [ajax flex-layout icons list pages selector]]
+            ;; => link href="polymer/iron-list/iron-list.html", etc.
             [polymer.paper :as paper :refer [button drawer-panel icon-button item
 	    		       	     	     material menu scroll-header-panel
 					     spinner styles toolbar]]

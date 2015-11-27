@@ -1,13 +1,15 @@
-# miraje
+# miraj
 
 Webcomponents, the Clojure way
+
+Currently only link:https://www.polymer-project.org/1.0/[Polymer].
 
 Motivation:
 
 Polymer is heavily invested in the Javascript ecosystem; to intall it,
 you have to install `node`, `npm`, `bower`, etc.  That's a lot of
 installation and configuration of stuff a Clojure programmer usually
-does not want or need to deal with.  Miraje is intended to make
+does not want or need to deal with.  Miraj is intended to make
 life slightly less horrible for Clojure/Clojurescript developers, who
 can use it instead of going through the
 link:https://www.polymer-project.org/1.0/docs/start/getting-the-code.html[Polymer
@@ -18,10 +20,10 @@ intallation rituals].
 Leiningen dependency:
 
 ----
-[miraje "0.1.0-SNAPSHOT"]
+[miraj "0.1.0-SNAPSHOT"]
 ----
 
-In a web app, the miraje jar file is included in the classpath, so
+In a web app, the miraj jar file is included in the classpath, so
 you can use standard techniques for loading resources.
 
 One easy way to do this is to "require" `[ring.middleware.resource

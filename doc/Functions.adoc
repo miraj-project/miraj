@@ -483,3 +483,428 @@ its own work.
 
 When observing, we have the option of waiting for the observation or
 moving on and trying again later.
+
+So we're really integrating several distinct concepts:
+
+* model of computation: interactionist (activate/observe)
+
+* code organization: threaded v. event-driven
+
+* flow of control: coroutines (activate/observer) v. functions (call/return)
+
+==== text is not process
+
+==== concurrent v. parallel
+
+Absurdities:
+
+* link:https://en.wikipedia.org/wiki/Concurrent_computing[Wikipedia: Concurrent Computing]
+
+"Concurrent computing is a form of computing in which several
+computations are executing during overlapping time
+periods—concurrently—instead of sequentially (one completing before
+the next starts.)"
+
+Anybody know what "overlapping time periods" means?  Didn't think so.
+
+"concurrently - instead of sequentially (on completing before the next
+starts)" - huh?  you mean simultaneously?  No?  Then what do you mean?
+And how can one computation begin before another "completes"?  This is
+just extraordinarily sloppy writing.  "Completes" apparently means
+something special - e.g. done, the whole thing has finished and has
+nothing more to do.  But preemption only ever happens when the
+preempted process (text) has completed something - the primitive
+operations are atomic, you cannot interrupt one in the middle, so to
+speak.  So whatever the writer is trying to say, this kind of
+"concurrency" has nothing to do with simultaneity - and so is not
+really "concurrent" - and everything to do with sequence.  And nothing
+to do with "time".
+
+The absurdities continue: "concurrent computing consists of process
+_lifetimes_ overlapping, but execution need not happen at the same
+instant."  But what the hell is a "process lifetime", and how can time
+every overlap?  "Process lifetime" clearly appeals to a notion of time
+that is entirely distinct from the notion of computation, where "time"
+means "step".  Clocktime, which is not relevant to the concept of
+computation.
+
+Part of the problem is the widespread conflation of "computation",
+"process" and "program text".
+
+So what does "concurrent computing" really mean?  Well, first off
+let's be clear: "computing" here means "processing".  And so-called
+concurrent processing is a rabidly stupid coinage if it is taken to
+mean anything other than "simultaneous processing.
+
+Then what should we call processing that involves preemptive switching
+to another program text?  Note that I did not say "to another
+thread". On a single cpu machine, there is only ever one "thread" but
+there may be multiple texts, texts that may or may not be autonomous.
+
+If the texts are truly autonomous - no joint dependencies - then we
+don't need a special term.  The texts execute in sequence, and whether
+or not they are interrupted to allow some other autonomous text to
+execute is irrelevant - the meaning of the texts is not affected by
+execution process.  Since texts are not processes, we should
+definitely not call these "concurrent computations"; instead, we
+should call them autonomous texts.  The process remains sequential
+(single-threaded).  But there is another element, scheduling.  So we
+have:
+
+* autonomous texts
+* single process
+* preemptive scheduling (which means, another controlling process (meta-process?))
+
+And preemptive scheduling might as well be random, from the
+perspective of the texts and process.  Neither one cares when an
+interrupt occurs; the end result will be the same.
+
+This gives us the _illusion_ of simultaneity, but only due to the
+speed of physical computers.
+
+We can also have:
+
+* autonomous texts
+
+* single process
+
+* non-preemptive scheduling - no controlling meta-process, texts (not
+  processes) must cooperatively yield and resume
+
+We really should discard "concurrent", or use it to mean what it means
+etymologically, "simultaneolus", i.e. "parallel".
+
+If not "concurrent", then what?  "Interruptible computing"?  Yuck.
+
+Texts may be
+
+* autonomous - no joint dependencies
+* jointly dependent (e.g. on a global variable)
+* mutually interdependent (each depends on the other)
+
+This is about the _meaning_ of the text, and has nothing to do with
+processing.
+
+==== text; process; scheduling
+
+
+= channels: the synchronous v. asynchronous fiction
+
+More abominations:
+
+link:https://en.wikipedia.org/wiki/Actor_model_and_process_calculi[Actor model and process calculii]
+
+* "Synchronous channels have the property that a sender putting a
+  message in the channel must wait for a receiver to get the message
+  out of the channel before the sender can proceed."
+
+* "Asynchronous channels have the property that a sender putting a
+  message in the channel need not wait for a receiver to get the
+  message out of the channel."
+
+This kind of language is blatantly preposterous.  What does waiting
+for a pick-up have to do with synchronicity that not waiting does not?
+Either way, receipt happens after send.
+
+The idea seems to be that synchronicity is a relation between sender
+and receiver actions.  But waiting until something happens does not a
+synchronicity make.  It's just an atrociously misplace metaphor.
+
+Note that this sort of "chronicity" is a property of the _channel_.
+Which should be enought right off the back to disqualify the
+terminology - how can a channel be either synchronous or asynchronous?
+Those are relations, not properties.
+
+The classic metaphors: a phone call (on this model) would count as
+involving a synchronous channel; a letter sent through the post office
+would count as an asynchronous channel.  Or more precisely, the phone
+network counts as a synchronous channel, the postal system as an
+asychronous one.
+
+But this is a ridiculous misuse of the English language.  Phone
+conversations are not synchronous.  If both parties talk at once,
+communication fails.  The key difference between the telephony
+metaphor and the postal metaphor is the role of the intermediary.  Not
+the fact of an intermediary; both systems involve an intermediary.
+
+The phone system intermediary is not autonomous; the work it does
+depends on the parties involved.  It only agrees to work as long as
+the caller agrees; if the caller hangs up before the call is answered,
+the intermediary quits too.  The postal intermediary, by contrast,
+starts work when the sender posts a letter, and does not stop until it
+is delivered, regardless of what the sender does after posting the
+letter.  Furthermore it can sit on the letter for an arbitrarily long
+period.  And finally it only has to deliver the letter; it does not
+have to stick around to see if the addressee actually opens the
+letter.
+
+Placing a phone call does not count as making a phone call if nobody
+picks up.  So the _act_ of calling somebody is dependent on pick-up.
+
+In any case it is clearly an abuse of the language to introduce
+notions of synchronicity.
+
+  What does it have to
+do with synchonicity (temporality)?
+
+What it's really about is mediation.  "Synchronous" channels are
+unmediated; "asynchronous" channels are mediated.  That's it.  Nothing
+to do with synchronicity.
+
+Better: mediated v. non-mediated channel.  The fiction is that
+communication across a non-mediated channel is direct and
+instantaneous - entanglement.  In fact there may be a delay, but in
+principle, when you dial somebody they pick up instantly.  Waiting for
+them to pick up is an implementation detail, so to speak - an evil
+necessary to sustain the illusion.
+
+BUT: the key point is not the reponse from the other end, but only the
+pickup.  Note the ambiguity of "answer" - in talk, one answers by
+saying something in reponse, but on the telephony system, one answers
+by just picking up the phone.  Actually saying "hello" is part of a
+higher-level protocol.  So when we make a call and wait, what we're
+waiting for is the pickup, not the "hello".
+
+Immediate channel: in principle, direct, "instantaneous" reponse; in
+practice, a gap between call (activation) and response (observation).
+
+Mediated channel: same, really, except no wait in case of gap.
+
+So how to characterize this "wait for pickup" if not as synchronicity?
+Definition of "act"?  With immediate channel, activation (calling) is
+not complete until partner acknowledges (receives message).  With
+mediated channel, activation is complete as soon as it is made,
+without regard to ack.
+
+Compare: connection-oriented protocol v. non-connection-oriented (tcb
+v. udp).  Then a "synchronous channel" is one that implements a
+connection-oriented protocol.
+
+So we add protocol to our stock of primitives:
+
+* texts (autonomous v. jointly dependent v. mutually dependent)
+
+* control  (single v. multiple processes)
+
+* scheduling (preemptive v. non-preemptive) (meta-process)
+
+* protocol (mediated v. non-mediated, or direct v. indirect)
+
+Then instead of e.g. "synchronous channel" we have "non-mediated
+protocol", and the latter is atemporal.
+
+Non-mediated protocol: action cannot be completed without cooperation
+of both parties (i.e. callee picks up).  So instead of "non-mediated",
+maybe "cooperative"?  "direct"?  Compare legal: process server -
+subpoena must be delivered in person and acknowledged.
+
+Real-world analogs not involving communication:
+
+"asynchronous", no-waiting:
+
+* washer-dryer: you put the clothes in and then go about your business
+  until later - you don't stand there waiting for the machines to
+  finish
+
+* cooking: you put the meatloaf in the oven and come back later; you
+  don't stand there watching it cook
+
+* web surfing - click on a link, and often you wait for the page to
+  load.  of course you don't have to - you can switch to something
+  else and then come back - but we all want our pages to load
+  instantaneously.
+
+Almost everything we do counts as "asynchronous" in this sense.
+
+"synchronous", waiting - for this, we want examples where we may
+expect immediate response, but will wait if necessary; or, better,
+where continuation w/o response is not possible.  that probaly almost
+never happens - we can always go do something else.
+
+* ringing a doorbell
+
+* conversation - you don't ask a question and then go do something
+  else, you expect an immediate response, which presupposes that the
+  other party receives your message "synchronously" - as soon as it
+  leaves your mouth.  this may be the paradigm of "synchronous"
+  communication.  it involves both synchronicity of send/receive
+  interaction, and sequential turn-taking.
+
+* handshaking - you cannot extend you hand and then leave it hanging
+  in midair while you go do something else; you have to wait until the
+  other guy grabs your hand
+
+* passing the salt - if you pass it hand-to-hand, you have to wait for
+  the receiver to take it from your hand.  if you slide it across the
+  table, you don't have to wait
+
+* reading a book - when you turn the page, you expect to start reading
+  without delay - you don't go make a cup of coffee while you wait for
+  the text to appear on the page
+
+* turning on/off a light - we expect immediate results; unless you
+  have one of those crappy new bulbs that take forever to light up,
+  you don't flip the switch, go do something else, and then come back
+  later
+
+* feeding - you wait to make sure your kid eats; for your pets, you
+  put down food and don't wait around to make sure they eat it
+  immediately
+
+* hot water - you want hot water from your faucets immediately, but if
+  it takes a while to warm up, you'll probably wait.  if it takes too
+  long you might go do something else and then come back and check it
+
+* computer logon - you cannot continue (with the computer) if your
+  logon fails so if it's a little slow you must wait.  although, here
+  too, you can go make a cup of coffee while windows boots up.
+
+* going to the bathroom - you really can't do much else until you're
+  done
+
+* phone calls - you have to wait for the other party to pick up.
+  unless you have a speaker phone; then you can let it ring in the
+  background while you do other things.  compare being put on hold
+  when you call the help line.
+
+moral: wherever delay is _possible_ we have "asynch" - you can always
+go do something else while waiting.  but that's because we're people -
+machines are different.
+
+So it's not about the channel, its about the protocol: do activations
+wait around to be observed or not?
+
+But then, how does the activation "know" it has been observed?  There
+would have to be a feedback loop involving another channel.
+
+The central fiction is entanglement: activation and observation are
+co-equal.  Every call is ipso facto observed.  This is not
+simultaneity, though, since entanglement is atemporal; but in practice
+this co-equality can only be represented as simultaneity.  And since
+simultaneity is hard (impossible) to do, there will always in practice
+be a delay between activation and observation, and so we have the
+option of sustaining the fiction in two ways: using a "blocking
+activation", which emulates simultaneity by treating
+activation/observation as an atomic unit no matter how long the delay;
+and "asynchronous activation", which sustains the fiction by assuming
+that activations are instantly observed (even if there is a delay on
+the receiving end) and moving the delay on the caller's side to the
+observation channel.
+
+Such "asynchronous activation" can be implemented using either threads
+or callbacks.  Either way, "asynchronous" is not very descriptive; it
+should be called just non-blocking or instant or something similar.
+The practical question for the caller is how and where to deal with
+possible delays.  There are several strategies:
+
+1.  blocking activation - put the wait at the beginning
+
+2.  blocking observation - treat the call as ipso facto observed, wait
+for response.  any delay in the receiver's acceptance of the call
+appears to the caller as delay in response.
+
+3.  block chopping, aka polling.  never block - the observation call
+always returns immediately with success or failure - but keep
+observing until an observation succeeds.  here an observation call
+that would block for n seconds is chopped into m non-blocking calls.
+But "non-blocking call" is a fiction; since every call in practice
+takes a non-zero amount of time, the best we can do is have "micro
+blocking calls", calls that return very rapidly if no observation is
+ready.  So what we really have is one fat blocking call chopped into a
+bunch of micro blocking calls.  If you make 10K micro-blocking calls
+before observing a datum, and that takes n seconds, it's equivalent to
+an n second blocking call, except that chopping it into micro-blocking
+calls allows us to interleave useful work and therefore create the
+illusion of non-blocking.  this will involve a loop, which can have
+the drawback of chewing cycles if the loop is tight.  you never block
+on the observation call, but you may burn a lot of cycles just
+looping.  and if you don't do this right you effectively block
+totally, nothing else gets done.  so you shift delay from a blocking
+call to a spinning loop.  on the other hand, if you design it right
+this technique can be very efficient.  for example you can use
+coroutines to check regularly for observations but continue on with
+work if nothing available yet.
+
+note that block chopping need not involve a large number of
+micro-blocking calls.  if the delay is n seconds, and we have n
+seconds worth of other work to do, our loop may make only a few
+micro-blocking observation calls.  in this case the sum of time
+working plus time in micro blocking calls equals delay time.  so we're
+really managing both blocking observation and work-while-waiting.
+
+4.  callbacks - treat the call as ipso facto observed as with strategy
+2; but instead of making a blocking observation, or polling with a
+non-blocking observation, register an observation callback.  this
+effectively moves the observational duties to the channel or runtime,
+which will invoke the callback when _it_ makes an observation.  The
+callback still waits around to be invoked, but it doesn't block, since
+it does not run until called.  A form of passive action - call it
+passive polling?  with this strategy there is no observation loop,
+because you never actually make an observation call - you delegate
+that responsibility to whatever manages the callback.  this strategy
+effectively involves blocking on an implicit background thread, one
+managed by the runtime or the channel or whatever is responsible for
+managing callbacks.
+
+5.  threads - go ahead and block, just do it on a background thread.
+now you don't need polling or callbacks to enable work-while-waiting,
+since a blocking observation on a bg thread does not block other
+threads.  here the problem is communication among threads.
+
+Call these "blocking strategies"?  Meaning, strategies for dealing
+with delays that under naive model would result in blocking.  Blocking
+_always_ occurs when there is a delay; these strategies address
+different ways of blocking.  And really they're about what we do while
+waiting: either block, or work on something else.  Plus how we know
+that waiting is over (observation call v. callback)
+
+
+== threads v. co-threads
+
+co-routines are often called lightweight threads (or similar), since
+they are similar to OS threads, but they differ in that they are not
+preemptively scheduled by the OS.
+
+how is this sort of threading related to the issues discussed here, namely
+
+* model of computation: interactionist (activate/observe) v. sequential (call/return)
+
+* code organization: threaded v. event-driven
+
+* flow of control: coroutines (activate/observe) v. subroutines (fns) (call/return) v. threads
+
+* "entanglement" management: blocking, polling, callbacks, threads
+
+* threads v. co-threads  (same as flow of control?)
+
+
+entanglement fiction == ipso-facto interactionism
+
+
+=== implementation
+
+defcofn: use protocol and type
+
+defprotocol declares ops activate and observe
+
+deftype CoFunction keeps two channels, in and out, with some alias for
+convenience, so user can e.g. define cofn "home" and then do (activate
+home ...) and (observe home).  Each returns the cofn so these can be
+chained: (observe (activate home)).  The protocol implementation maps
+"home" in each case to the appropriate channel.
+
+defcofn takes an implementation body as well, and sets up the gochans
+and goblocks necessary to make activate/observe work.  Blocking
+strategy expressed via the usual ! decoration.
+
+=== pavlovian entanglement
+
+pavlovian: behavior/observation
+
+entanglement: hidden mechanism, "simultaneity", behavior and
+observation joint aspects of one system
+
+alternative:  interaction structure
+
+We can model a PE as system consisting of a pair of connected
+(entangled) state machines.

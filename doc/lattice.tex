@@ -1,0 +1,47 @@
+\documentclass{minimal}
+
+\usepackage{tikz}
+\usetikzlibrary{positioning}
+\usepackage{amsfonts}
+\usepackage{verbatim}
+\usepackage[active,tightpage]{preview}
+\PreviewEnvironment{tikzpicture}
+
+\begin{document}
+
+\begin{tikzpicture}[node distance=2.5cm,line width=1pt]
+\title{Untergruppenverband der $A_4$}
+\node(A4) at (0,0)     {$A_4$};
+\node(V4)       [below right  =0.2cm of A4] {$V_4$};
+\node(C31)      [below left of=A4]  {$C_3$};
+\node(C32)      [left of=C31]       {$C_3$};
+\node(C33)      [left of=C32]       {$C_3$};
+\node(C34)      [left of=C33]       {$C_3$};
+\node(C21)      [below right of =A4]       {$C_2$};
+\node(C22)      [right of=C21]      {$C_2$};
+\node(C23)      [right of=C22]      {$C_2$};
+
+\node(1)        [below=5cm of A4]   {$\left\{1\right\}$};
+\draw(A4)       -- (V4);
+\draw(A4)       -- (C31);
+\draw(A4)       -- node[left]{3}  (C32);
+\draw(A4)       -- (C33);
+\draw(A4)       -- (C34);
+\draw(C31)      -- (C32);
+\draw(C32)      -- (C33);
+\draw(C33)      -- (C34);
+\draw(C31)      --  (1);
+\draw(C32)      --  (1);
+\draw(C33)      --  (1);
+\draw(C34)      --  (1);
+\draw(V4)       --(C21);
+\draw(V4)       -- node[midway,left]{2} (C22);
+\draw(V4)       -- (C23);
+\draw(C21)      -- (C22);
+\draw(C22)      -- (C23);
+\draw(C21)      --  (1);
+\draw(C22)      --  (1);
+\draw(C23)      --  (1);
+\end{tikzpicture}
+
+\end{document}
