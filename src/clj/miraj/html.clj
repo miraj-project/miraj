@@ -1,352 +1,287 @@
 (ns miraj.html
-  (:refer-clojure :exclude [map])
-  (:require [clojure.data.xml :as xml]
-            [clojure.tools.logging :as log :only [trace debug error info]]
-            [clojure.string :as string]
-            [clojure.pprint :as pp]
-            [jsoup.soup :as jsoup])
-  (:import [java.io ByteArrayInputStream StringReader StringWriter]
-           [java.util Properties]
-           [javax.xml.parsers DocumentBuilder DocumentBuilderFactory]
-           [javax.xml.transform.dom DOMSource]
-           [javax.xml.transform OutputKeys TransformerFactory]
-           [javax.xml.transform.stream StreamSource StreamResult]
-           [org.jsoup Jsoup]))
+  (:refer-clojure :exclude [map meta time])
+  (:require [miraj.ml.core :refer [make-fns make-void-elt-fns]]))
 
-;; ;; using jsoup:
-;; (defn pprint
-;;   [html]
-;;   (let [doc (Jsoup/parseBodyFragment html)]
-;;     (.prettyPrint (.outputSettings doc) true)
-;;     (println (.html (.body doc)))))
+            ;;[clojure.data.xml :as xml]
+            ;; [clojure.tools.logging :as log :only [trace debug error info]]
+            ;; [clojure.string :as string]
+            ;; [clojure.pprint :as pp]
+  ;; (:import [java.io ByteArrayInputStream StringReader StringWriter]
+  ;;          [java.util Properties]
+  ;;          [javax.xml.parsers DocumentBuilder DocumentBuilderFactory]
+  ;;          [javax.xml.transform.dom DOMSource]
+  ;;          [javax.xml.transform OutputKeys TransformerFactory]
+  ;;          [javax.xml.transform.stream StreamSource StreamResult]
+  ;;          [org.jsoup Jsoup]
+  ;;          [org.jsoup.parser Parser]))
 
-;; TransformerFactory factory = TransformerFactory.newInstance();
-;; try {
-;; 	Transformer transformer = factory.newTransformer();
-;; 	transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-;; 	transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "4");	DOMSource source = new DOMSource(doc);
-;; 	StreamResult result = new StreamResult(outputFile);
-;; 	transformer.transform(source, result);
-;; } catch (TransformerException ex) {
-;; 	//Do something with the exception!
-;; }
+;; http://www.w3.org/TR/html51/semantics.html#semantics
 
-;; http://stackoverflow.com/questions/1264849/pretty-printing-output-from-javax-xml-transform-transformer-with-only-standard-j
-(defn pprint-stream
-  [html]
-  ;; (println "HTML str: " html)
-  (let [factory (TransformerFactory/newInstance)
-        transformer (.newTransformer factory)]
-    (.setOutputProperty transformer OutputKeys/INDENT "yes")
-    (.setOutputProperty transformer "{http://xml.apache.org/xslt}indent-amount", "4")
-    (.setOutputProperty transformer OutputKeys/OMIT_XML_DECLARATION "yes")
-    (let [xmlInput (StreamSource. (StringReader. html))
-          xmlOutput (StreamResult. (StringWriter.))]
-    (.setOutputProperty transformer OutputKeys/DOCTYPE_PUBLIC "bar")
-    (.setOutputProperty transformer OutputKeys/DOCTYPE_SYSTEM "foo")
+;; complete list of html5 tags:
+;; http://www.w3.org/TR/html-markup/elements.html
+;; as of 29 Nov 2015 (missing 'data'):
 
-    ;; DocumentType doctype = xmlDoc.getDoctype();
-    ;;     if(doctype != null) {
-    ;;         transformer.setOutputProperty(OutputKeys.DOCTYPE_PUBLIC, doctype.getPublicId());
-    ;;         transformer.setOutputProperty(OutputKeys.DOCTYPE_SYSTEM, doctype.getSystemId());
-    ;;     }
+;; see also http://www.w3.org/html/wg/drafts/html/master/index.html#elements-3
 
-      (.transform transformer xmlInput xmlOutput)
-      (println (.toString (.getWriter xmlOutput))))))
+;; a – hyperlink CHANGED
+;; abbr – abbreviation
+;; address – contact information
+;; area – image-map hyperlink
+;; article – article NEW
+;; aside – tangential content NEW
+;; audio – audio stream NEW
 
-;; (defn pprint
-;;   [html]
-;;   ;; (println "HTML: " html)
-;;   (let [factory (TransformerFactory/newInstance)
-;;         transformer (.newTransformer factory)
-;;         html (if (string? html) html
-;;                  ;; (if Element
-;;                  (xml/serialize html))]
-;;     (.setOutputProperty transformer OutputKeys/INDENT "yes")
-;;     (.setOutputProperty transformer "{http://xml.apache.org/xslt}indent-amount", "4")
-;;     (.setOutputProperty transformer OutputKeys/OMIT_XML_DECLARATION "yes")
-;;     ;; (.setOutputProperty transformer OutputKeys/DOCTYPE_PUBLIC "")
-;;     ;; (.setOutputProperty transformer OutputKeys/DOCTYPE_SYSTEM "foo")
-;;     ;; (.setOutputProperty transformer OutputKeys/METHOD "html")
-;;     (let [dom-factory (DocumentBuilderFactory/newInstance)
-;;           builder (.newDocumentBuilder dom-factory)
-;;           is (ByteArrayInputStream. (.getBytes html))
-;;           doc (.parse builder is)
-;;           domsrc (DOMSource. doc)
-;;           xmlOutput (StreamResult. (StringWriter.))
-;;           os (.getWriter xmlOutput)
-;;           doctype (.getDoctype doc)]
-;;       (if doctype
-;;           (.write os "<!DOCTYPE html>\n"))
-;;       (.transform transformer domsrc xmlOutput)
-;;       (println (.toString (.getWriter xmlOutput))))))
+;; b – offset text conventionally styled in bold CHANGED
+;; base – base URL
+;; bdi – BiDi isolate NEW
+;; bdo – BiDi override
+;; blockquote – block quotation
+;; body – document body
+;; br – line break
+;; button – button
 
-;; ;; using data.xml:
-;; (defn pprint
-;;   [html]
-;;   (log/trace "html type: " (type html))
-;;   (pp/pprint html))
+;; canvas – canvas for dynamic graphics NEW
+;; caption – table title
+;; cite – cited title of a work CHANGED
+;; code – code fragment
+;; col – table column
+;; colgroup – table column group
+;; command – command NEW
 
-;; from https://github.com/brennonyork/clj-template
-;; see http://www.paradiso.cc/2014/03/25/html-templates-in-clojure/
+;; data - MISSING from list but in REC
+;; datalist – predefined options for other controls NEW
+;; dd – description or value
+;; del – deleted text
+;; details – control for additional on-demand information NEW
+;; dfn – defining instance
+;; dialog - dialog box or window; http://www.w3.org/html/wg/drafts/html/master/semantics.html#the-dialog-element
+;; div – generic flow container
+;; dl – description list
+;; dt – term or name
 
-;; see also https://github.com/hoplon/hoplon
+;; em – emphatic stress
+;; embed – integration point for plugins NEW
 
+;; fieldset – set of related form controls
+;; figcaption – figure caption NEW
+;; figure – figure with optional caption NEW
+;; footer – footer NEW
+;; form – user-submittable form
 
-(def html5-tags
-  ["a" "abbr" "address" "area" "article" "aside" "audio"
-   "b" "base" "bdi" "bdo" "blockquote" "body" "br" "button"
-   "canvas" "caption" "cite" "code" "col" "colgroup" "command"
+;; h1 – heading
+;; h2 – heading
+;; h3 – heading
+;; h4 – heading
+;; h5 – heading
+;; h6 – heading
+;; head – document metadata container
+;; header – header NEW
+;; hr – thematic break CHANGED
+;; html – root element
+
+;; i – offset text conventionally styled in italic CHANGED
+;; iframe – nested browsing context (inline frame)
+;; img – image
+;; input – input control CHANGED
+;; ins – inserted text
+
+;; kbd – user input
+;; keygen – key-pair generator/input control NEW
+
+;; label – caption for a form control
+;; legend – title or explanatory caption
+;; li – list item
+;; link – inter-document relationship metadata
+
+;; main - Container for the dominant contents of another element
+;; map – image-map definition
+;; mark – marked (highlighted) text NEW
+;; math - MathML root
+;; menu – menu of commands
+;; menuitem - menu item
+;; meta – text metadata
+;; meter – scalar gauge NEW
+
+;; nav – section with navigational links
+;; noscript – fallback content for script
+
+;; object – generic external content: image, nested browsing context, or plugin
+;; ol – ordered list
+;; optgroup – group of options
+;; option – option in a list box or combo box control
+;; output – result of a calculation in a form NEW
+
+;; p – paragraph
+;; param – initialization parameters for Object
+;; pre – preformatted text
+;; progress – progress indicator NEW
+
+;; q – quoted text
+
+;; rb - ruby base
+;; rp – ruby parenthesis
+;; rt – ruby annotation text
+;; rtc – ruby annotation text container
+;; ruby – ruby annotation
+
+;; s – struck text CHANGED
+;; samp – (sample) output
+;; script – embedded script
+;; section – section NEW
+;; select – option-selection form control
+;; small – side comment
+;; source – media source for video or audio
+;; span – generic span
+;; strong – strong importance
+;; style – style (presentation) information
+;; sub – subscript
+;; summary – summary, caption, or legend for a details control
+;; sup – superscript
+;; svg - SVG root
+;; table – table
+;; tbody – table row group
+;; td – table cell
+;; template - template
+;; textarea – text input area
+;; tfoot – table footer row group
+;; th – table header cell
+;; thead – table heading group
+;; time – date and/or time NEW
+;; title – document title
+;; tr – table row
+;; track – timed text track
+;; u – unarticulated non-textual annotation
+;; ul – unordered list
+;; var – variable or placeholder text
+;; video – video NEW
+;; wbr – line-break opportunity NEW
+
+;; http://www.w3.org/TR/2011/WD-html5-20110525/content-models.html#metadata-content-0
+(def html5-metadata-tags
+  ["base" "command" "link" "meta" "noscript" "script" "style" "title"
+   "template"])
+
+;; http://www.w3.org/TR/2011/WD-html5-20110525/content-models.html#sectioning-content-0
+(def html5-sectioning-tags
+  ["address" "article" "aside"
+   "blockquote" "body" "details"
+   "fieldset" "figure" "footer"
+   "header" "nav" "section" "td"])
+
+;; http://www.w3.org/TR/2011/WD-html5-20110525/content-models.html#heading-content-0
+(def html5-heading-tags
+  ["h1" "h2" "h3" "h4" "h5" "h6"])
+
+;; according to https://developer.mozilla.org/en-US/docs/Web/HTML/Block-level_elements
+(def html5-block-tags
+  ["address"
+   "canvas" "caption" "command"
    "datalist" "dd" "del" "details" "dfn" "div" "dl" "dt" "data"
+   "figcaption" "form"
+   "li"
+   "main" "menu" "menuitem"
+   "ol"
+   "p" "pre"
+   "title"
+   "ul"])
+
+;; phrasing content: http://www.w3.org/TR/2011/WD-html5-20110525/content-models.html#phrasing-content-0
+(def html5-phrasing-tags
+  ["a" "abbr" "area" "audio"
+   "b" "bdi" "bdo" "br" "button"
+   "cite" "code" "command"
+   "datalist" "del" "dfn"
    "em" "embed"
-   "fieldset" "figcaption" "figure" "footer" "font" "form"
-   "h1" "h2" "h3" "h4" "h5" "h6" "head" "header" "hgroup" "hr" "html"
    "i" "iframe" "img" "input" "ins"
    "kbd" "keygen"
-   "label" "legend" "li" "link"
-   "map" "mark" "menu" "menuitem" "meta" "meter" "main" "math"
-   "nav" "noscript"
-   "object" "ol" "optgroup" "option" "output"
-   "p" "param" "pre" "progress"
+   "label"
+   "map" "mark" "math" "meter"
+   "noscript"
+   "object" "output"
+   "progress"
    "q"
-   "rp" "rt" "ruby"
-   "s" "samp" "script" "section" "select" "small" "source" "span" "strong" "style" "sub" "summary" "sup" "svg"
-   "table" "tbody" "td" "textarea" "tfoot" "th" "thead" "time" "title" "tr" "track"
-   "u" "ul"
+   "ruby"
+   "s" "samp" "script" "select" "small" "span" "strong" "sub" "sup" "svg"
+   "textarea" "time"
+   "u"
    "var" "video"
    "wbr"])
 
-(def polymer-tags
-  ["dom-module" "dom-repeat" "template"])
+(def html5-null-tags
+  ["caption" "col" "colgroup"
+   "head" "html"
+   "legend"
+   "optgroup" "option"
+   "rp" "rt"
+   "summary"
+   "table" "tbody" "td" "tfoot" "th" "thead" "tr"])
 
-(defn make-attrs
-  [attrs]
-  (string/join " "
-    (for [[k v] attrs]
-      (str (name k) "=\""v "\""))))
+(def html5-void-elt-tags
+  ["area" "base" "br" "col"
+   "embed" "hr" "img" "input"
+   "keygen" "link" "meta" "param"
+   "source" "track" "wbr"])
 
-(defmacro xform-args
-  [forms]
-  (log/trace "xform-args: " forms (type forms))
-  (loop [lst# forms rst# '()]
-    (log/trace "loop lst#: " lst# " rst#: " rst#)
-    (cond
-      (empty? lst#)
-      (do (log/trace "empty?: " (reverse rst#) (type (reverse rst#)))
-          (list 'quote (reverse rst#)))
+(def html5-rawtext-elts
+  ["script" "style"])
 
-      (map? (first lst#))
-      (recur (next lst#) rst#)
+;; http://www.w3.org/TR/html5/obsolete.html#non-conforming-features
+(def html5-obsolete-tags
+  {:applet "Use embed or object instead."
+   :acronym "Use abbr instead."
+   :basefont "Use appropriate elements or CSS instead."
+   :bgsound "Use audio instead."
+   :big "Use appropriate elements or CSS instead."
+   :blink "Use appropriate elements or CSS instead."
+   :center "Use appropriate elements or CSS instead."
+   :dir "Use ul instead."
+   :font "Use appropriate elements or CSS instead."
+   :marquee "Use appropriate elements or CSS instead."
+   :multicol "Use appropriate elements or CSS instead."
+   :nobr "Use appropriate elements or CSS instead."
+   :frame "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
+   :frameset "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
+   :noframes "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
+   :hgroup "To mark up subheadings, consider putting the subheading into a p element after the h1- h6 element containing the main heading, or putting the subheading directly within the h1- h6 element containing the main heading, but separated from the main heading by punctuation and/or within, for example, a span class="subheading" element with differentiated styling. Headings and subheadings, alternative titles, or taglines can be grouped using the header or div elements."
+   :isindex "Use an explicit form and text field combination instead."
+   :listing "Use pre and code instead."
+   :nextid "Use GUIDs instead."
+   :noembed "Use object instead of embed when fallback is necessary."
+   :plaintext "Use the "text/plain" MIME type instead."
+   :strike "Use del instead if the element is marking an edit, otherwise use s instead."
+   :xmp "Use pre and code instead, and escape "<" and "&" characters as "&lt;" and "&amp;" respectively."
+   :spacer "Use appropriate elements or CSS instead."
+   :tt "Use appropriate elements or CSS instead."})
 
-      (string? (first lst#))
-      (do (log/trace "string: " (first lst#))
-          (recur (next lst#) (cons (first lst#) rst#)))
+(def attrs-regex
+  #" *[^>]* *>")
 
-      (symbol? (first lst#))
-          (let [fst (first lst#)]
-            (if (contains? (ns-map *ns*) fst)
-              (recur (next lst#) (cons (eval fst) rst#))
-              (recur (next lst#) (cons (str "{{" fst "}}") rst#))))
+(def attrs-overlap-start-regex
+  ;; e.g. for a, b, em, i, li etc
+  ;; match <li>, <li >, <li/>, <li />
+  #" */?>")
 
-      (= (first lst#) 'get-in)
-      (do (log/trace "get-in: ")
-          (cons "GOTIN" rst#))
+(def attrs-overlap-attrs-regex
+  ;; e.g. for a, b, em, i, li etc
+  ;; match <li>, <li >, <li/>, <li />, <li foo="bar">, <li foo="bar">
+  #" +[^>]* */?>")
 
-      (list? (first lst#))
-      (do (log/trace "list? first")
-          (let [form (first lst#)
-                log (log/trace "form: " form)
-;;                log (log/trace "eval form: " ~form)
-                op (first form)
-                rst (rest form)
-                ;; log (log/trace "OP: " op)
-                ;; log (log/trace "RST: " rst)
-                ]
-          (recur (next lst#) (cons (resolve op)
-                                   rst#))))
-          ;; (recur (next lst#) (cons (eval
-          ;;                           (first lst#)) rst#)))
-          ;; (recur (next lst#) (cons (xform-args `(first ~lst#)) rst#)))
+(def html5-tags
+  (distinct
+   (sort
+    (concat html5-null-tags
+            html5-metadata-tags html5-heading-tags html5-sectioning-tags html5-block-tags
+            html5-phrasing-tags))))
 
-      :else
-      (do (log/trace "else: ")
-          (let [fst (first lst#)]
-            (if (contains? (ns-map *ns*) fst)
-              (recur (next lst#) (cons (eval fst) rst#))
-              (recur (next lst#) (cons (str "{{" fst "}}") rst#))))))))
+(defn list-tags
+  []
+  (let [content-tags (remove (set html5-void-elt-tags) html5-tags)]
+    (println "ALL TAGS: " html5-tags)
+    (println "CONTENT TAGS: " content-tags)
+    (doseq [tag html5-tags]
+      (println tag))))
 
-(defmacro eval-body
-  [body]
-  (log/trace "eval-body: " (str body))
-  (if (symbol? body)
-    (if (contains? (ns-map *ns*) body)
-      body
-      (str "{{" body "}}"))
-    (apply eval body)))
+(make-fns (remove (set html5-void-elt-tags) html5-tags))
 
-;; (defmacro elt
-;;   [tag & args]
-;;   (log/trace "elt tag: " tag)
-;;   (log/trace "elt args: " args (count args) (type args))
-;; ;;  args
-;;   "foo"
-;;   )
-  ;; (str
-  ;;  (str "<" (name tag)
-  ;;          ;; (when (clojure.core/map? fst#) ;;args#))
-  ;;          ;;   (do (log/trace "map? true")
-  ;;          ;;       (str " " (make-attrs fst#))))
-  ;;          ">")
-  ;;  (str "</" (name tag) ">\n")))
+(make-void-elt-fns html5-void-elt-tags)
 
-  ;; `(let [;;args# ~@args ;; (xform-args ~args)
-  ;;        ;;log# (log/trace "XFORM results: " args# (type args#))
-  ;;        ;; fst# (first '~args)
-  ;;        res# (list
-  ;;                   (str "<" (name ~tag)
-  ;;                        ;; (when (clojure.core/map? fst#) ;;args#))
-  ;;                        ;;   (do (log/trace "map? true")
-  ;;                        ;;       (str " " (make-attrs fst#))))
-  ;;                        ">")
-
-  ;;                   (if (clojure.core/map? (first args))
-  ;;                     (apply str (rest args))
-  ;;                     ~bod)
-  ;;                     ;;(eval-body args))
-  ;;                             ;; (apply str (rest (quote args#)))
-  ;;                             ;; (apply str (quote args#)))
-
-  ;;                   (str "</" (name ~tag) ">\n"))
-  ;;        res-str# (apply str res#)]
-  ;;    (log/trace "elt res#: " res# (type res#) (count res#))
-  ;;    (log/trace "elt res-str#: " res-str#)
-  ;;    res-str#)))
-;;     (apply str res#)))
-
-;; (defn make-macros
-;;   [args]
-;;   (log/trace "make-macros " args (type args))
-;;   (let [r (doseq [arg args]
-;;             (do
-;;               (log/trace "makemacs arg: " arg (type arg))
-;;               (eval `(defmacro ~(symbol (str arg))
-;;                  [& x#]
-;;                  (log/trace "FOBARL:" x# (type x#))
-;;                  (log/trace "fst:" (first x#))
-;;                  (str
-;;                   "<"
-;;                   ~arg
-;;                   (if (map? (first x#)) (str " " (make-attrs (first x#))))
-;;                   ">"
-;;                   (let [forms# (if (map? (first x#))
-;;                                 (rest x#)
-;;                                 x#)]
-;;                     (log/trace "forms: " forms# (type forms#))
-;;                       ;; (cond
-;;                       ;;   (symbol? (first forms#))
-;;                       ;;   (do (log/trace "FOO")
-;;                       ;;       (if (contains? (ns-map *ns*) (first forms#))
-;;                       ;;         (apply eval forms#)
-;;                       ;;         (str "{{" (apply str forms#) "}}")))
-;;                       ;;   (not (nil? forms#))
-;;                       ;;   (do (log/trace "BAR")
-;;                       ;;       (apply eval forms#))))
-;;                     (cond
-;;                       (symbol? (first forms#))
-;;                       (do (log/trace "FOO")
-;;                           (if (contains? (ns-map *ns*) (first forms#))
-;;                             (apply eval forms#)
-;;                             (str "{{" (apply str forms#) "}}")))
-;;                       (not (nil? forms#))
-;;                       (do (log/trace "BAR")
-;;                           (apply str (for [form# forms#]
-;;                                        (do (log/trace "FORM: " form#)
-;;                                            (eval form#)))))))
-;;                   "</" ~arg ">")))))]
-;;     nil))
-
-;; (make-macros html5-tags)
-
-(defn make-fns
-  [args]
-  (log/trace "make-fns " args) ;; (type args))
-  (doseq [arg args]
-    (log/trace "make-fns arg: " arg (type arg))
-    (let [farg (symbol arg)
-          kw   (keyword arg)
-          func `(defn ~farg ;; (symbol (str arg))
-                  [& hargs#]
-                  (log/trace "hargs: " (pr-str hargs#))
-                  (if (empty? hargs#)
-                    (xml/element ~kw)
-                    (let [first# (first hargs#)
-                          attrs# (if (map? first#)
-                                   (do (log/trace "map? first")
-                                       (if (instance? clojure.data.xml.Element first#)
-                                         (do (log/trace "Element instance")
-                                             {})
-                                         (do (log/trace "NOT Element instance")
-                                             first#)))
-                                   (do (log/trace "NOT map? first")
-                                       {}))
-                          content# (if (map? first#)
-                                     (if (instance? clojure.data.xml.Element first#)
-                                       hargs#
-                                       (rest hargs#))
-                                     hargs#)
-                          func# (apply xml/element ~kw attrs# content#)]
-                      ;; (log/trace "hargs: " hargs#)
-                      (log/trace "kw: " ~kw)
-                      (log/trace "args: " attrs#)
-                      (log/trace "content: " content# " (" (type content#) ")")
-                      ;; (log/trace "func: " func# (type func#))
-                      func#)))
-          f (eval func)])))
-
-(make-fns html5-tags)
-(make-fns polymer-tags)
-
-;; (defn make-str-fns
-;;   [args]
-;;   (log/trace "make-fns " args (type args))
-;;   (let [r (doseq [arg args]
-;;             (log/trace "make-fns arg: " arg (type arg))
-;;             (let [farg (symbol arg)
-;;                   func (eval `(defn ~farg ;; (symbol (str arg))
-;;                          [& hargs#]
-;;                          (log/trace "FOBARL:" hargs# (type hargs#))
-;;                          (log/trace "fst:" (first hargs#))
-;;                          (str
-;;                           "<"
-;;                           ~arg
-;;                           (if (map? (first hargs#)) (str " " (make-attrs (first hargs#))))
-;;                           ">"
-;;                           (apply str
-;;                                  (let [forms# (if (map? (first hargs#))
-;;                                                 (rest hargs#)
-;;                                                 hargs#)]
-;;                                    (log/trace "forms#: " forms# (type forms#))
-;;                                    (cond
-;;                                      (symbol? (first forms#))
-;;                                      (do (log/trace "FOO")
-;;                                          (if (contains? (ns-map *ns*) (first forms#))
-;;                                            (apply eval forms#)
-;;                                            (str "{{" (apply str forms#) "}}")))
-;;                                      (not (nil? forms#))
-;;                                      (do (log/trace "BAR")
-;;                                          (apply str (for [form# forms#]
-;;                                                       (do (log/trace "FORM: " form#)
-;;                                                           (eval form#))))))))
-;;                           "</" ~arg ">")))]
-;;               (log/trace "func: " func)))]
-;;         nil))
-
-;; (make-str-fns html5-tags)
-;; (make-str-fns polymer-tags)
-;; *ns*
-;; (li "hello")
-
-;;(div {:class$ "foo"} "bar")
-
-;;(makemacs polymer-tags)
-;; (dom-module {:id "my-elt"} (template "foo"))
