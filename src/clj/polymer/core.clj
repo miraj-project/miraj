@@ -1,22 +1,22 @@
-(ns miraj.polymer.core
-  (:refer-clojure :exclude [map meta time])
+(ns polymer.core
+  (:refer-clojure :exclude [list map meta time])
   (:require [clojure.data.xml :as xml]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [cheshire.core :as json :refer :all]
             [clj-http.client :as client]))
 
-;;(ns-unmap *ns* 'make-fns)
+;;(ns-unmap *ns* 'make-polymer-fns)
 
-(defn make-fns
+(defn make-polymer-fns
   [pfx args]
-  (println "make-fns " args) ;; (type args))
+  (println "make-polymer-fns " args) ;; (type args))
   (doseq [arg args]
     (let [farg (symbol arg)
           kw (keyword (str pfx "-" arg))
-          log (println "make-fns arg: " farg " (" arg ")")
+          ;; log (println "make-polymer-fns arg: " farg " (" arg ")")
           func `(defn ~farg ;; (symbol (str arg))
                   [& hargs#]
-                  (println "POLYMER FN: " ~kw (pr-str hargs#))
+                  ;; (println "POLYMER FN: " ~kw (pr-str hargs#))
                   (if (empty? hargs#)
                     (xml/element ~kw)
                     (let [first# (first hargs#)

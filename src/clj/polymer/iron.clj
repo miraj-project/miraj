@@ -1,5 +1,8 @@
-(ns miraj.polymer.iron
-  (:require [miraj.polymer.core :as p :refer [make-fns]]))
+(ns polymer.iron
+  (:refer-clojure :exclude [list meta])
+  (:require [polymer.core :refer [make-polymer-fns]]))
+
+(alter-meta! *ns* (fn [m] (assoc m :co-ns true)))
 
 (def polymer-iron-tags
   ["a11y-announcer"
@@ -41,5 +44,5 @@
    "validatable-behavior"
    "validator-behavior"])
 
-(p/make-fns "iron" polymer-iron-tags)
+(make-polymer-fns "iron" polymer-iron-tags)
 

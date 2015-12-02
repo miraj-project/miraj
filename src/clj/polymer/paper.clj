@@ -1,8 +1,10 @@
-(ns miraj.polymer.paper
+(ns polymer.paper
   (:refer-clojure :exclude [map meta time])
-  (:require [miraj.polymer.core :as p :refer [make-fns]]))
+  (:require [polymer.core :refer [make-polymer-fns]]))
 
-(def polymer-paper-tags
+(alter-meta! *ns* (fn [m] (assoc m :co-ns true)))
+
+(defonce polymer-paper-tags
   ["badge"
    "behaviors"
    "button"
@@ -38,5 +40,5 @@
    "toolbar"
    "tooltip"])
 
-(p/make-fns "paper" polymer-paper-tags)
+(make-polymer-fns "paper" polymer-paper-tags)
 
