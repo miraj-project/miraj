@@ -23,6 +23,8 @@
 
 ;; see also http://www.w3.org/html/wg/drafts/html/master/index.html#elements-3
 
+;;FIXME: make a complete tag map, tags as keys, docstrings as vals, linked to w3c spec
+;; then use element content categories with membership test
 ;; a – hyperlink CHANGED
 ;; abbr – abbreviation
 ;; address – contact information
@@ -242,14 +244,14 @@
    :frame "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
    :frameset "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
    :noframes "Either use iframe and CSS instead, or use server-side includes to generate complete pages with the various invariant parts merged in."
-   :hgroup "To mark up subheadings, consider putting the subheading into a p element after the h1- h6 element containing the main heading, or putting the subheading directly within the h1- h6 element containing the main heading, but separated from the main heading by punctuation and/or within, for example, a span class="subheading" element with differentiated styling. Headings and subheadings, alternative titles, or taglines can be grouped using the header or div elements."
+   :hgroup "To mark up subheadings, consider putting the subheading into a p element after the h1- h6 element containing the main heading, or putting the subheading directly within the h1- h6 element containing the main heading, but separated from the main heading by punctuation and/or within, for example, a span class='subheading' element with differentiated styling. Headings and subheadings, alternative titles, or taglines can be grouped using the header or div elements."
    :isindex "Use an explicit form and text field combination instead."
    :listing "Use pre and code instead."
    :nextid "Use GUIDs instead."
    :noembed "Use object instead of embed when fallback is necessary."
-   :plaintext "Use the "text/plain" MIME type instead."
+   :plaintext "Use the 'text/plain' MIME type instead."
    :strike "Use del instead if the element is marking an edit, otherwise use s instead."
-   :xmp "Use pre and code instead, and escape "<" and "&" characters as "&lt;" and "&amp;" respectively."
+   :xmp "Use pre and code instead, and escape '<' and '&' characters as '&lt;' and '&amp;' respectively."
    :spacer "Use appropriate elements or CSS instead."
    :tt "Use appropriate elements or CSS instead."})
 
