@@ -1,0 +1,45 @@
+(ns miraj.polymer.iron
+  (:require [miraj.polymer.core :as p :refer [make-fns]]))
+
+(def polymer-iron-tags
+  ["a11y-announcer"
+   "a11y-keys"
+   "a11y-keys-behavior"
+   "ajax"
+   "autogrow-textarea"
+   "behaviors"
+   "checked-element-behavior"
+   "collapse"
+   "component-page"
+   "doc-viewer"
+   "dropdown"
+   "fit-behavior"
+   "flex-layout"
+   "form"
+   "form-element-behavior"
+   "icon"
+   "icons"
+   "iconset"
+   "iconset-svg"
+   "image"
+   "input"
+   "jsonp-library"
+   "label"
+   "list"
+   "localstorage"
+   "media-query"
+   "menu-behavior"
+   "meta"
+   "overlay-behavior"
+   "pages"
+   "range-behavior"
+   "resizable-behavior"
+   "selector"
+   "signals"
+   "swipeable-container"
+   "test-helpers"
+   "validatable-behavior"
+   "validator-behavior"])
+
+(p/make-fns "iron" polymer-iron-tags)
+
