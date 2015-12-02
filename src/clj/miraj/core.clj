@@ -15,8 +15,12 @@
             [cljs.env :as env]
             [hiccup.core :refer [html]]
             [hiccup.page :refer [html5]]
-            [ring.util.response :refer [response]])
+            [ring.util.response :refer [response]]
+            [miraj.html :as h])
   (:import [java.io StringReader]))
+
+
+;;FIXME:  switch from hiccup to miraj.html
 
 ;; some of the cljs stuff is borrowed from
 ;;  http://swannodette.github.io/2014/01/14/clojurescript-analysis--compilation/
@@ -147,27 +151,6 @@
   ;;    (vector? seq-exprs) "a vector for its binding"
   ;;    (even? (count seq-exprs)) "an even number of forms in binding vector")
 
-(defmacro handle-ctor
-  [ctor]
-  (log/trace "")
-  (log/trace "handle-ctor: " ctor)
-  ;; (doseq [form ctor]
-  ;;   (log/trace "ctor form: " form))
-  (if (not (= ('ctor (first ctor))))
-    (log/trace "ERROR: first not 'ctor"))
-  (if (not (vector? (first (next ctor))))
-    (log/trace "ERROR: missing param vector"))
-  (if (not (list? (first (nnext ctor))))
-    (log/trace "ERROR: missing ctor body"))
-  (let [params (first (next ctor))
-        body   (first (nnext ctor))]
-    (log/trace "params: " params)
-    (log/trace "body: " body)
-    `(let [body# ~(eval body)]
-      (log/trace "body: " body#)
-      body#)))
-;      (xml/serialize body#))))
-
 (defmacro handle-params
   [params]
   (log/trace "handle-params: " params)
@@ -179,45 +162,82 @@
     ;;   (log/trace "let params: " letparms)
       parms))
 
+(defmacro handle-ctor
+  [ctor]
+  (log/trace "")
+  (log/trace "handle-ctor: " ctor)
+  ;; (doseq [form ctor]
+  ;;   (log/trace "ctor form: " form))
+  (let [key (first ctor)
+        params (nth ctor 1)
+        body (rest (rest ctor))]
+  (if (not (= ('ctor key)))
+    (log/trace "ERROR: first not 'ctor"))
+  (if (not (vector? params))
+    (log/trace "ERROR: missing param vector"))
+  (if (not (list? body))
+    (log/trace "ERROR: missing ctor body"))
+  (log/trace "params: " params)
+  (log/trace "body: " body)
+  (let [forms (for [form body]
+                (do (log/trace "form: " form)
+                    (log/trace "formx: " (macroexpand form))
+                    (eval form)))]
+    (log/trace "FORMS: " (count forms) ": " forms)
+    forms)))
+
 (defmacro co-type
   [name & args]
   (log/trace "co-type: " name ", nbr args:" (count args))
   ;; (doseq [arg args]
   ;;   (log/trace "arg: " (type arg) ": " arg))
-  #_(let [result (for [arg args]
-                 (cond
-                   (list? arg)
-                   (cond
-                     (= 'ctor (first arg))
-                     (do (log/trace "CTOR")
-                         (eval `(handle-ctor ~arg)))
-                     ;; (= :require (first arg))
-                     ;; (do (log/trace "REQUIRE")
-                     ;;     "<require>")
-                     ;; :else
-                     ;; (do (log/trace "UNKNOWN: " arg)
-                     ;;     "<UNKNOWN>")
-                     )
+  (let [result (for [arg args]
+                 (do (log/trace "arg: " arg)
+                     (cond
+                       (list? arg)
+                       (cond
+                         (= 'ctor (first arg))
+                         (do (log/trace "CTOR")
+                             (macroexpand `(handle-ctor ~arg)))
+                         ;; (= :require (first arg))
+                         ;; (do (log/trace "REQUIRE")
+                         ;;     "<require>")
+                         ;; :else
+                         ;; (do (log/trace "UNKNOWN: " arg)
+                         ;;     "<UNKNOWN>")
+                         )
 
-                   (string? arg) arg
-                   ;; :else
-                   ;; (do (log/trace "UNKNOWN TYPE: " arg)
-                   ;;       "<UNKNOWN TYPE>")
-                   ))]
-      )
-  (let [ctor (nth args 2)
-        ;;result (eval `(handle-ctor ~ctor))]
-        parms (nth ctor 1)
-        params (vec (flatten (merge []
-                (for [param parms]
-                  [param (keyword param)]))))
-        body    (list 'let params (first (nnext ctor)))
-        ]
-    (log/trace "params: " params)
-    (log/trace "body: " body)
-    `(let [body# ~body]
-       (log/trace "new body: " body#)
-      body#)))
+                       (string? arg) arg
+                       ;; :else
+                       ;; (do (log/trace "UNKNOWN TYPE: " arg)
+                       ;;       "<UNKNOWN TYPE>")
+                       )))
+        ctor (nth result 2)]
+    ;; (print "RESULT: " ctor)
+    `(list ~@ctor)))
+
+;; FIXME:  intern as a func in co-ns
+  ;; `(let [n# (defn ~nm ~args ~@body)]
+  ;;    (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
+
+  ;; (let [ctor (nth args 2)
+  ;;       ;;result (eval `(handle-ctor ~ctor))]
+  ;;       parms (nth ctor 1)
+  ;;       params (vec (flatten (merge [] ;; must be an easier way
+  ;;                                   (for [param parms]
+  ;;                                     [param (keyword param)]))))
+  ;;       id (str name)
+  ;;       body1 (list 'h/dom-module {:id id}
+  ;;                   (list 'h/template
+  ;;                         (first (nnext ctor))))
+  ;;       body    (list 'let params body1)
+  ;;       ]
+  ;;   (log/trace "params: " params)
+  ;;   (log/trace "body1: " body1)
+  ;;   (log/trace "body: " body)
+  ;;   `(let [body# ~body]
+  ;;      (log/trace "new body: " body#)
+  ;;     body#)))
 
     ;; (log/trace "result: " result)
     ;; result))
@@ -414,7 +434,7 @@
           (eval header)                   ; get <meta> from Miraj var
           (apply coroutine nil)))
       (throw (RuntimeException. (str "arg to resume must be defined with
-      'miraj.hiccup/co-routine', not 'clojure.core/defn'"))))))
+      'miraj.polymer/co-routine', not 'clojure.core/defn'"))))))
 
 (defn wrap-component
   [handler ns]
