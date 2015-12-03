@@ -128,10 +128,10 @@
 
 (defn get-href
   [pfx only]
-  (log/trace "get-href: " pfx " - " only)
+  ;; (log/trace "get-href: " pfx " - " only)
   (let [pfx (str/split (str pfx) #"\.")
         hd (first pfx)]
-    (log/trace "get-href pxf: " pfx)
+    ;; (log/trace "get-href pxf: " pfx)
     (cond
       (= hd "polymer")
       (let [pns (second pfx)]
@@ -161,20 +161,20 @@
 (defn get-js
   [script]
   (let [u (nth script 2)]
-    (log/trace "script url: " u)
+    ;; (log/trace "script url: " u)
     (h/script {:type "text/javascript" :src u})))
 
 (defn get-style
   [script]
   (let [u (nth script 2)]
-    (log/trace "script url: " u)
+    ;; (log/trace "script url: " u)
     (h/link {:rel "stylesheet" :href u})))
 
 (defn handle-refs
-  ;; {:arglists '([name docstring? attr-map? references*])}
   ;; [docstr reqs & body]
+;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
-  (log/trace "handle-refs: " args)
+  ;; (log/trace "handle-refs: " args)
   (let [ns (create-ns nm)
         ns-path (ns-to-path ns)
         refmap (into {} (map #(identity [(first %) (rest %)]) args))
@@ -184,19 +184,19 @@
         components (filter #(do (:co-ns (meta (find-ns (first %))))) reqs)
 
         scripts (for [script (filter #(some #{:js} %) reqs)] (get-js script))
-        log (log/trace "SCRIPTS: " scripts)
+        ;; log (log/trace "SCRIPTS: " scripts)
 
         styles  (for [script (filter #(some #{:css} %) reqs)] (get-style script))
-        log (log/trace "STYLES: " styles)
+        ;; log (log/trace "STYLES: " styles)
 
         links (for [comp components] (get-link comp))
-        log (log/trace "LINKS: " links)
+        ;; log (log/trace "LINKS: " links)
 
         preamble (apply miraj-header title ns-path [scripts styles links])
             ]
-    (log/trace (str "*ns*: " ns " " (type ns)))
-    (log/trace "name: " nm (type nm))
-    (log/trace "title: " title)
+    ;; (log/trace (str "*ns*: " ns " " (type ns)))
+    ;; (log/trace "name: " nm (type nm))
+    ;; (log/trace "title: " title)
     ;; (log/trace "reqs: " reqs)
     ;; (log/trace "components: " components)
     ;; (log/trace "links: " links)

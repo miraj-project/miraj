@@ -264,23 +264,26 @@
   co-namespace (declared using the 'co-ns' form).  they run in a
   co-application (i.e. webpage).  (Technically, a co-routine is
   represented as an ordinary function with metadata {:miraj :co-routine}.)"
-  [name args & body]
-  ;; (log/trace "co-routine in ns: " *ns*)
-  (if (not (ns-resolve *ns* (symbol "Miraj")))
+  [nm args & body]
+  (log/trace "co-routine " nm " in ns: " *ns*)
+  (log/trace "co-routine in ns: " *ns*)
+  (if (not #_(ns-resolve *ns* (symbol "Miraj"))
+           (:co-ns (meta *ns*)))
     (throw (RuntimeException. (str "co-routines can only be defined within a co-namespace."))))
-  `(let [n# (defn ~name ~args ~@body)]
-     (alter-meta! n# (fn [m#] (assoc m# :miraj :co-routine)))
+  `(let [n# (defn ~nm ~args ~@body)]
+     (alter-meta! n# (fn [m#] (assoc m# :co-routine true)))
      ;; (log/trace "co-routine: " (meta n#) n#)
      n#))
 
-(defmacro co-defn
+(defmacro co-fn
   "define a co-function. i.e. a web component. co-functions can be
   defined in any namespace, but used in co-routines."
   [nm args & body]
-  ;; (log/trace (str "co-defn: " (ns-name *ns*) "/" nm " " *ns*))
+  (log/trace (str "co-fn: " (ns-name *ns*) "/" nm " " *ns*))
   `(let [n# (defn ~nm ~args ~@body)]
-     (alter-meta! n# (fn [m#] (assoc m# :miraj :co-fn)))
+     (alter-meta! n# (fn [m#] (assoc m# :co-fn true)))
      n#))
+
 ;;FIXME: only "main" allowed for now
 (defmacro resume
   [coroutine] ;; e.g. foo.bar/main
@@ -331,3 +334,28 @@
             (response r)))
         (handler request)))
     ))
+
+(defn get-body
+  [component]
+  (log/trace "get-body: " component)
+  (let [body ((find-var component))]
+    (log/trace "body: " body (type body))
+    (if (= :body (:tag body))
+      body
+      (h/body {:unresolved ""} body))))
+
+(defmacro activate [component]
+  (log/trace "activate: " component (type component))
+  (if (not (:co-fn (meta (find-var component))))
+    (throw (RuntimeException. (str "only co-functions can be activated."))))
+  (println "Activating " component ": ")
+  (let [ns (find-ns (symbol (namespace component)))]
+    (if (not (:co-ns (meta ns)))
+      (throw (RuntimeException. (str "co-functions must be defined in a co-namespace."))))
+    (let [preamble (:co-fn (meta ns))
+          ;; log (log/trace "preamble:" preamble)
+          body (get-body component)
+          tree (h/html preamble body)]
+      ;; (log/trace "tree: " tree)
+      tree)))
+;;    `(xml/serialize :html ~tree))))
