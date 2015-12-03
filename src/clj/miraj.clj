@@ -7,7 +7,7 @@
 
 (println "loading miraj")
 
-(defonce polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "molecules"})
+(def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
 (defn android-header
   [docstr]
@@ -63,7 +63,6 @@
              (win8-header docstr)
              (polymer-header ns-path)
              (vec reqs))]
-    (log/trace "HDR: " hdr)
     hdr))
 
 (defn ns-to-path
@@ -127,13 +126,96 @@
                            (log/error "unsupported option: " opts)))))))]
     (mapcat identity reqs)))
 
+(defn get-href
+  [pfx only]
+  (log/trace "get-href: " pfx " - " only)
+  (let [pfx (str/split (str pfx) #"\.")
+        hd (first pfx)]
+    (log/trace "get-href pxf: " pfx)
+    (cond
+      (= hd "polymer")
+      (let [pns (second pfx)]
+        (if (not (contains? polymer-nss pns))
+          (throw (RuntimeException. (str "unsupported namespace: " pns " | " pfx " | " polymer-nss))))
+        (if only
+          (cond
+            (= pns "font") (str hd "/" pns "-" only "/" only ".html")
+            :else (str hd "/" pns "-" only "/" pns "-" only ".html"))
+          (str hd "/" pns "-elements.html"))))))
+
+(defn get-link
+ [comp]
+ (log/trace "component: " comp)
+ (let [ns (first comp)
+       options (apply hash-map (rest comp))
+       as-opt (:as options)
+       only-opts (:only options)]
+   ;; (log/trace "component ns: " ns " :only " only-opts)
+   ;; (log/trace "component opts: " options)
+   ;; (log/trace "component as: " as-opt)
+   (if (nil? only-opts)
+     (h/link {:rel "import" :href (get-href ns nil)})
+     (for [only only-opts]
+       (h/link {:rel "import" :href (get-href ns only)})))))
+
+(defn get-js
+  [script]
+  (let [u (nth script 2)]
+    (log/trace "script url: " u)
+    (h/script {:type "text/javascript" :src u})))
+
+(defn get-style
+  [script]
+  (let [u (nth script 2)]
+    (log/trace "script url: " u)
+    (h/link {:rel "stylesheet" :href u})))
+
 (defn handle-refs
   ;; {:arglists '([name docstring? attr-map? references*])}
   ;; [docstr reqs & body]
-  [& args]
+  [nm & args]
   (log/trace "handle-refs: " args)
-  (let [refmap (into {} (map #(identity [(first %) (rest %)]) args))]
-    (pp/pprint refmap)
+  (let [ns (create-ns nm)
+        ns-path (ns-to-path ns)
+        refmap (into {} (map #(identity [(first %) (rest %)]) args))
+        title (first (:title refmap))
+        reqs (:require refmap)
+        ;; pick out the :requires for components only
+        components (filter #(do (:co-ns (meta (find-ns (first %))))) reqs)
+
+        scripts (for [script (filter #(some #{:js} %) reqs)] (get-js script))
+        log (log/trace "SCRIPTS: " scripts)
+
+        styles  (for [script (filter #(some #{:css} %) reqs)] (get-style script))
+        log (log/trace "STYLES: " styles)
+
+        links (for [comp components] (get-link comp))
+        log (log/trace "LINKS: " links)
+
+        preamble (apply miraj-header title ns-path [scripts styles links])
+            ]
+    (log/trace (str "*ns*: " ns " " (type ns)))
+    (log/trace "name: " nm (type nm))
+    (log/trace "title: " title)
+    ;; (log/trace "reqs: " reqs)
+    ;; (log/trace "components: " components)
+    ;; (log/trace "links: " links)
+    ;; (log/trace "preamble: " preamble)
+    `(let [;ns# (create-ns ~nm)
+                                        ;log# (log/trace "new-ns: " (str ns#))
+           ;; var# (intern '~ns (symbol "Miraj"))
+           ;;log# ~(println "ns: " ns)
+           ;; (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
+           var# (alter-meta! ;; var-root
+                 ;; var#
+                 ~ns
+                 (fn [current# args#]
+                   (merge current# {:co-ns true
+                                    :co-fn args#}))
+                 ~preamble)
+           ]
+       var#)))
+
   ;; (if (symbol? arg)
   ;;   (do ;; we're defining co-fns
   ;;     ;; (log/trace "co-ns: " arg " - defining co-fns")
@@ -142,49 +224,20 @@
   ;;       (throw (RuntimeException. (str "co-routines can only be defined within a co-namespace."))))
   ;;     )
     ;; (do ;; we're defining co-routines
-      (let [title (first (:title refmap))
 
-
-
-            reqs (:require refmap)
-            ;; pick out the :requires for components only
-            components (filter #(do
-                                  #_(println "REQ: " (first %) " - "
-                                             (:co-ns (meta (find-ns (first %)))))
-                                  (:co-ns (meta (find-ns (first %))))) reqs)
-
-            calls (for [comp components] (h/link {:rel "import" :href (first comp)}))
-            ns *ns*
-            ns-path (ns-to-path ns)
-            ;; reqs (get-reqs reqs)
-            ]
-        (log/trace (str "*ns*: " *ns*))
-        (log/trace "title: " title)
-        (log/trace "reqs: " reqs)
-        (log/trace "components: " components)
-        (log/trace "CALLS: " calls)
-
-        `(let [;;ns# (create-ns '~ns)
-               ;;log# (log/trace "new-ns: " (str ns#))
-               var# (intern '~ns (symbol "Miraj"))
-               log# (log/trace "var#: " var#)
-               val# (alter-var-root
-                     var#
-                     (fn [oldval#]
-                       ~(apply miraj-header title ns-path calls)
-                       ))]
-           var#))))
 
 (defonce custom-kws #{:title :components})
 
 (defmacro co-ns
   [name & refs]
   (println "co-ns refs: " refs)
-  (eval (apply handle-refs refs))
+  (eval (apply handle-refs name refs))
   (let [refmap (into {} (map #(identity [(first %) (rest %)]) refs))
-        required (list (apply list ':require (:require refmap)))]
-    (println "REFS: " refs)
-    (println "REQUIRED: " required)
+        requireds (:require refmap)
+        libs (filter #(not (some #{:js :css} %)) requireds)
+        required (list (apply list ':require libs))]
+    ;; (println "REFS: " refs)
+    ;; (println "REQUIRED: " required)
     `(ns ~name ~@required)))
 
 
