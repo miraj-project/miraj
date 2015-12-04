@@ -461,14 +461,17 @@
   [disp-map]
   (log/trace "dispatch " disp-map)
   (doseq [[k handler] disp-map]
-    (let [ch (chan)]
-      (log/trace "NEW CHANNEL: " ch " for " k)
-      (if (not= :_DEFAULT k)
+    (if (not= :_DEFAULT k)
+      (let [ch (chan)]
+        (log/trace "NEW CHANNEL: " ch " for " k)
         (swap! dispatch-map
                (fn [old k handler] (assoc old k handler))
-               (ns-to-path (subs (str k) 1))
-               (if (= :_DEFAULT k) default ch)))
-      (chan-dispatch (if (= :_DEFAULT k) default ch) handler)))
+               (if (= :_ROOT k) "/" (ns-to-path (subs (str k) 1)))
+               (if (= :_DEFAULT k) default ch))
+        (chan-dispatch ch handler))))
+  ;;FIXME: throw an exception of user does not provide default handler?
+  ;;OR: issue a warning and install default handler
+  (chan-dispatch default (:_DEFAULT disp-map))
   (log/trace "dispatch-map " @dispatch-map)
   (log/trace "http-rqst chan: " http-rqst)
   (log/trace "http-resp chan: " http-resp)
