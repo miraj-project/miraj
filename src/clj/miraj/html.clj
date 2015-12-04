@@ -1,6 +1,9 @@
 (ns miraj.html
   (:refer-clojure :exclude [map meta time])
-  (:require [miraj.ml.core :refer [make-fns make-void-elt-fns]]))
+  (:require [miraj.ml.core :refer [make-fns make-void-elt-fns]]
+            [clojure.tools.logging :as log :only [trace debug error info]]))
+
+(log/trace "loading")
 
             ;;[clojure.data.xml :as xml]
             ;; [clojure.tools.logging :as log :only [trace debug error info]]

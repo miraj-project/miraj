@@ -5,35 +5,35 @@
             [miraj.html :as h]))
 ;;  (:require [clojure.pprint :as pp]))
 
-(println "loading miraj")
+(log/trace "loading")
 
 (def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
 (defn android-header
   [docstr]
   ;; Chrome for Android theme color
-  [(h/meta {:name "theme-color" :content "#2E3AA1"})
-  ;; Add to homescreen for Chrome on Android
-  (h/meta {:name "mobile-web-app-capable" :content "yes"})
-  (h/meta {:name "application-name" :content "PSK"})
-  (h/link {:rel "icon" :sizes "192x192"
-           :href "images/touch/chrome-touch-icon-192x192.png"})])
+  (list (h/meta {:name "theme-color" :content "#2E3AA1"})
+        ;; Add to homescreen for Chrome on Android
+        (h/meta {:name "mobile-web-app-capable" :content "yes"})
+        (h/meta {:name "application-name" :content "PSK"})
+        (h/link {:rel "icon" :sizes "192x192"
+                 :href "images/touch/chrome-touch-icon-192x192.png"})))
 
 (defn safari-header
   [docstr]
   ;; Add to homescreen for Safari on iOS
-  [(h/meta {:name "apple-mobile-web-app-capable" :content "yes"})
+  (list (h/meta {:name "apple-mobile-web-app-capable" :content "yes"})
   (h/meta {:name "apple-mobile-web-app-status-bar-style" :content "black"})
   (h/meta {:name "apple-mobile-web-app-title" :content (str docstr)})
-  (h/link {:rel "apple-touch-icon" :href "images/touch/apple-touch-icon.png"})])
+  (h/link {:rel "apple-touch-icon" :href "images/touch/apple-touch-icon.png"})))
 
 (defn win8-header
   [docstr]
-  [   ;; Tile color for Win8
+  (list   ;; Tile color for Win8
    (h/meta {:name "msapplication-TileColor" :content "#3372DF"})
    ;; Tile icon for Win8 (144x144)
    (h/meta {:name "msapplication-TileImage"
-            :content "images/touch/ms-touch-icon-144x144-precomposed.png"})])
+            :content "images/touch/ms-touch-icon-144x144-precomposed.png"})))
 
 (defn polymer-header
   [ns-path]
@@ -46,26 +46,31 @@
    (h/style {:is "custom-style" :include "shared-styles"})
    (h/script {:src "polymer/webcomponentsjs/webcomponents-lite.js"})])
 
+(defn meta-header
+  [docstr]
+  (list (h/title docstr)
+   (h/meta {:charset "utf-8"})
+   (h/meta {:name "description" :content docstr})
+   (h/meta {:name "viewport",
+            :content
+            "width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes"})
+   ;; Web Application Manifest
+   (h/link {:rel "manifest" :href "manifest.json"})))
+
 (defn miraj-header
   [docstr ns-path & reqs]
-  (println "REQS: " reqs)
-  (let [hdr (h/head
-             (h/title docstr)
-             (h/meta {:charset "utf-8"})
-             (h/meta {:name "description" :content docstr})
-             (h/meta {:name "viewport",
-                      :content
-                      "width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes"})
-             ;; Web Application Manifest
-             (h/link {:rel "manifest" :href "manifest.json"})
-             (android-header docstr)
-             (safari-header docstr)
-             (win8-header docstr)
-             (polymer-header ns-path)
-             (vec reqs))]
+  (println "miraj-header: " reqs)
+  (let [hdr (h/head (apply
+                     concat (meta-header docstr)
+                     (android-header docstr)
+                     (safari-header docstr)
+                     (win8-header docstr)
+                     (polymer-header ns-path)
+                     reqs))]
+    (log/trace "MIRAJ HEADER: " hdr)
     hdr))
 
-(defn ns-to-path
+(defn path-from-ns
   [ns]
   (str/replace (str ns) #"\.|-" {"." "/" "-" "_"}))
 
@@ -145,7 +150,7 @@
 
 (defn get-link
  [comp]
- (log/trace "component: " comp)
+ (log/trace (str "get-link: " comp))
  (let [ns (first comp)
        options (apply hash-map (rest comp))
        as-opt (:as options)
@@ -160,28 +165,34 @@
 
 (defn get-js
   [script]
+  (log/trace "get-js: " script)
   (let [u (nth script 2)]
-    ;; (log/trace "script url: " u)
     (h/script {:type "text/javascript" :src u})))
 
 (defn get-style
   [script]
+  (log/trace "get-style " script)
   (let [u (nth script 2)]
-    ;; (log/trace "script url: " u)
     (h/link {:rel "stylesheet" :href u})))
 
 (defn handle-refs
   ;; [docstr reqs & body]
 ;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
-  ;; (log/trace "handle-refs: " args)
+  (log/trace "handle-refs: " args)
   (let [ns (create-ns nm)
-        ns-path (ns-to-path ns)
+        ns-path (path-from-ns ns)
         refmap (into {} (map #(identity [(first %) (rest %)]) args))
+        ;; log (log/trace "refmap: " refmap)
         title (first (:title refmap))
         reqs (:require refmap)
+        ;; log (log/trace "reqs: " reqs)
         ;; pick out the :requires for components only
-        components (filter #(do (:co-ns (meta (find-ns (first %))))) reqs)
+        components (let [comps (filter #(not (some #{:js :css} %)) reqs)
+                         c (doseq [c comps] (require c))]
+                     (filter #(do #_(log/trace "comp: " % " " (find-ns (first %)))
+                                  (:co-ns (meta (find-ns (first %))))) comps))
+        ;; log (log/trace "components: " components)
 
         scripts (for [script (filter #(some #{:js} %) reqs)] (get-js script))
         ;; log (log/trace "SCRIPTS: " scripts)
@@ -189,10 +200,14 @@
         styles  (for [script (filter #(some #{:css} %) reqs)] (get-style script))
         ;; log (log/trace "STYLES: " styles)
 
-        links (for [comp components] (get-link comp))
+        links (flatten (for [comp components] (do #_(log/trace "link? " comp) (get-link comp))))
         ;; log (log/trace "LINKS: " links)
 
-        preamble (apply miraj-header title ns-path [scripts styles links])
+        polymer (concat scripts styles links)
+        ;; log (log/trace "POLYMER: " polymer)
+
+        preamble (miraj-header title ns-path polymer)
+        log (log/trace "PREAMBLE: " preamble)
             ]
     ;; (log/trace (str "*ns*: " ns " " (type ns)))
     ;; (log/trace "name: " nm (type nm))
@@ -212,7 +227,7 @@
                  (fn [current# args#]
                    (merge current# {:co-ns true
                                     :co-fn args#}))
-                 ~preamble)
+                 '~preamble)
            ]
        var#)))
 
@@ -229,16 +244,15 @@
 (defonce custom-kws #{:title :components})
 
 (defmacro co-ns
-  [name & refs]
-  (println "co-ns refs: " refs)
-  (eval (apply handle-refs name refs))
+  [nm & refs]
+  (log/trace "co-ns: " nm) ;; " " refs)
+  (eval (apply handle-refs nm refs))
   (let [refmap (into {} (map #(identity [(first %) (rest %)]) refs))
         requireds (:require refmap)
         libs (filter #(not (some #{:js :css} %)) requireds)
         required (list (apply list ':require libs))]
     ;; (println "REFS: " refs)
     ;; (println "REQUIRED: " required)
-    `(ns ~name ~@required)))
+    `(ns ~nm ~@required)))
 
-
-(println "loaded miraj")
+(log/trace "loaded")

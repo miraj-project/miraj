@@ -1,5 +1,6 @@
 (ns miraj.core
-  (:require [clojure.string :as string]
+  (:require [clojure.core.async :as async :refer :all]
+            [clojure.string :as string]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [clojure.pprint :as pp]
             [clojure.data.xml :as xml]
@@ -15,9 +16,11 @@
             [cljs.env :as env]
             [hiccup.core :refer [html]]
             [hiccup.page :refer [html5]]
-            [ring.util.response :refer [response]]
+            [ring.util.response :refer [not-found response]]
             [miraj.html :as h])
   (:import [java.io StringReader]))
+
+(log/trace "loading")
 
   ;; some of the cljs stuff is borrowed from
   ;;  http://swannodette.github.io/2014/01/14/clojurescript-analysis--compilation/
@@ -279,7 +282,7 @@
   "define a co-function. i.e. a web component. co-functions can be
   defined in any namespace, but used in co-routines."
   [nm args & body]
-  (log/trace (str "co-fn: " (ns-name *ns*) "/" nm " " *ns*))
+  (log/trace (str "defco-fn: " (ns-name *ns*) "/" nm))
   `(let [n# (defn ~nm ~args ~@body)]
      (alter-meta! n# (fn [m#] (assoc m# :co-fn true)))
      n#))
@@ -336,26 +339,158 @@
     ))
 
 (defn get-body
-  [component]
-  (log/trace "get-body: " component)
-  (let [body ((find-var component))]
+  [ns component]
+  (log/trace "get-body ns: " ns)
+  (log/trace "get-body: " component (type component))
+  ;; (log/trace "get-body class: " (class component) " / " (type component))
+    ;; for dev, always reload
+  ;; (log/trace "reloading ns " ns)
+  ;; (require (ns-name ns) :reload)
+  (let [body (if (fn? component) (component)
+                 (if (symbol? component) ((resolve component))))]
     (log/trace "body: " body (type body))
     (if (= :body (:tag body))
       body
-      (h/body {:unresolved ""} body))))
+      (h/body {:unresolved "unresolved"} body))))
 
-(defmacro activate [component]
+
+;; (defmacro activate [component]
+(defn activate [component]
   (log/trace "activate: " component (type component))
-  (if (not (:co-fn (meta (find-var component))))
-    (throw (RuntimeException. (str "only co-functions can be activated."))))
-  (println "Activating " component ": ")
-  (let [ns (find-ns (symbol (namespace component)))]
-    (if (not (:co-ns (meta ns)))
-      (throw (RuntimeException. (str "co-functions must be defined in a co-namespace."))))
-    (let [preamble (:co-fn (meta ns))
-          ;; log (log/trace "preamble:" preamble)
-          body (get-body component)
-          tree (h/html preamble body)]
-      ;; (log/trace "tree: " tree)
-      tree)))
+  (cond
+    (symbol? component)
+    (do (log/trace "activating symbol")
+        (let [ns-sym (symbol (namespace component))
+              ;; log (log/trace "ns-sym: " ns-sym)
+              ns (find-ns ns-sym)
+              ;; log (log/trace "ns: " ns)
+              nm (name component)]
+          (if (nil? ns) (do (log/trace "requiring ns " ns-sym) (require ns-sym)))
+          (if (not (:co-fn (meta (find-var component))))
+            (throw (RuntimeException. (str "only co-functions can be activated."))))
+          (let [ns (find-ns (symbol (namespace component)))
+                log (log/trace "ACTIVAT ns: " ns)
+                preamble (if-let [cofn (:co-fn (meta ns))]
+                           cofn
+                           (throw (RuntimeException.
+                                   (str "co-functions must be defined in a co-namespace."))))]
+            (log/trace "ACTIVATE PREAMBLE: " preamble)
+            (let [body# (get-body ns component)
+                  log# (log/trace "ACTIVATE BODY: " body#)
+                  tree# (h/html preamble body#)]
+              (log/trace "TREE: " tree#)
+              tree#))))
+
+    (var? component)
+    (do (log/trace "activating var meta:" (meta component))
+        (if (not (:co-fn (meta component)))
+          (throw (RuntimeException. (str "only co-functions can be activated.")))
+          (log/trace "found co-fn"))
+        (let [ns (:ns (meta component))
+              ;; log (log/trace "found ns: " (meta ns))
+              preamble (if (not (:co-ns (meta ns)))
+                         (throw (RuntimeException. (str "co-functions must be defined in a co-namespace.")))
+                         (:co-fn (meta ns)))]
+          (log/trace "preamble: " preamble)
+          ;;`(do (log/trace "activating " (str (ns-name ~ns) "/" ~nm))
+          (let [body# (get-body ns component)
+                log# (log/trace "body: " body#)
+                tree# (h/html preamble body#)]
+            (log/trace "tree: " tree#)
+            tree#)))
+    :else
+    (do (log/trace "activating other: " (type component)))))
+
+
 ;;    `(xml/serialize :html ~tree))))
+
+;; dispatch-map takes URIs to input channels
+(defonce dispatch-map (atom {}))
+
+(defonce http-rqst (chan 10))
+(defonce http-resp (chan 10))
+(defonce default (chan 10))
+
+(defn chan-dispatch
+  [in-chan behavior]
+  (log/trace "chan-dispatch: " in-chan  behavior (type behavior) " fn? " (fn? behavior))
+  ;; [chan & behavior]
+  ;; creates a pair of gochans
+  (let [;beh (if (list? behavior) (eval behavior) behavior)
+        ;;log (log/trace "beh: " beh (type beh) (fn? beh))
+        ;; ch (deref (ns-resolve *ns* inchan))
+        ;; log (log/trace "ch deref: " ch (type ch))
+        ;; in-chan (if (= (type ch) clojure.core.async.impl.channels.ManyToManyChannel)
+        ;;           (do (log/trace "FOO") ch)
+        ;;           (throw (Exception. "bad netchan sym")))
+        ;; log (log/trace "inchan: " in-chan)
+
+        cofn? (if (symbol? behavior)
+                (:co-fn (meta (find-var behavior)))
+                (if (var? behavior)
+                  (:co-fn (meta behavior))
+                  false))
+
+        beh (if (or (fn? behavior) (symbol? behavior)) behavior
+                (throw (Exception. "dispatch table entries must be [kw function] pairs")))]
+
+        ;; beh (if (list? behavior) (fn [r] (behavior r))
+        ;;         (if (symbol? behavior) (find-var behavior)
+        ;;             (throw (Exception. "arg must be fn symbol or list"))))]
+    (log/trace "co-fn? " cofn? behavior)
+    (go (log/trace "launching netchan " in-chan beh)
+         (while true
+           (let [rqst# (<! in-chan)
+                 uri# (:uri rqst#)]
+             (log/trace "resuming netchan: " (str in-chan "->" 'http-resp) " handling: " uri#)
+             ;; note: we don't actually do anything with the request
+             (log/trace "http-resp: " http-resp)
+             (>! http-resp
+                 (if cofn?
+                   (do (log/trace "activating co-fn " beh (type beh))
+                       (let [body (activate beh)
+                             r (xml/serialize :html body)]
+                         (log/trace "RESULT: " r)
+                         (response r)))
+                   (do (log/trace "calling fn " beh)
+                       (if-let [res (beh rqst#)]
+                         res
+                         (not-found "foo"))))))))))
+
+(defn dispatch
+  [disp-map]
+  (log/trace "dispatch " disp-map)
+  (doseq [[k handler] disp-map]
+    (let [ch (chan)]
+      (log/trace "NEW CHANNEL: " ch " for " k)
+      (if (not= :_DEFAULT k)
+        (swap! dispatch-map
+               (fn [old k handler] (assoc old k handler))
+               (ns-to-path (subs (str k) 1))
+               (if (= :_DEFAULT k) default ch)))
+      (chan-dispatch (if (= :_DEFAULT k) default ch) handler)))
+  (log/trace "dispatch-map " @dispatch-map)
+  (log/trace "http-rqst chan: " http-rqst)
+  (log/trace "http-resp chan: " http-resp)
+  (log/trace "default chan: " default)
+  (go (while true
+         (let [rqst# (<! http-rqst)
+               log# (log/trace "resuming dispatch")
+               uri# (:uri rqst#)
+               chan# (if-let [ch (get @dispatch-map uri#)]
+                       ch default)]
+          (log/trace "DEFAULT CHAN: " default)
+          (log/trace "DISPATCHCHAN: " chan#)
+          (log/trace "URI: " uri#)
+          (>! chan# rqst#)))))
+
+(log/trace "BUZ")
+
+(require 'config :reload)
+
+(log/trace "BooZ")
+
+(defn start [rqst]
+  (log/trace "dispatching http")
+  (go (>! http-rqst rqst))
+  (<!! http-resp))

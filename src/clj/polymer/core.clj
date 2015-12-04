@@ -9,7 +9,7 @@
 
 (defn make-polymer-fns
   [pfx args]
-  (println "make-polymer-fns " args) ;; (type args))
+  (log/trace "make-polymer-fns " pfx) ;; " " args) ;; (type args))
   (doseq [arg args]
     (let [farg (symbol arg)
           kw (keyword (str pfx "-" arg))
