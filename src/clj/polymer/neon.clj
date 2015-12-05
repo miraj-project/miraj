@@ -1,5 +1,5 @@
 (ns polymer.neon
-  (:require [polymer.core :refer [make-polymer-fns]]))
+  (:require [polymer :refer [make-polymer-fns]]))
 
 (alter-meta! *ns* (fn [m] (assoc m :co-ns true)))
 
