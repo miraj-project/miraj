@@ -1,19 +1,19 @@
 (ns miraj
   (:require [clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
-            [clojure.data.xml :as xml]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [clojure.tools.reader.reader-types :as readers]
-            [cljs.compiler :as c]
-            [cljs.closure :as cc]
-            [cljs.env :as env]
             [slingshot.slingshot :refer [try+ throw+]]
             [ring.util.response :as ring :refer [response]]
             [ring.middleware.keyword-params :refer [keyword-params-request]]
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
+            [miraj.common :as mrj]
+            [miraj.sync :as msync]
+            [miraj.async :as mas]
+            [miraj.data.xml :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]])
   (:import [java.io StringReader StringWriter]))
@@ -25,11 +25,14 @@
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
 
-;; dispatch-map takes URIs to input channels
-(defonce dispatch-map (atom {}))
-(defonce http-rqst-chan (chan 20))
-(defonce http-resp-chan (chan 20))
-(defonce default-chan (chan 20))
+;; ;; dispatch-map takes URIs to input channels
+;; (defonce dispatch-map-get (atom {}))
+;; (defonce dispatch-map-head (atom {}))
+;; (defonce dispatch-map-post (atom {}))
+;; (defonce dispatch-map-put (atom {}))
+;; (defonce http-rqst-chan (chan 20))
+;; (defonce http-resp-chan (chan 20))
+;; (defonce default-chan (chan 20))
 
 ;;TODO: support config of base path
 (def polymer-map
@@ -40,14 +43,14 @@
 
 (def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
-  (defn path-to-ns
-    [ns]
-    (subs (str/replace (str ns) "/" ".") 1))
+(defn path-to-ns
+  [ns]
+  (subs (str/replace (str ns) "/" ".") 1))
 
-  (defn ns-to-path
-    [ns]
-    (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
-      (if (= \/ (first s)) s (str "/" s))))
+(defn ns-to-path
+  [ns]
+  (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
+    (if (= \/ (first s)) s (str "/" s))))
 
 (defn android-header
   [docstr]
@@ -112,63 +115,6 @@
 (defn path-from-ns
   [ns]
   (str/replace (str ns) #"\.|-" {"." "/" "-" "_"}))
-
-(defn- get-reqs
-  [reqs]
-  (log/trace "get-reqs: " reqs)
-  ;; (if (not= (first reqs) :require)
-  ;;   (throw (RuntimeException. (str  "foo"))))
-
-;; test for component ns:
-;;(:co-ns (meta (find-ns 'polymer.paper)))
-
-  (let [reqs (seq
-              (for [req reqs]
-                (do
-                  (log/trace "REQ: " req (type req))
-                  (let [pfx (str/split (str (first req)) #"\.")
-                        opts (next req)]
-                    (log/trace (str "PREFIX: " pfx))
-                    (cond
-                      (= (first pfx) "polymer")
-                      (let [pns (second pfx)
-                            refs (:refer (apply hash-map opts))]
-                        (if (not (contains? polymer-nss pns))
-                          (throw (RuntimeException. (str "unsupported namespace: " (first req)))))
-                        (for [ref refs]
-                          ;; [:link {:rel "import"
-                          (h/link {:rel "import"
-                                   :href (str (first pfx) "/"
-                                              (second pfx) "-"
-                                              ref "/"
-                                              (second pfx) "-"
-                                              ref ".html")})))
-
-                      (keyword? (first opts)) ;; :refer, :js, :css, :html
-                      (do #_(log/trace "KEYWORD: " (first opts))
-                          (let [args (apply hash-map opts)]
-                            ;; (log/trace "args: " args)
-                            (if (> (count (keys args)) 1)
-                              (str "<h1>ERROR option must be one of :refer, :js, :css or :html</h1>")
-                              (cond
-                                (:refer args)
-                                (for [opt (:refer args)]
-                                  (do #_(log/trace "require: " opt)
-                                      (h/link {:rel "import"
-                                               :href (str (first pfx) "/"
-                                                          (second pfx) "/"
-                                                          opt)})))
-                                (:js args)
-                                [(h/script {:src (:js args)})]
-                                (:css args)
-                                [(h/link {:rel "stylesheet" :href (:css args)})]
-                                (:html args)
-                                [(h/link {:rel "import" :href (:html args)})]
-                                :else (str "<h1>ERROR unsupported option: " (keys args) "</h1>")))))
-                      :else
-                      (do  (str "<h1>ERROR unsupported option: " opts "</h1>")
-                           (log/error "unsupported option: " opts)))))))]
-    (mapcat identity reqs)))
 
 (defn get-href
   [pfx only]
@@ -236,13 +182,14 @@
       (for [refer refer-opts]
         (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
-(defn handle-refs
+;; set html preamble as namespace metadata
+(defn set-html-head!
   ;; [docstr reqs & body]
   ;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
-  (log/trace "handle-refs co-ns: " nm)
-  (log/trace "handle-refs this ns: " *ns*)
-  (log/trace "handle-refs args: " args)
+  (log/trace "set-html-head! co-ns: " nm)
+  (log/trace "set-html-head! this ns: " *ns*)
+  (log/trace "set-html-head! args: " args)
   (let [ns (create-ns nm)
         ns-path (path-from-ns ns)
         refmap (into {} (map #(identity [(first %) (rest %)]) args))
@@ -303,240 +250,70 @@
           ]
       newvar)))
 
-  ;; (if (symbol? arg)
-  ;;   (do ;; we're defining co-fns
-  ;;     ;; (log/trace "co-ns: " arg " - defining co-fns")
-  ;;     (require arg :reload)
-  ;;     (if (not (ns-resolve *ns* (symbol "Miraj")))
-  ;;       (throw (RuntimeException. (str "co-routines can only be defined within a co-namespace."))))
-  ;;     )
-    ;; (do ;; we're defining co-routines
-
-
-(defonce custom-kws #{:title :components})
-
-(declare chan-dispatch)
-
-(defn config-polymer-reqs
-  [reqs]
-  (log/trace "config-polymer-reqs: " reqs)
-  (doseq [req reqs]
-    (let [nmsp (first req)
-          pm-path (ns-to-path nmsp)
-          pm-chan (chan)]
-      (log/trace "reqd ns: " nmsp ", path: " pm-path)
-      (swap! dispatch-map
-             (fn [old path channel] (assoc old path channel))
-             pm-path pm-chan)
-      (chan-dispatch pm-path pm-chan
-                     #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
-                          (let [resp (resource-request % "/")]
-                            (if resp
-                              resp
-                              (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
-                                  (not-found (:uri %))))))))))
-
-(defn config-js-reqs
-  [reqs]
-  (log/trace "config-js-reqs: " reqs)
-  (doseq [req reqs]
-    (let [nmsp (first req)
-          js-path (str (ns-to-path nmsp) ".*\\.js")
-          js-chan (chan)]
-      (log/trace "reqd ns: " nmsp ", path: " js-path)
-      (swap! dispatch-map
-             (fn [old path ch] (assoc old path ch))
-             js-path js-chan)
-      (chan-dispatch js-path js-chan  #(do (log/trace "HANDLING JS RQST: " (:uri %))
-                                           (let [resp (resource-request % "scripts/")]
-                                             (if resp
-                                               resp
-                                               (do (log/trace "JS NOT FOUND: " (:uri %))
-                                                   (not-found (:uri %))))))))))
-
-(defn config-css-reqs
-  [reqs]
-  (log/trace "config-css-reqs: " reqs)
-  (doseq [req reqs]
-    (let [nmsp (first req)
-          css-path (str (ns-to-path nmsp) ".*\\.css")
-          css-chan (chan)]
-      (log/trace "reqd ns: " nmsp ", path: " css-path)
-      (swap! dispatch-map
-             (fn [old path ch] (assoc old path ch))
-             css-path css-chan)
-      (chan-dispatch css-path css-chan
-                     #(do (log/trace "HANDLING CSS RQST: " (:uri %))
-                          (let [resp (resource-request % "styles/")]
-                            ;; :styles.*  #(resource-request % "/")
-                            (if resp
-                              resp
-                              (do (log/trace "CSS NOT FOUND: " (:uri %))
-                                  (not-found (:uri %))))))))))
+(defn configure-namespace [nm refs]
+  (throw (Exception. "calling dummy configure-namespace")))
 
 (defmacro co-ns
   [nm & refs]
   (log/trace "def co-ns: " nm " " refs)
-  (eval (apply handle-refs nm refs))
-  (let [ref-map (into {} (clojure.core/map
-                          #(identity [(first %) (rest %)]) refs))
-        clj-reqs (:require ref-map)
-        html-reqs (:html ref-map)
-        js-reqs (filter #(some #{:js} %) html-reqs)
-        css-reqs (filter #(some #{:css} %) html-reqs)
-        libs (filter #(not (some #{:js :css} %)) clj-reqs)
-
-        polymer-reqs (:polymer ref-map)
-        ;; pm-reqs (filter #(.startsWith (str (first %)) "polymer.") polymer-reqs)
-
-        required (list (apply list ':require (concat libs polymer-reqs)))]
-    ;; (println "REFS: " refs)
-    (println "REQUIRED: " required)
-    (if (not (nil? polymer-reqs))
-      (do (log/trace "POLYMER reqs: " polymer-reqs)
-          (config-polymer-reqs polymer-reqs)))
-
-    (if (not (nil? js-reqs))
-      (do (log/trace "JS reqs: " js-reqs)
-          (config-js-reqs js-reqs)))
-
-    (if (not (nil? css-reqs))
-      (do (log/trace "CSS reqs: " css-reqs)
-          (config-css-reqs css-reqs)))
-    ;; (log/trace "DISPATCH map: " (sort @dispatch-map))
+  (eval (apply set-html-head! nm refs))
+  (let [required (configure-namespace nm refs)]
+    (log/trace "co-ns requireds: " required)
     `(ns ~nm ~@required)))
 
-  ;; some of the cljs stuff is borrowed from
-  ;;  http://swannodette.github.io/2014/01/14/clojurescript-analysis--compilation/
-  ;;  https://github.com/swannodette/hello-cljsc
-  ;; cljs compile
-  (def user-env '{:ns {:name foo.bar} :locals {}})
+(defmacro handle-ctor
+  [ctor]
+  (log/trace "")
+  (log/trace "handle-ctor: " ctor)
+  ;; (doseq [form ctor]
+  ;;   (log/trace "ctor form: " form))
+  (let [key (first ctor)
+        params (nth ctor 1)
+        body (rest (rest ctor))]
+    (if (not (= ('ctor key)))
+      (log/trace "ERROR: first not 'ctor"))
+    (if (not (vector? params))
+      (log/trace "ERROR: missing param vector"))
+    (if (not (list? body))
+      (log/trace "ERROR: missing ctor body"))
+    (log/trace "params: " params)
+    (log/trace "body: " body)
+    (let [forms (for [form body]
+                  (do (log/trace "form: " form)
+                      (log/trace "formx: " (macroexpand form))
+                      (eval form)))]
+      (log/trace "FORMS: " (count forms) ": " forms)
+      forms)))
 
-  ;; A simple helper which allows us to read ClojureScript source from a string
-  ;; instead of having to bother with files.
-  (defn string-reader [s]
-    (clojure.lang.LineNumberingPushbackReader. (java.io.StringReader. s)))
-
-  ;; A simple helper to emit ClojureScript compiled to JavaScript
-  ;; as a string.
-  ;; (defn emit-str [ast]
-  ;;   (with-out-str (c/emit ast)))
-
-  ;; A simple helper that takes a stream and returns a lazy sequences of
-  ;; read forms.
-  ;; (defn forms-seq [stream]
-  ;;   (let [rdr (readers/indexing-push-back-reader stream 1)
-  ;;         forms-seq* (fn forms-seq* []
-  ;;                      (lazy-seq
-  ;;                       (if-let [form (reader/read rdr nil nil)]
-  ;;                         (cons form (forms-seq*)))))]
-  ;;     (forms-seq*)))
-
-  ;; ;; A helper to just read the first s-expression
-  ;; (defn read1 [str]
-  ;;   (first (forms-seq (string-reader str))))
-
-  ;; (read1 "[1 2 3]")
-
-  ;; (let [form (read1 "[1 2 3]")]
-  ;;   (pp/pprint (ana/analyze user-env form)))
-
-  ;; This will pretty print an :invoke AST node.
-  ;; (let [form (read1 "(foo 1)")]
-  ;;   (pp/pprint (ana/analyze user-env form)))
-
-  ;; (first (read1 "(if x true false)"))
-
-  ;; (let [form (read1 "(if x true false)")]
-  ;;   (pp/pprint (ana/parse (first form) user-env form nil nil)))
-
-  ;; (let [form (read1 "(if x true false)")]
-  ;;   (pp/pprint (ana/analyze user-env form)))
-
-  ;; ;; To compile an AST node to JavaScript we just call cljs.compiler/emit
-  ;; ;; with an AST node as the argument. Click on the output box to expand it.
-  ;; (let [form (read1 "(if x true false)")]
-  ;;   (with-out-str (c/emit (ana/analyze user-env form))))
-
-  ;; ;; Pretty simple! try different things!
-  ;; (let [form (read1 "(fn [a b] (+ a b))")]
-  ;;   (with-out-str (c/emit (ana/analyze user-env form))))
-
-  ;; (defmacro cljs->js [form]
-  ;;   (let [form# (read1 (str form))]
-  ;; ;;    (println "form# " form#)
-  ;;     (with-out-str (c/emit (ana/analyze user-env form#)))))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  ;; (clojure.core/assert-args
-  ;;    (vector? seq-exprs) "a vector for its binding"
-  ;;    (even? (count seq-exprs)) "an even number of forms in binding vector")
-
-  (defmacro handle-params
-    [params]
-    (log/trace "handle-params: " params)
-    (let [parms (vec (flatten (merge []
-                                     (for [param params]
-                                       [param (keyword param)]))))]
-      (log/trace "new params: " parms)
-      ;; (let [letparms (list 'let parms)]
-      ;;   (log/trace "let params: " letparms)
-      parms))
-
-  (defmacro handle-ctor
-    [ctor]
-    (log/trace "")
-    (log/trace "handle-ctor: " ctor)
-    ;; (doseq [form ctor]
-    ;;   (log/trace "ctor form: " form))
-    (let [key (first ctor)
-          params (nth ctor 1)
-          body (rest (rest ctor))]
-      (if (not (= ('ctor key)))
-        (log/trace "ERROR: first not 'ctor"))
-      (if (not (vector? params))
-        (log/trace "ERROR: missing param vector"))
-      (if (not (list? body))
-        (log/trace "ERROR: missing ctor body"))
-      (log/trace "params: " params)
-      (log/trace "body: " body)
-      (let [forms (for [form body]
-                    (do (log/trace "form: " form)
-                        (log/trace "formx: " (macroexpand form))
-                        (eval form)))]
-        (log/trace "FORMS: " (count forms) ": " forms)
-        forms)))
-
-  (defmacro co-type
-    [name & args]
-    (log/trace "co-type: " name ", nbr args:" (count args))
-    ;; (doseq [arg args]
-    ;;   (log/trace "arg: " (type arg) ": " arg))
-    (let [result (for [arg args]
-                   (do (log/trace "arg: " arg)
+(defmacro co-type
+  [name & args]
+  (log/trace "co-type: " name ", nbr args:" (count args))
+  ;; (doseq [arg args]
+  ;;   (log/trace "arg: " (type arg) ": " arg))
+  (let [result (for [arg args]
+                 (do (log/trace "arg: " arg)
+                     (cond
+                       (list? arg)
                        (cond
-                         (list? arg)
-                         (cond
-                           (= 'ctor (first arg))
-                           (do (log/trace "CTOR")
-                               (macroexpand `(handle-ctor ~arg)))
-                           ;; (= :require (first arg))
-                           ;; (do (log/trace "REQUIRE")
-                           ;;     "<require>")
-                           ;; :else
-                           ;; (do (log/trace "UNKNOWN: " arg)
-                           ;;     "<UNKNOWN>")
-                           )
-
-                         (string? arg) arg
+                         (= 'ctor (first arg))
+                         (do (log/trace "CTOR")
+                             (macroexpand `(handle-ctor ~arg)))
+                         ;; (= :require (first arg))
+                         ;; (do (log/trace "REQUIRE")
+                         ;;     "<require>")
                          ;; :else
-                         ;; (do (log/trace "UNKNOWN TYPE: " arg)
-                         ;;       "<UNKNOWN TYPE>")
-                         )))
-          ctor (nth result 2)]
-      ;; (print "RESULT: " ctor)
-      `(list ~@ctor)))
+                         ;; (do (log/trace "UNKNOWN: " arg)
+                         ;;     "<UNKNOWN>")
+                         )
+
+                       (string? arg) arg
+                       ;; :else
+                       ;; (do (log/trace "UNKNOWN TYPE: " arg)
+                       ;;       "<UNKNOWN TYPE>")
+                       )))
+        ctor (nth result 2)]
+    ;; (print "RESULT: " ctor)
+    `(list ~@ctor)))
 
   ;; FIXME:  intern as a func in co-ns
   ;; `(let [n# (defn ~nm ~args ~@body)]
@@ -713,346 +490,23 @@
         (handler request)))
     ))
 
-(defn get-body
-  [ns component]
-  ;; (log/trace "get-body ns: " ns)
-  ;; (log/trace "get-body: " component (type component))
-  ;; (log/trace "get-body class: " (class component) " / " (type component))
-    ;; for dev, always reload
-  ;; (log/trace "reloading ns " ns)
-  ;; (require (ns-name ns) :reload)
-  (let [body (if (fn? component) (component)
-                 (if (symbol? component) ((resolve component))))]
-    ;; (log/trace "body: " body (type body))
-    (if (= :body (:tag body))
-      body
-      (h/body {:unresolved "unresolved"} body))))
+(defn start-netspace-observer [method netspace-sym co-fn]
+  (throw (Exception. "calling dummy start-netspace-observer")))
 
-
-;; (defmacro activate [component]
-(defn activate [component]
-  (log/trace "activate: " component (type component))
-  (cond
-    (symbol? component)
-    (do (log/trace "activating symbol")
-        (let [ns-sym (symbol (namespace component))
-              ;; log (log/trace "ns-sym: " ns-sym)
-              ns (find-ns ns-sym)
-              ;; log (log/trace "ns: " ns)
-              nm (name component)]
-          (if (nil? ns) (do (log/trace "requiring ns " ns-sym) (require ns-sym)))
-          (if (not (:co-fn (meta (find-var component))))
-            (throw (RuntimeException. (str "only co-functions can be activated."))))
-          (let [ns (find-ns (symbol (namespace component)))
-                ;; log (log/trace "ACTIVATE ns: " ns)
-                preamble (if-let [cofn (:co-fn (meta ns))]
-                           cofn
-                           (throw (RuntimeException.
-                                   (str "co-functions must be defined in a co-namespace."))))]
-            ;; (log/trace "ACTIVATE PREAMBLE: " preamble)
-            (let [body# (get-body ns component)
-                  ;; log# (log/trace "ACTIVATE BODY: " body#)
-                  tree# (h/html preamble body#)]
-              ;; (log/trace "TREE: " tree#)
-              tree#))))
-
-    (var? component)
-    (do (log/trace "activating var meta:" (meta component))
-        (if (not (:co-fn (meta component)))
-          (throw (RuntimeException. (str "only co-functions can be activated.")))
-          (log/trace "found co-fn"))
-        (let [ns (:ns (meta component))
-              ;; log (log/trace "found ns: " (meta ns))
-              preamble (if (not (:co-ns (meta ns)))
-                         (throw (RuntimeException. (str "co-functions must be defined in a co-namespace.")))
-                         (:co-fn (meta ns)))]
-          (log/trace "preamble: " preamble)
-          ;;`(do (log/trace "activating " (str (ns-name ~ns) "/" ~nm))
-          (let [body# (get-body ns component)
-                ;; log# (log/trace "body: " body#)
-                tree# (h/html preamble body#)]
-            ;; (log/trace "tree: " tree#)
-            tree#)))
-    :else
-    (do (log/trace "activating other: " (type component)))))
-
-
-;;    `(xml/serialize :html ~tree))))
-
-(defn get-path-node
-  [n path]
-  ;; (log/trace "get-path-node: " n path)
-  (let [nodes (vec (filter #(not (empty? %)) (str/split path #"/")))
-        ;; log (log/trace "nodes: " nodes (count nodes))
-        node (if (< n (count nodes))
-               (nodes (+ 1 n)) "foo")]
-    node))
-
-;FIXME: validation.  count of plain args must match count of nodes, etc.
-;;FIXME: account for base url nodecount
-(defn demultiplex
-  [params rqst ]
-  (let [rqst (keyword-params-request (params-request rqst))
-        ;; log (log/trace "demultiplex: " (pprint-str rqst))
-        log (log/trace "demultiplex uri: " (:uri rqst))
-        log (log/trace "demultiplex params: " params)
-
-  ;; default ring keys
-  ;;     (:body :character-encoding :content-length :content-type
-  ;;      :headers :protocol :query-string :remote-addr :request-method
-  ;;      :scheme :server-name :server-port :ssl-client-cert :uri)
-
-
-        ;; keywordize params
-        ;; params (map #(if (or (:? (meta %)) (:?? (meta %)))
-        ;;                (with-meta (keyword %) (meta %)) %)
-        ;;             params)
-        ;; log (log/trace "params: " params)
-
-        ;; params are def'd, args are incoming from rqst;
-        ;;FIXME: deal with base url
-
-        baseuri (vec (filter #(not (empty? %)) (str/split (:miraj-baseuri rqst) #"/")))
-        path-args (vec (filter #(not (empty? %)) (str/split (:uri rqst) #"/")))
-        path-args (subvec path-args (count baseuri))
-        log (log/trace "baseuri: " baseuri)
-        log (log/trace "path-args: " path-args)
-
-        path-params (filter #(not (or (:? (meta %)) (:?? (meta %)))) params)
-        [path-params varargs] (split-with #(not= '& %) path-params)
-        log (log/trace "path-params: " path-params)
-        log (log/trace "varargs: " varargs)
-
-        param-args (:params rqst)
-        log (log/trace "param-args: " param-args)
-        required-params (map #(keyword %) (filter #(:? (meta %)) params))
-        optional-params (map #(keyword %) (filter #(:?? (meta %)) params))
-        log (log/trace "required-params: " required-params)
-        log (log/trace "optional-params: " optional-params)]
-
-    (if (empty? varargs)
-      (if (not= (count path-args) (count path-params))
-        (do (log/trace (str "Error: url path should have exactly " (count path-params) " path nodes."))
-            (bad-request! (str "Error: url path should have exactly " (count path-params) " path nodes following base path " (:miraj-baseuri rqst))))
-        (log/trace "match: path-args & path-params"))
-      (if (< (- (count path-args) 1) (count path-params))
-        (do (log/trace (str "Error: url path should have at least " (count path-params) " path nodes."))
-            (bad-request!
-             (str "Error: url path should have at least " (count path-params) " path nodes.")))
-        (log/trace "match: path-args & path-params")))
-
-    (if (not (every? (set (keys param-args)) required-params))
-      (bad-request! (str "Error: missing required body/query param: "
-                         (pr-str required-params) " != " (into '() (keys param-args))))
-      (log/trace "match: param-args & required-params"))
-
-    (let [required-set (set required-params)
-          param-arg-keys (keys param-args)
-          optional-param-args (remove #(contains? required-set %) param-arg-keys)
-          log (log/trace "optional-param-args: " optional-param-args)]
-    (if (not (every? (set optional-params) optional-param-args))
-      (bad-request! (str "Error: unknown optional body/query param: "
-                         (pr-str optional-params)
-                         " != " (pr-str optional-param-args)))
-      (log/trace "match: param-args & optional-params")))
-
-    (let [args (map-indexed
-                (fn [i param]
-                  (do (log/trace "param: " param (if (meta param) (meta param)))
-                     (if (:? (meta param))
-                       (do
-                           (get param-args (keyword param)))
-                       (if (:?? (meta param))
-                         (do
-                           (get param-args (keyword param)))
-                         (do (log/trace "path arg " (get path-args i))
-                             (get path-args i))))))
-                params)]
-      (log/trace "args: " args)
-      args)))
-
-    ;; (let [u (:uri rqst)]
-    ;;   (let [args (map-indexed
-    ;;               (fn [i arg]
-    ;;                 (log/trace "arg " i ": " arg)
-    ;;                 (if (= \& (first (str arg)))
-    ;;                   (do (log/trace "found url parm")
-    ;;                       nil)
-    ;;                   (let [node (get-path-node i u)]
-    ;;                     (log/trace "node: " node)
-    ;;                     node)))
-    ;;               param-args)]
-    ;;     (log/trace "ARGS: " args)
-    ;;     args))))
-
-(defn chan-dispatch
-  [path in-chan behavior]
-  (log/trace "chan-dispatch: " path in-chan  behavior (type behavior) " fn? " (fn? behavior))
-  ;; [chan & behavior]
-  ;; creates a pair of gochans
-  (let [cofn? (if (symbol? behavior)
-                (:co-fn (meta (find-var behavior)))
-                (if (var? behavior)
-                  (:co-fn (meta behavior))
-                  false))
-
-        beh (cond
-              (list? behavior) (eval behavior) ;;FIXME
-              (symbol? behavior) behavior
-              (fn? behavior) behavior
-              :else (throw (Exception. "dispatch table entries must be [symbol symbol] or [symbol list] or [symbol fn] pairs")))]
-
-    (log/trace "co-fn? " cofn? behavior)
-
-    (go ;(log/trace "launching netchan " in-chan beh)
-         (while true
-           (let [rqst (<! in-chan)
-                 uri (:uri rqst)]
-             ;; (log/trace "resuming netchan: " (str in-chan "->" 'http-resp-chan) " handling: " uri)
-             ;; note: we don't actually do anything with the request
-             ;; (log/trace "http-resp chan: " http-resp-chan)
-             (if cofn?
-               (do (log/trace "dispatching co-fn " uri (:miraj-baseuri rqst))
-                   (if (= (:uri rqst) (:miraj-baseuri rqst))
-                     (do (log/trace "activating co-fn " beh) ;; (type beh))
-                         (let [body (activate beh)
-                               r (xml/serialize :html body)]
-                           ;; (log/trace "RESULT: " r)
-                           (>! http-resp-chan (response r))))
-                     (>! http-resp-chan (not-found))))
-               (do
-                 (if (symbol? behavior)
-                   (let [v (find-var behavior)
-                         m (meta v)
-                         args (try+ (demultiplex (first (:arglists m)) rqst)
-                                    (catch [:type :miraj.http.response/response]
-                                        {:keys [response]}
-                                      ;; (log/trace "caught exc " (:status response))
-                                        (>! http-resp-chan response)
-                                        nil))]
-                     (if (not (nil? args))
-                       (do
-                         (log/trace "calling (" (:name m) args "), for " (:uri rqst))
-                         (if-let [res (apply (deref v) args)]
-                           (do (log/trace (:name m) " says: " res)
-                               (>! http-resp-chan (response res)))
-                           (>! http-resp-chan (not-found))))))
-                   (do (log/trace "applying lambda " (:uri rqst) beh)
-                       (log/trace "type lambda " (type beh))
-                       (log/trace "class lambda " (class beh))
-                       (log/trace "meta lambda " (meta beh))
-                       (>! http-resp-chan
-                           (if-let [res (beh rqst)]
-                             (do ;;(log/trace "if-let " res)
-                                 res)
-                             (do ;;(log/trace "not found ")
-                                 (not-found))))))
-                   )))))))
-
-(defn default-dispatch
-  [in-chan behavior]
-  (log/trace "default-dispatch")
-  (go ;(log/trace "launching default chan")
-    (while true
-      (let [rqst (<! in-chan)
-            uri (:uri rqst)]
-        (log/trace "default dispatch on: " uri)
-        (>! http-resp-chan (behavior rqst))))))
-
-(defn set-dispatch-map!
-  [netspace-sym co-fn]
-  (log/trace "set-dispatch-map! " netspace-sym (type netspace-sym) co-fn (type co-fn))
-  ;; (doseq [[netspace-sym co-fn] disp-map]
-  (if (= '* netspace-sym)
-    (default-dispatch default-chan (if (list? co-fn) (eval co-fn) co-fn))
-    (let [ch (chan)
-          path (if (= netspace-sym '$)
-                 "/"
-                 (ns-to-path (str netspace-sym)))]
-      (log/trace "NEW CHANNEL: " path ": " ch)
-      (swap! dispatch-map
-             (fn [old path channel] (assoc old path channel))
-             path ch)
-      (chan-dispatch path ch co-fn))))
-
-(defn dispatch
-  [] ;;[disp-map]
-  (log/trace "dispatch")
-  (go (while true
-         (let [rqst (<! http-rqst-chan)
-               uri (:uri rqst)
-               log (log/trace "resuming HTTP dispatch for " uri)
-               [drqst dchan]
-               (if-let [to-chan (get @dispatch-map uri)]
-                 (do (log/trace "exact match: " uri to-chan)
-                     [(assoc rqst :miraj-baseuri uri) to-chan])
-                 (let [pred (fn [mapentry]
-                              (let [uri-str (str (first mapentry))
-                                    ;;FIXME: currently "/" match is absolute, no /*
-                                    re (re-pattern (if (= "/" uri-str) "/" (str uri-str ".*")))
-                                    match (re-matches re uri)]
-                                (if match
-                                  (do (log/trace "match: " match " against " re)
-                                      [uri-str mapentry])
-                                  nil)))
-                       matchings (filter pred @dispatch-map)]
-                   (log/trace uri "matchings: " (pr-str matchings))
-                   (if (empty? matchings)
-                     [rqst default-chan]
-                     (do
-                       (if (> (count matchings) 1)
-                         (let [m (reduce (fn [cum match]
-                                           (if (> (count (first cum))
-                                                  (count (first match)))
-                                             cum match))
-                                         matchings)
-                               log (log/trace "longest match: " m)
-                               to-chan (last m)
-                               baseuri (first m)]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan])
-                         (let [to-chan (last (first matchings))
-                               baseuri (first (first matchings))]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan]))))))]
-          ;; (log/trace "DEFAULT CHAN: " default-chan)
-          ;; (log/trace "DISPATCHCHAN: " dchan)
-          (log/trace "CHAN dispatching uri: " uri)
-          (>! dchan drqst)))))
+;; (defn config-polymer-defaults []
+;;   (throw (Exception. "calling dummy config-polymer-defaults")))
 
 (defmacro >>
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " '~netspace '~behavior)
-  `(set-dispatch-map! '~netspace '~behavior))
+  `(start-netspace-observer :get '~netspace '~behavior))
 
 (defmacro >>!
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
-  `(set-dispatch-map! '!netspace '~behavior))
-
-(defn dump-dispatch-map
-  []
-  (log/trace "dispatch-map " (pprint-str (into (sorted-map) @dispatch-map))))
-(dump-dispatch-map)
-  ;; (log/trace "http-rqst chan: " http-rqst-chan)
-  ;; (log/trace "http-resp chan: " http-resp-chan)
-  ;; (log/trace "default chan: " default-chan)
-;;(dispatch config/dispatch-table)
-
-;;FIXME: only include polymer stuff on demand
-(doseq [[chan-kw handler] polymer-map]
-  (let [ch (chan)
-        path  (ns-to-path (subs (str chan-kw) 1))]
-    (log/trace "NEW CHANNEL: " path ": " ch)
-    (swap! dispatch-map
-           (fn [old path channel] (assoc old path channel))
-           (if (= chan-kw :$) "/" path)
-           ch)
-    (chan-dispatch path ch handler)))
+  `(start-netspace-observer :post '~netspace '~behavior))
 
 ;; ;;FIXME: only install default if user doesn't
 ;; (do (log/trace "using default not-found co-fn")
@@ -1062,16 +516,70 @@
 ;;             (log/trace "default co-fn on: " uri)
 ;;             (>! http-resp-chan (not-found)))))))
 
-(dispatch)
 
-(defn start [rqst]
-  ;; (log/trace "dispatching http rqst: " (:uri rqst))
-  (go (>! http-rqst-chan rqst))
-  (let [r (<!! http-resp-chan)]
-    ;; (log/trace "responding " r)
-    r))
+(defn start [rqst])
 
-(log/trace "RELOADING CONFIG")
-(require 'config :reload)
+(defn dump-dispatch-map [& method]
+  (throw (Exception. "calling dummy dump-dispatch-map")))
+
+(defn config-sync []
+  (log/trace "config-sync")
+  (alter-var-root
+   (var start)                     ; var to alter
+   (fn [f]                       ; fn to apply to the var's value
+     (fn [rqst]
+       (log/trace "SYNC dispatching http rqst: " (:uri rqst))
+       ))))
+
+(defn config-sync []
+  (log/trace "config-sync")
+  (alter-var-root (var configure-namespace) (fn [f] msync/configure-namespace))
+  ;; (alter-var-root (var config-polymer-defaults) (fn [f] msync/config-polymer-defaults))
+  ;; (alter-var-root (var config-polymer-reqs) (fn [f] msync/config-polymer-reqs))
+  ;; (alter-var-root (var config-css-reqs) (fn [f] msync/config-css-reqs))
+  ;; (alter-var-root (var config-js-reqs) (fn [f] msync/config-js-reqs))
+  (alter-var-root (var start-netspace-observer) (fn [f] msync/start-netspace-observer))
+  (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
+  (alter-var-root (var start) (fn [f] msync/start))
+  (msync/start-http-observer))
+
+(defn config-async []
+  (log/trace "config-async")
+  (alter-var-root (var configure-namespace) (fn [f] mas/configure-namespace))
+  ;; (alter-var-root (var config-polymer-defaults) (fn [f] mas/config-polymer-defaults))
+  ;; (alter-var-root (var config-polymer-reqs) (fn [f] mas/config-polymer-reqs))
+  ;; (alter-var-root (var config-css-reqs) (fn [f] mas/config-css-reqs))
+  ;; (alter-var-root (var config-js-reqs) (fn [f] mas/config-js-reqs))
+  (alter-var-root (var start-netspace-observer) (fn [f] mas/start-netspace-observer))
+  (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
+  (alter-var-root (var start) (fn [f] mas/start))
+  (mas/start-http-observer))
+
+     ;; (fn [rqst]
+     ;;   (log/trace "ASYNC dispatching http rqst: " (:uri rqst))
+     ;;   (go (>! mas/http-rqst-chan rqst))
+     ;;   (let [r (<!! mas/http-resp-chan)]
+     ;;     ;; (log/trace "responding " r)
+     ;;     r))))
+
+(defn config [mode]
+  (log/trace "config " mode)
+  (condp = mode
+    :sync (config-sync)
+    :async (config-async)
+    (throw (Exception. "unrecognized config mode: " mode))))
+
+;; (defn start [rqst]
+;;   ;; (require 'config) ;;FIXME: one-time only
+;;   ;; (log/trace "dispatching http rqst: " (:uri rqst))
+;;   (go (>! mas/http-rqst-chan rqst))
+;;   (let [r (<!! mas/http-resp-chan)]
+;;     ;; (log/trace "responding " r)
+;;     r))
+
+;; (dump-dispatch-map :get)
+;; (dump-dispatch-map :head)
+;; (dump-dispatch-map :post)
+;; (dump-dispatch-map :put)
 
 (log/trace "loaded")
