@@ -490,8 +490,8 @@
         (handler request)))
     ))
 
-(defn start-netspace-observer [method netspace-sym co-fn]
-  (throw (Exception. "calling dummy start-netspace-observer")))
+(defn configure-netspace [method netspace-sym co-fn]
+  (throw (Exception. "calling dummy configure-netspace")))
 
 ;; (defn config-polymer-defaults []
 ;;   (throw (Exception. "calling dummy config-polymer-defaults")))
@@ -500,13 +500,13 @@
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " '~netspace '~behavior)
-  `(start-netspace-observer :get '~netspace '~behavior))
+  `(configure-netspace :get '~netspace '~behavior))
 
 (defmacro >>!
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
-  `(start-netspace-observer :post '~netspace '~behavior))
+  `(configure-netspace :post '~netspace '~behavior))
 
 ;; ;;FIXME: only install default if user doesn't
 ;; (do (log/trace "using default not-found co-fn")
@@ -534,23 +534,15 @@
 (defn config-sync []
   (log/trace "config-sync")
   (alter-var-root (var configure-namespace) (fn [f] msync/configure-namespace))
-  ;; (alter-var-root (var config-polymer-defaults) (fn [f] msync/config-polymer-defaults))
-  ;; (alter-var-root (var config-polymer-reqs) (fn [f] msync/config-polymer-reqs))
-  ;; (alter-var-root (var config-css-reqs) (fn [f] msync/config-css-reqs))
-  ;; (alter-var-root (var config-js-reqs) (fn [f] msync/config-js-reqs))
-  (alter-var-root (var start-netspace-observer) (fn [f] msync/start-netspace-observer))
+  (alter-var-root (var configure-netspace) (fn [f] msync/configure-netspace!))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
-  (alter-var-root (var start) (fn [f] msync/start-http-observer)))
+  (alter-var-root (var start) (fn [f] msync/start)))
 ;;  (msync/start-http-observer))
 
 (defn config-async []
   (log/trace "config-async")
   (alter-var-root (var configure-namespace) (fn [f] masync/configure-namespace))
-  ;; (alter-var-root (var config-polymer-defaults) (fn [f] masync/config-polymer-defaults))
-  ;; (alter-var-root (var config-polymer-reqs) (fn [f] masync/config-polymer-reqs))
-  ;; (alter-var-root (var config-css-reqs) (fn [f] masync/config-css-reqs))
-  ;; (alter-var-root (var config-js-reqs) (fn [f] masync/config-js-reqs))
-  (alter-var-root (var start-netspace-observer) (fn [f] masync/start-netspace-observer))
+  (alter-var-root (var configure-netspace) (fn [f] masync/start-netspace-observer))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
   (alter-var-root (var start) (fn [f] masync/start))
   (masync/start-http-observer))

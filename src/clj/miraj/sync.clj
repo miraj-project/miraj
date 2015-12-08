@@ -7,13 +7,13 @@
             [cljs.compiler :as c]
             [cljs.closure :as cc]
             [cljs.env :as env]
-            [slingshot.slingshot :refer [try+ throw+]]
+            [slingshot.slingshot :refer [try+]]
             [ring.util.response :as ring :refer [response]]
             [ring.middleware.keyword-params :refer [keyword-params-request]]
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
-            [miraj.common :as mrj]
+            [miraj.common :as mcomm]
             [miraj.data.xml :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]])
@@ -38,22 +38,24 @@
    :styles  #(resource-request % "/")
    :themes  #(resource-request % "/")})
 
-(declare start-netspace-observer)
+(declare configure-netspace!)
 
 (defn ns-to-path
   [ns]
   (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
     (if (= \/ (first s)) s (str "/" s))))
 
-(defn start-default-observer
-  [in-chan behavior]
-  (log/trace "start-default-observer: " behavior)
-  (go ;(log/trace "launching default chan")
-    (while true
-      (let [rqst (<! in-chan)
-            uri (:uri rqst)]
-        (log/trace "default dispatch on: " uri)
-        (>! http-resp-chan (behavior rqst))))))
+(defn default-observer [rqst]
+  (throw (Exception. "invoked dummy default-observer")))
+;; (defn start-default-observer
+;;   [in-chan behavior]
+;;   (log/trace "start-default-observer: " behavior)
+;;   (go ;(log/trace "launching default chan")
+;;     (while true
+;;       (let [rqst (<! in-chan)
+;;             uri (:uri rqst)]
+;;         (log/trace "default dispatch on: " uri)
+;;         (>! http-resp-chan (behavior rqst))))))
 
 (def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
@@ -65,8 +67,8 @@
 (defn config-polymer-defaults
   []
   (doseq [[chan-kw handler] polymer-map]
-    (start-netspace-observer :get (subs (str chan-kw) 1) handler))
-  (mrj/dump-dispatch-map :get))
+    (configure-netspace! :get (subs (str chan-kw) 1) handler))
+  (mcomm/dump-dispatch-map :get))
 
 (defn config-polymer-reqs
   [reqs]
@@ -76,14 +78,14 @@
           pm-path (ns-to-path nmsp)
           pm-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " pm-path)
-      (start-netspace-observer :get nmsp
+      (configure-netspace! :get nmsp
                                #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
                                     (let [resp (resource-request % "/")]
                                       (if resp
                                         resp
                                         (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
                                             (not-found (:uri %)))))))))
-  (mrj/dump-dispatch-map :get))
+  (mcomm/dump-dispatch-map :get))
 
 (defn config-js-reqs
   [reqs]
@@ -93,14 +95,14 @@
           js-path (str nmsp ".*js")] ;;FIXME regex syntax
           ;; js-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " js-path)
-      (start-netspace-observer :get (symbol js-path)
+      (configure-netspace! :get (symbol js-path)
                                #(do (log/trace "HANDLING JS RQST: " (:uri %))
                                     (let [resp (resource-request % "scripts/")]
                                       (if resp
                                         resp
                                         (do (log/trace "JS NOT FOUND: " (:uri %))
                                             (not-found (:uri %)))))))))
-    (mrj/dump-dispatch-map :get))
+    (mcomm/dump-dispatch-map :get))
 
 (defn config-css-reqs
   [reqs]
@@ -110,7 +112,7 @@
           css-path (str nmsp ".*css")] ;;FIXME: regex syntax
           ;; css-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " css-path)
-      (start-netspace-observer :get (symbol css-path)
+      (configure-netspace! :get (symbol css-path)
                      #(do (log/trace "HANDLING CSS RQST: " (:uri %))
                           (let [resp (resource-request % "styles/")]
                             ;; :styles.*  #(resource-request % "/")
@@ -118,7 +120,7 @@
                               resp
                               (do (log/trace "CSS NOT FOUND: " (:uri %))
                                   (not-found (:uri %)))))))))
-    (mrj/dump-dispatch-map :get))
+    (mcomm/dump-dispatch-map :get))
 
 (defn configure-namespace
   [nm refs]
@@ -313,147 +315,109 @@
     (do (log/trace "activating other: " (type component)))))
 
 (defn configure-netspace!
-  [method netspace-sym co-fn]
-  (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) co-fn (type co-fn))
-  ;; (doseq [[netspace-sym co-fn] disp-map]
+  [method netspace-sym behavior]
+  (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) behavior (type behavior))
+  ;; (doseq [[netspace-sym behavior] disp-map]
   (if (= '* netspace-sym)
-    [nil default-chan co-fn]
-    (let [ch (chan)
-          path (if (= netspace-sym '$)
+    (let [default (if (list? behavior) (eval behavior) behavior)]
+      (alter-var-root (var default-observer) (fn [f] default))
+      [nil behavior])
+    (let [path (if (= netspace-sym '$)
                  "/"
                  (ns-to-path (str netspace-sym)))
-          dispatch-map (mrj/get-dispatch-map method)]
-      (log/trace "NEW CHANNEL: " method path) ;;  ": " ch " on dm: " dispatch-map)
+
+          ;; f (cond (list? behavior) (eval behavior) ;;FIXME check for lambda
+          ;;         (symbol? behavior) behavior
+          ;;         (fn? behavior) behavior
+          ;;         :else
+          ;;         (throw
+          ;;          (Exception.
+          ;;           "behavior fn must be symbol, fn, or lambda")))
+
+          dispatch-map (mcomm/get-dispatch-map method)]
+      (log/trace "NEW NETSPACE: " method path behavior)
       (swap! dispatch-map
-             (fn [old path channel] (assoc old path channel))
-             path ch)
-      [path ch co-fn])))
-;;      (start-netspace-observer path ch co-fn))))
+             (fn [old path fn] (assoc old path fn))
+             path behavior)
+      [path behavior])))
+;;      (configure-netspace! path ch co-fn))))
 
-(defn start-netspace-observer
-  [method netspace-sym co-fn]
-    (log/trace "start-netspace-observer for: " method netspace-sym)
-  (let [[path in-chan behavior] (configure-netspace! method netspace-sym co-fn)]
-    (if (nil? path)
-      (start-default-observer default-chan (if (list? co-fn) (eval co-fn) co-fn))
-    ;; [chan & behavior]
-    ;; creates a pair of gochans
-    (let [cofn? (if (symbol? behavior)
-                  (:co-fn (meta (find-var behavior)))
-                  (if (var? behavior)
-                    (:co-fn (meta behavior))
-                    false))
+(defn co-fn? [f]
+  (if (mcomm/is-lambda? f)
+    false
+    (if (symbol? f)
+      ;; (:co-fn (meta (find-var f)))
+      (-> f find-var meta :co-fn)
+      (if (var? f)
+        ;; (:co-fn (meta f))
+        (-> f meta :co-fn)
+        false))))
 
-          beh (cond
-                (list? behavior) (eval behavior) ;;FIXME
-                (symbol? behavior) behavior
-                (fn? behavior) behavior
-                :else (throw (Exception. "dispatch table entries must be [symbol symbol] or [symbol list] or [symbol fn] pairs")))]
+(defn dispatch-rqst
+  [rqst behavior]
+  (log/trace "dispatch-rqst: " (:uri rqst) behavior (type behavior))
+  ;; if fn is co-fn then activate
+  (cond
+    (co-fn? behavior)
+    (do (log/trace "dispatching co-fn " (:uri rqst) (:miraj-baseuri rqst))
+        (if (= (:uri rqst) (:miraj-baseuri rqst))
+          (do (log/trace "activating co-fn " behavior)
+              (let [body (activate behavior)
+                    r (xml/serialize :html body)]
+                ;; (log/trace "RESULT: " r)
+                (response r)))
+          (default-observer rqst)))
 
-      (log/trace "co-fn? " cofn? behavior)
+    (symbol? behavior)
+    (do (log/trace "SYMBOL")
+        (if (fn? behavior)
+          (do (log/trace "FN")
+              (let [args (try+ (mcomm/match-params-to-sig rqst behavior)
+                               (catch [:type :miraj.http.response/response]
+                                   e ;;{:keys [type response]}
+                                 (log/trace "CATCH: " e (:type e) (type e))
+                                 e))]
+                (if (= (:type args) :miraj.http.response/response)
+                  (:response args)
+                  (do
+                    (log/trace "calling ("
+                               (-> behavior find-var meta :name) args
+                               "), for " (:uri rqst))
+                    (if-let [res (apply (deref (-> behavior find-var)) args)]
+                      (do (log/trace (-> behavior find-var meta :name) " says: " res)
+                          res)
+                      (response (not-found))))))) ;;FIXME user-defined not-found
+          (do (log/trace "NOT FN: " behavior)
+              (response (str (deref (find-var behavior)))))))
 
-      (go ;(log/trace "launching netchan " in-chan beh)
-        (while true
-          (let [rqst (<! in-chan)
-                uri (:uri rqst)]
-            ;; (log/trace "resuming netchan: " (str in-chan "->" 'http-resp-chan) " handling: " uri)
-            ;; note: we don't actually do anything with the request
-            ;; (log/trace "http-resp chan: " http-resp-chan)
-            (if cofn?
-              (do (log/trace "dispatching co-fn " uri (:miraj-baseuri rqst))
-                  (if (= (:uri rqst) (:miraj-baseuri rqst))
-                    (do (log/trace "activating co-fn " beh) ;; (type beh))
-                        (let [body (activate beh)
-                              r (xml/serialize :html body)]
-                          ;; (log/trace "RESULT: " r)
-                          (>! http-resp-chan (response r))))
-                    (>! http-resp-chan (not-found))))
-              (do
-                (if (symbol? behavior)
-                  (let [v (find-var behavior)
-                        m (meta v)
-                        args (try+ (demultiplex-rqst-sig (first (:arglists m)) rqst)
-                                   (catch [:type :miraj.http.response/response]
-                                       {:keys [response]}
-                                     ;; (log/trace "caught exc " (:status response))
-                                     (>! http-resp-chan response)
-                                     nil))]
-                    (if (not (nil? args))
-                      (do
-                        (log/trace "calling (" (:name m) args "), for " (:uri rqst))
-                        (if-let [res (apply (deref v) args)]
-                          (do (log/trace (:name m) " says: " res)
-                              (>! http-resp-chan res))
-                          (>! http-resp-chan (not-found))))))
-                  (do (log/trace "applying lambda " (:uri rqst) beh)
-                      (log/trace "type lambda " (type beh))
-                      (log/trace "class lambda " (class beh))
-                      (log/trace "meta lambda " (meta beh))
-                      (>! http-resp-chan
-                          (if-let [res (beh rqst)]
-                            (do ;;(log/trace "if-let " res)
-                              res)
-                            (do ;;(log/trace "not found ")
-                              (not-found))))))
-                )))))))))
+    (var? behavior)
+    (log/trace "VAR")
 
-(defn start-http-observer
-  [] ;;[disp-map]
-  (log/trace "start-http-observer")
-  (go (while true
-         (let [rqst (<! http-rqst-chan)
-               log (log/trace "rqst: " rqst)
-               uri (:uri rqst)
-               method (:request-method rqst)
-               dispatch-map (mrj/get-dispatch-map method)
-               log (log/trace "resuming HTTP dispatch for " method uri)
-               ;; log (mrj/dump-dispatch-map method)
+    (list? behavior)
+    (if (mcomm/is-lambda? behavior)
+      (do (log/trace "LAMBDA: " behavior)
+          ((eval behavior) rqst))
+      (do (log/trace "LIST: " behavior)))
 
-               ;; match-uri...
+    :else
+    (do (log/trace (str "UNKNOWN BEHAVIOR TYPE: " (type behavior) behavior))
+        (response (str behavior)))))
 
-               [drqst dchan]
-               (if-let [to-chan (get (deref dispatch-map) uri)]
-                 (do (log/trace "exact match: " uri to-chan)
-                     [(assoc rqst :miraj-baseuri uri) to-chan])
-                 (let [pred (fn [mapentry]
-                              (let [uri-str (str (first mapentry))
-                                    ;;FIXME: currently "/" match is absolute, no /*
-                                    re (re-pattern (if (= "/" uri-str) "/" (str uri-str ".*")))
-                                    match (re-matches re uri)]
-                                (if match
-                                  (do (log/trace "match: " match " against " re)
-                                      [uri-str mapentry])
-                                  nil)))
-                       matchings (filter pred (deref dispatch-map))]
-                   (log/trace uri "matchings: " (pr-str matchings))
-                   (if (empty? matchings)
-                     [rqst default-chan]
-                     (do
-                       (if (> (count matchings) 1)
-                         (let [m (reduce (fn [cum match]
-                                           (if (> (count (first cum))
-                                                  (count (first match)))
-                                             cum match))
-                                         matchings)
-                               log (log/trace "longest match: " m)
-                               to-chan (last m)
-                               baseuri (first m)]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan])
-                         (let [to-chan (last (first matchings))
-                               baseuri (first (first matchings))]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan]))))))]
-          ;; (log/trace "DEFAULT CHAN: " default-chan)
-          ;; (log/trace "DISPATCHCHAN: " dchan)
-          (log/trace "CHAN dispatching uri: " uri)
-          (>! dchan drqst)))))
+  ;; if fn is symbol then match sig and apply if match
+  ;; else fn is a lambda, just apply it to rqst
+
+  ;; NB: lambda exprs are the way to get the entire request as a param
+  ;; - a lambda expression is a ring handler
+
 
 (defn start [rqst]
-  (log/trace "dispatching http rqst: " (:uri rqst)))
-  ;; 1.  match path to find handler
+  (log/trace "START HTTP RQST: " (:uri rqst))
+    (if-let [dispatch-entry (mcomm/get-dispatch-entry rqst)]
+      (do (log/trace "dispatch val: " dispatch-entry)
+          (log/trace "dispatch co-fn: " (last dispatch-entry))
+          (dispatch-rqst (assoc rqst :miraj-baseuri (first dispatch-entry)) (last dispatch-entry)))
+      (default-observer rqst)))
+
   ;; 2.  match sig - incoming args v. handler's formal params
   ;; 3.  call fn
   ;; NB: this is just like XSLT, there, the path is through the tree.
