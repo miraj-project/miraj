@@ -16,7 +16,8 @@
             [miraj.common :as mrj]
             [miraj.data.xml :as xml]
             [miraj.html :as h]
-            [miraj.http.response :refer [bad-request bad-request! not-found]])
+            [miraj.http.response :refer [bad-request bad-request! not-found]]
+            [miraj.http.status :as http])
   (:import [java.io StringReader StringWriter]))
 
 (log/trace "loading")
@@ -66,16 +67,7 @@
   []
   (doseq [[chan-kw handler] polymer-map]
     (start-netspace-observer :get (subs (str chan-kw) 1) handler))
-  (mrj/dump-dispatch-map :get))
-
-    ;; (let [ch (chan)
-    ;;       path  (ns-to-path (subs (str chan-kw) 1))]
-    ;;   (log/trace "NEW CHANNEL: " :get path) ;; ": " ch)
-    ;;   (swap! mrj/dispatch-map-get
-    ;;          (fn [old path channel] (assoc old path channel))
-    ;;          (if (= chan-kw :$) "/" path)
-    ;;          ch)
-    ;;   (start-netspace-observer path ch handler))))
+  #_(mrj/dump-dispatch-map :get))
 
 (defn config-polymer-reqs
   [reqs]
@@ -92,18 +84,7 @@
                                         resp
                                         (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
                                             (not-found (:uri %)))))))))
-  (mrj/dump-dispatch-map :get))
-
-      ;; (swap! mrj/dispatch-map-get
-      ;;        (fn [old path channel] (assoc old path channel))
-      ;;        pm-path pm-chan)
-      ;; (start-netspace-observer pm-path pm-chan
-      ;;                #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
-      ;;                     (let [resp (resource-request % "/")]
-      ;;                       (if resp
-      ;;                         resp
-      ;;                         (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
-      ;;                             (not-found (:uri %))))))))))
+  #_(mrj/dump-dispatch-map :get))
 
 (defn config-js-reqs
   [reqs]
@@ -120,17 +101,7 @@
                                         resp
                                         (do (log/trace "JS NOT FOUND: " (:uri %))
                                             (not-found (:uri %)))))))))
-    (mrj/dump-dispatch-map :get))
-
-      ;; (swap! mrj/dispatch-map-get
-      ;;        (fn [old path ch] (assoc old path ch))
-      ;;        js-path js-chan)
-      ;; (start-netspace-observer js-path js-chan  #(do (log/trace "HANDLING JS RQST: " (:uri %))
-      ;;                                      (let [resp (resource-request % "scripts/")]
-      ;;                                        (if resp
-      ;;                                          resp
-      ;;                                          (do (log/trace "JS NOT FOUND: " (:uri %))
-      ;;                                              (not-found (:uri %))))))))))
+  #_(mrj/dump-dispatch-map :get))
 
 (defn config-css-reqs
   [reqs]
@@ -148,19 +119,7 @@
                               resp
                               (do (log/trace "CSS NOT FOUND: " (:uri %))
                                   (not-found (:uri %)))))))))
-    (mrj/dump-dispatch-map :get))
-
-      ;; (swap! mrj/dispatch-map-get
-      ;;        (fn [old path ch] (assoc old path ch))
-      ;;        css-path css-chan)
-      ;; (start-netspace-observer css-path css-chan
-      ;;                #(do (log/trace "HANDLING CSS RQST: " (:uri %))
-      ;;                     (let [resp (resource-request % "styles/")]
-      ;;                       ;; :styles.*  #(resource-request % "/")
-      ;;                       (if resp
-      ;;                         resp
-      ;;                         (do (log/trace "CSS NOT FOUND: " (:uri %))
-      ;;                             (not-found (:uri %))))))))))
+  #_(mrj/dump-dispatch-map :get))
 
 (defn configure-namespace
   [nm refs]
@@ -197,84 +156,89 @@
 
 ;FIXME: validation.  count of plain args must match count of nodes, etc.
 ;;FIXME: account for base url nodecount
-(defn demultiplex-rqst-sig
-  [params rqst ]
+(defn match-params-to-sig
+  [rqst func]
+  (log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
+  (log/trace "base uri: " (:miraj-baseuri rqst))
+  ;; ring terminology: "params" are incoming, from rqst
+  ;; so "args" are formal, defined by the fn signature
+  ;; first put all the request params in the ring rqst map
   (let [rqst (keyword-params-request (params-request rqst))
-        ;; log (log/trace "demultiplex-rqst-sig: " (pprint-str rqst))
-        log (log/trace "demultiplex-rqst-sig uri: " (:uri rqst))
-        log (log/trace "demultiplex-rqst-sig params: " params)
 
-  ;; default ring keys
-  ;;     (:body :character-encoding :content-length :content-type
-  ;;      :headers :protocol :query-string :remote-addr :request-method
-  ;;      :scheme :server-name :server-port :ssl-client-cert :uri)
+        uri-pfx-nodes (if (:miraj-baseuri rqst)
+                        (vec (filter #(not (empty? %)) (str/split (:miraj-baseuri rqst) #"/")))
+                        [])
+        uri-path-params (vec (filter #(not (empty? %)) (str/split (:uri rqst) #"/")))
+        uri-path-params (subvec uri-path-params (count uri-pfx-nodes))
+        log (log/trace "uri-pfx-nodes: " uri-pfx-nodes)
+        log (log/trace "uri-path-params: " uri-path-params)
 
+        uri-params (:params rqst)
+        log (log/trace "uri-params: " uri-params)
 
-        ;; keywordize params
-        ;; params (map #(if (or (:? (meta %)) (:?? (meta %)))
-        ;;                (with-meta (keyword %) (meta %)) %)
-        ;;             params)
-        ;; log (log/trace "params: " params)
+        ;; now get the arglist from the fn defn
+        ;; sig-args (first (:arglists (meta (find-var func))))
+        sig-args (-> func find-var meta :arglists first)
+        sig-path-args (filter #(not (or (:? (meta %)) (:?? (meta %)))) sig-args)
+        [sig-path-args sig-path-varargs] (split-with #(not= '& %) sig-path-args)
+        log (log/trace "sig-path-args: " sig-path-args)
+        log (log/trace "sig-path-varargs: " sig-path-varargs)
 
-        ;; params are def'd, args are incoming from rqst;
-        ;;FIXME: deal with base url
-
-        baseuri (vec (filter #(not (empty? %)) (str/split (:miraj-baseuri rqst) #"/")))
-        path-args (vec (filter #(not (empty? %)) (str/split (:uri rqst) #"/")))
-        path-args (subvec path-args (count baseuri))
-        log (log/trace "baseuri: " baseuri)
-        log (log/trace "path-args: " path-args)
-
-        path-params (filter #(not (or (:? (meta %)) (:?? (meta %)))) params)
-        [path-params varargs] (split-with #(not= '& %) path-params)
-        log (log/trace "path-params: " path-params)
-        log (log/trace "varargs: " varargs)
-
-        param-args (:params rqst)
-        log (log/trace "param-args: " param-args)
-        required-params (map #(keyword %) (filter #(:? (meta %)) params))
-        optional-params (map #(keyword %) (filter #(:?? (meta %)) params))
+        required-params (map #(keyword %) (filter #(:? (meta %)) sig-args))
+        optional-params (map #(keyword %) (filter #(:?? (meta %)) sig-args))
         log (log/trace "required-params: " required-params)
         log (log/trace "optional-params: " optional-params)]
 
-    (if (empty? varargs)
-      (if (not= (count path-args) (count path-params))
-        (do (log/trace (str "Error: url path should have exactly " (count path-params) " path nodes."))
-            (bad-request! (str "Error: url path should have exactly " (count path-params) " path nodes following base path " (:miraj-baseuri rqst))))
-        (log/trace "match: path-args & path-params"))
-      (if (< (- (count path-args) 1) (count path-params))
-        (do (log/trace (str "Error: url path should have at least " (count path-params) " path nodes."))
-            (bad-request!
-             (str "Error: url path should have at least " (count path-params) " path nodes.")))
-        (log/trace "match: path-args & path-params")))
+    (if (empty? sig-path-varargs)
+      (if (not= (count uri-path-params) (count sig-path-args))
+        ;;FIXME: should response be 404 not found?
+        (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
+                     ": " (-> http/bad-request http/status :description))]
+          ;; (do (log/trace s "  URI path should have exactly " (count sig-path-args) "path nodes"
+          ;;                "following base path " (:miraj-baseuri rqst))
+              (bad-request! (str s " URI path should have exactly " (count sig-path-args) " path nodes"
+                                 " following base path " (:miraj-baseuri rqst))))
+        (log/trace "match: uri-path-params & sig-path-args"))
 
-    (if (not (every? (set (keys param-args)) required-params))
-      (bad-request! (str "Error: missing required body/query param: "
-                         (pr-str required-params) " != " (into '() (keys param-args))))
-      (log/trace "match: param-args & required-params"))
+      (if (< (- (count uri-path-params) 1) (count sig-path-args))
+        (do (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
+                         ": " (-> http/bad-request http/status :description))]
+              (log/trace (str s " URI path should have at least " (count sig-path-args) " path nodes."))
+              (bad-request!
+               (str s "  URI path should have at least " (count sig-path-args) " path nodes."))))
+        (log/trace "match: uri-path-params & sig-path-args")))
+
+    (if (not (every? (set (keys uri-params)) required-params))
+      (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
+                         ": " (-> http/bad-request http/status :description))]
+            (bad-request! (str s  "  Missing required body/query param: "
+                               (pr-str required-params) " != " (into '() (keys uri-params)))))
+      (log/trace "match: uri-params & required-params"))
 
     (let [required-set (set required-params)
-          param-arg-keys (keys param-args)
+          param-arg-keys (keys uri-params)
           optional-param-args (remove #(contains? required-set %) param-arg-keys)
           log (log/trace "optional-param-args: " optional-param-args)]
     (if (not (every? (set optional-params) optional-param-args))
-      (bad-request! (str "Error: unknown optional body/query param: "
+      (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
+                         ": " (-> http/bad-request http/status :description))]
+        (bad-request! (str s "  Unknown optional body/query param: "
                          (pr-str optional-params)
-                         " != " (pr-str optional-param-args)))
-      (log/trace "match: param-args & optional-params")))
+                         " != " (pr-str optional-param-args))))
+      (log/trace "match: uri-params & optional-params")))
 
     (let [args (map-indexed
                 (fn [i param]
                   (do (log/trace "param: " param (if (meta param) (meta param)))
                      (if (:? (meta param))
                        (do
-                           (get param-args (keyword param)))
+                           (get uri-params (keyword param)))
                        (if (:?? (meta param))
                          (do
-                           (get param-args (keyword param)))
-                         (do (log/trace "path arg " (get path-args i))
-                             (get path-args i))))))
-                params)]
+                           (get uri-params (keyword param)))
+                         (do (log/trace "path arg " (get uri-path-params i))
+                             (get uri-path-params i))))))
+                sig-args)]
       (log/trace "args: " args)
       args)))
 
@@ -288,7 +252,7 @@
     ;;                   (let [node (get-path-node i u)]
     ;;                     (log/trace "node: " node)
     ;;                     node)))
-    ;;               param-args)]
+    ;;               uri-params)]
     ;;     (log/trace "ARGS: " args)
     ;;     args))))
 
@@ -393,15 +357,12 @@
                   (fn? behavior) behavior
                   :else (throw (Exception. "dispatch table entries must be [symbol symbol] or [symbol list] or [symbol fn] pairs")))]
 
-        (log/trace "co-fn? " cofn? behavior)
-
-        (go ;(log/trace "launching netchan " in-chan beh)
+        ;; (log/trace "co-fn? " cofn? behavior)
+        (go (log/trace "observing netspace " in-chan beh)
           (while true
             (let [rqst (<! in-chan)
                   uri (:uri rqst)]
               ;; (log/trace "resuming netchan: " (str in-chan "->" 'http-resp-chan) " handling: " uri)
-              ;; note: we don't actually do anything with the request
-              ;; (log/trace "http-resp chan: " http-resp-chan)
               (if cofn?
                 (do (log/trace "dispatching co-fn " uri (:miraj-baseuri rqst))
                     (if (= (:uri rqst) (:miraj-baseuri rqst))
@@ -413,9 +374,7 @@
                       (>! http-resp-chan (not-found))))
                 (do
                   (if (symbol? behavior)
-                    (let [v (find-var behavior)
-                          m (meta v)
-                          args (try+ (demultiplex-rqst-sig (first (:arglists m)) rqst)
+                    (let [args (try+ (match-params-to-sig rqst behavior)
                                      (catch [:type :miraj.http.response/response]
                                          {:keys [response]}
                                        ;; (log/trace "caught exc " (:status response))
@@ -423,9 +382,11 @@
                                        nil))]
                       (if (not (nil? args))
                         (do
-                          (log/trace "calling (" (:name m) args "), for " (:uri rqst))
-                          (if-let [res (apply (deref v) args)]
-                            (do (log/trace (:name m) " says: " res)
+                          (log/trace "calling ("
+                                     (-> behavior find-var meta :name) args
+                                     "), for " (:uri rqst))
+                          (if-let [res (apply (deref (-> behavior find-var)) args)]
+                            (do (log/trace (-> behavior find-var meta :name) " says: " res)
                                 (>! http-resp-chan res))
                             (>! http-resp-chan (not-found))))))
                     (do (log/trace "applying lambda " (:uri rqst) beh)
@@ -440,62 +401,63 @@
                                 (not-found))))))
                   )))))))))
 
+(defn get-dispatch-entry
+  [rqst]
+  (log/trace "get-dispatch-entry") ; ": " rqst)
+  (let [uri (:uri rqst)
+        method (:request-method rqst)
+        dispatch-map (mrj/get-dispatch-map method)]
+    (if-let [dispatch-val (get (deref dispatch-map) uri)]
+      (do (log/trace "exact match: " uri dispatch-val)
+          [uri dispatch-val])
+      (let [pfx-match? (fn [mapentry]
+                         (let [uri-str (str (first mapentry))
+                               re (re-pattern (if (= "/" uri-str) "/" (str uri-str ".*")))
+                               match (re-matches re uri)]
+                           (if match (do (log/trace "match: " match " against " re)
+                                         true)
+                                         ;; [uri-str mapentry])
+                               false)))
+            matchings (filter pfx-match? (deref dispatch-map))]
+        (log/trace uri "matchings: " (pr-str matchings))
+        ;; each match is a pair [uri chan], so we can find longest matched uri
+        (if (empty? matchings)
+          nil
+          (do
+            (if (> (count matchings) 1)
+              (let [longest-match (reduce (fn [longest current]
+                                            (if (> (count (first longest))
+                                                   (count (first current)))
+                                              longest
+                                              current))
+                                          matchings)]
+                (log/trace "longest match: " longest-match)
+                longest-match)
+              ;;     to-chan (last longest-match)
+              ;;     baseuri (first longest-match)]
+              ;; [(assoc rqst :miraj-baseuri baseuri) to-chan])
+              (first matchings))))))))
+              ;; (let [to-chan (last (first matchings))
+              ;;       baseuri (first (first matchings))]
+              ;;   [(assoc rqst :miraj-baseuri baseuri) to-chan]))))))))
+
 (defn start-http-observer
   [] ;;[disp-map]
   (log/trace "start-http-observer")
   (go (while true
-         (let [rqst (<! http-rqst-chan)
-               log (log/trace "rqst: " rqst)
-               uri (:uri rqst)
-               method (:request-method rqst)
-               dispatch-map (mrj/get-dispatch-map method)
-               log (log/trace "resuming HTTP dispatch for " method uri)
-               ;; log (mrj/dump-dispatch-map method)
-               [drqst dchan]
-               (if-let [to-chan (get (deref dispatch-map) uri)]
-                 (do (log/trace "exact match: " uri to-chan)
-                     [(assoc rqst :miraj-baseuri uri) to-chan])
-                 (let [pred (fn [mapentry]
-                              (let [uri-str (str (first mapentry))
-                                    ;;FIXME: currently "/" match is absolute, no /*
-                                    re (re-pattern (if (= "/" uri-str) "/" (str uri-str ".*")))
-                                    match (re-matches re uri)]
-                                (if match
-                                  (do (log/trace "match: " match " against " re)
-                                      [uri-str mapentry])
-                                  nil)))
-                       matchings (filter pred (deref dispatch-map))]
-                   (log/trace uri "matchings: " (pr-str matchings))
-                   (if (empty? matchings)
-                     [rqst default-chan]
-                     (do
-                       (if (> (count matchings) 1)
-                         (let [m (reduce (fn [cum match]
-                                           (if (> (count (first cum))
-                                                  (count (first match)))
-                                             cum match))
-                                         matchings)
-                               log (log/trace "longest match: " m)
-                               to-chan (last m)
-                               baseuri (first m)]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan])
-                         (let [to-chan (last (first matchings))
-                               baseuri (first (first matchings))]
-                           (log/trace "to-chan: " to-chan)
-                           (log/trace "baseuri: " baseuri)
-                           [(assoc rqst :miraj-baseuri baseuri) to-chan]))))))]
-          ;; (log/trace "DEFAULT CHAN: " default-chan)
-          ;; (log/trace "DISPATCHCHAN: " dchan)
-          (log/trace "CHAN dispatching uri: " uri)
-          (>! dchan drqst)))))
+        (let [rqst (<! http-rqst-chan)]
+          (log/trace "http dispatching rqst: " (:request-method rqst) (:uri rqst))
+          (if-let [dispatch-val (get-dispatch-entry rqst)]
+            (do (log/trace "dispatch val: " dispatch-val)
+                 (log/trace "dispatch chan: " (last dispatch-val))
+                (>! (last dispatch-val) (assoc rqst :miraj-baseuri (first dispatch-val))))
+            (>! default-chan (assoc rqst :miraj-baseuri nil)))))))
 
 (defn start [rqst]
-  (log/trace "dispatching http rqst: " (:uri rqst))
+  (log/trace "start http rqst: " (:uri rqst))
   (go (>! http-rqst-chan rqst))
-  (let [r (<!! http-resp-chan)]
-    ;; (log/trace "responding " r)
-    r))
+  (let [resp (<!! http-resp-chan)]
+    ;; (log/trace "responding " resp)
+    resp))
 
 (log/trace "loaded")

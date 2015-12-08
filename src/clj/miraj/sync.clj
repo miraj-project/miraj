@@ -45,9 +45,9 @@
   (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
     (if (= \/ (first s)) s (str "/" s))))
 
-(defn default-dispatch
+(defn start-default-observer
   [in-chan behavior]
-  (log/trace "default-dispatch")
+  (log/trace "start-default-observer: " behavior)
   (go ;(log/trace "launching default chan")
     (while true
       (let [rqst (<! in-chan)
@@ -65,15 +65,8 @@
 (defn config-polymer-defaults
   []
   (doseq [[chan-kw handler] polymer-map]
-    (let [ch (chan)
-          path  (ns-to-path (subs (str chan-kw) 1))]
-      (log/trace "NEW CHANNEL: " :get path) ;; ": " ch)
-      (swap! mrj/dispatch-map-get
-             (fn [old path channel] (assoc old path channel))
-             (if (= chan-kw :$) "/" path)
-             ch)
-      (start-netspace-observer :get chan-kw handler))))
-      ;; (start-netspace-observer path ch handler))))
+    (start-netspace-observer :get (subs (str chan-kw) 1) handler))
+  (mrj/dump-dispatch-map :get))
 
 (defn config-polymer-reqs
   [reqs]
@@ -83,54 +76,49 @@
           pm-path (ns-to-path nmsp)
           pm-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " pm-path)
-      (swap! mrj/dispatch-map-get
-             (fn [old path channel] (assoc old path channel))
-             pm-path pm-chan)
-      (start-netspace-observer pm-path pm-chan
-                     #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
-                          (let [resp (resource-request % "/")]
-                            (if resp
-                              resp
-                              (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
-                                  (not-found (:uri %))))))))))
+      (start-netspace-observer :get nmsp
+                               #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
+                                    (let [resp (resource-request % "/")]
+                                      (if resp
+                                        resp
+                                        (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
+                                            (not-found (:uri %)))))))))
+  (mrj/dump-dispatch-map :get))
 
 (defn config-js-reqs
   [reqs]
   (log/trace "config-js-reqs: " reqs)
   (doseq [req reqs]
     (let [nmsp (first req)
-          js-path (str (ns-to-path nmsp) ".*\\.js")
-          js-chan (chan)]
+          js-path (str nmsp ".*js")] ;;FIXME regex syntax
+          ;; js-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " js-path)
-      (swap! mrj/dispatch-map-get
-             (fn [old path ch] (assoc old path ch))
-             js-path js-chan)
-      (start-netspace-observer js-path js-chan  #(do (log/trace "HANDLING JS RQST: " (:uri %))
-                                           (let [resp (resource-request % "scripts/")]
-                                             (if resp
-                                               resp
-                                               (do (log/trace "JS NOT FOUND: " (:uri %))
-                                                   (not-found (:uri %))))))))))
+      (start-netspace-observer :get (symbol js-path)
+                               #(do (log/trace "HANDLING JS RQST: " (:uri %))
+                                    (let [resp (resource-request % "scripts/")]
+                                      (if resp
+                                        resp
+                                        (do (log/trace "JS NOT FOUND: " (:uri %))
+                                            (not-found (:uri %)))))))))
+    (mrj/dump-dispatch-map :get))
 
 (defn config-css-reqs
   [reqs]
   (log/trace "config-css-reqs: " reqs)
   (doseq [req reqs]
     (let [nmsp (first req)
-          css-path (str (ns-to-path nmsp) ".*\\.css")
-          css-chan (chan)]
+          css-path (str nmsp ".*css")] ;;FIXME: regex syntax
+          ;; css-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " css-path)
-      (swap! mrj/dispatch-map-get
-             (fn [old path ch] (assoc old path ch))
-             css-path css-chan)
-      (start-netspace-observer css-path css-chan
+      (start-netspace-observer :get (symbol css-path)
                      #(do (log/trace "HANDLING CSS RQST: " (:uri %))
                           (let [resp (resource-request % "styles/")]
                             ;; :styles.*  #(resource-request % "/")
                             (if resp
                               resp
                               (do (log/trace "CSS NOT FOUND: " (:uri %))
-                                  (not-found (:uri %))))))))))
+                                  (not-found (:uri %)))))))))
+    (mrj/dump-dispatch-map :get))
 
 (defn configure-namespace
   [nm refs]
@@ -164,7 +152,7 @@
     (config-polymer-defaults)
     required))
 
-
+;; Match incoming URI+args against netspace and fn formal params
 ;FIXME: validation.  count of plain args must match count of nodes, etc.
 ;;FIXME: account for base url nodecount
 (defn demultiplex-rqst-sig
@@ -329,7 +317,7 @@
   (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) co-fn (type co-fn))
   ;; (doseq [[netspace-sym co-fn] disp-map]
   (if (= '* netspace-sym)
-    (default-dispatch default-chan (if (list? co-fn) (eval co-fn) co-fn))
+    [nil default-chan co-fn]
     (let [ch (chan)
           path (if (= netspace-sym '$)
                  "/"
@@ -344,8 +332,10 @@
 
 (defn start-netspace-observer
   [method netspace-sym co-fn]
+    (log/trace "start-netspace-observer for: " method netspace-sym)
   (let [[path in-chan behavior] (configure-netspace! method netspace-sym co-fn)]
-    (log/trace "start-netspace-observer for: " path) ;; in-chan  behavior (type behavior) " fn? " (fn? behavior))
+    (if (nil? path)
+      (start-default-observer default-chan (if (list? co-fn) (eval co-fn) co-fn))
     ;; [chan & behavior]
     ;; creates a pair of gochans
     (let [cofn? (if (symbol? behavior)
@@ -405,7 +395,7 @@
                               res)
                             (do ;;(log/trace "not found ")
                               (not-found))))))
-                ))))))))
+                )))))))))
 
 (defn start-http-observer
   [] ;;[disp-map]
@@ -418,6 +408,9 @@
                dispatch-map (mrj/get-dispatch-map method)
                log (log/trace "resuming HTTP dispatch for " method uri)
                ;; log (mrj/dump-dispatch-map method)
+
+               ;; match-uri...
+
                [drqst dchan]
                (if-let [to-chan (get (deref dispatch-map) uri)]
                  (do (log/trace "exact match: " uri to-chan)
@@ -459,12 +452,14 @@
           (>! dchan drqst)))))
 
 (defn start [rqst]
-  (log/trace "dispatching http rqst: " (:uri rqst))
-  ;; find matching route in dispatch table
-  ;; call fn
-  (go (>! http-rqst-chan rqst))
-  (let [r (<!! http-resp-chan)]
-    ;; (log/trace "responding " r)
-    r))
+  (log/trace "dispatching http rqst: " (:uri rqst)))
+  ;; 1.  match path to find handler
+  ;; 2.  match sig - incoming args v. handler's formal params
+  ;; 3.  call fn
+  ;; NB: this is just like XSLT, there, the path is through the tree.
+  ;; (go (>! http-rqst-chan rqst))
+  ;; (let [r (<!! http-resp-chan)]
+  ;;   ;; (log/trace "responding " r)
+  ;;   r))
 
 (log/trace "loaded")

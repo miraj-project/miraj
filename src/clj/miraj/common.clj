@@ -29,9 +29,10 @@
 (defonce dispatch-map-post (atom {}))
 (defonce dispatch-map-put (atom {}))
 
+;;FIXME: implement dispatch-map using protocols/interfaces, e.g. IPersistentMap
 (defn get-dispatch-map
   [method]
-  (log/trace "get-dispatch-map: " method)
+  ;; (log/trace "get-dispatch-map: " method)
   (condp = method
     :get dispatch-map-get
     :head dispatch-map-head

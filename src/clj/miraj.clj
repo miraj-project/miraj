@@ -12,7 +12,7 @@
             [potemkin.namespaces :refer [import-vars]]
             [miraj.common :as mrj]
             [miraj.sync :as msync]
-            [miraj.async :as mas]
+            [miraj.async :as masync]
             [miraj.data.xml :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]])
@@ -540,25 +540,25 @@
   ;; (alter-var-root (var config-js-reqs) (fn [f] msync/config-js-reqs))
   (alter-var-root (var start-netspace-observer) (fn [f] msync/start-netspace-observer))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
-  (alter-var-root (var start) (fn [f] msync/start))
-  (msync/start-http-observer))
+  (alter-var-root (var start) (fn [f] msync/start-http-observer)))
+;;  (msync/start-http-observer))
 
 (defn config-async []
   (log/trace "config-async")
-  (alter-var-root (var configure-namespace) (fn [f] mas/configure-namespace))
-  ;; (alter-var-root (var config-polymer-defaults) (fn [f] mas/config-polymer-defaults))
-  ;; (alter-var-root (var config-polymer-reqs) (fn [f] mas/config-polymer-reqs))
-  ;; (alter-var-root (var config-css-reqs) (fn [f] mas/config-css-reqs))
-  ;; (alter-var-root (var config-js-reqs) (fn [f] mas/config-js-reqs))
-  (alter-var-root (var start-netspace-observer) (fn [f] mas/start-netspace-observer))
+  (alter-var-root (var configure-namespace) (fn [f] masync/configure-namespace))
+  ;; (alter-var-root (var config-polymer-defaults) (fn [f] masync/config-polymer-defaults))
+  ;; (alter-var-root (var config-polymer-reqs) (fn [f] masync/config-polymer-reqs))
+  ;; (alter-var-root (var config-css-reqs) (fn [f] masync/config-css-reqs))
+  ;; (alter-var-root (var config-js-reqs) (fn [f] masync/config-js-reqs))
+  (alter-var-root (var start-netspace-observer) (fn [f] masync/start-netspace-observer))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
-  (alter-var-root (var start) (fn [f] mas/start))
-  (mas/start-http-observer))
+  (alter-var-root (var start) (fn [f] masync/start))
+  (masync/start-http-observer))
 
      ;; (fn [rqst]
      ;;   (log/trace "ASYNC dispatching http rqst: " (:uri rqst))
-     ;;   (go (>! mas/http-rqst-chan rqst))
-     ;;   (let [r (<!! mas/http-resp-chan)]
+     ;;   (go (>! masync/http-rqst-chan rqst))
+     ;;   (let [r (<!! masync/http-resp-chan)]
      ;;     ;; (log/trace "responding " r)
      ;;     r))))
 
@@ -568,18 +568,5 @@
     :sync (config-sync)
     :async (config-async)
     (throw (Exception. "unrecognized config mode: " mode))))
-
-;; (defn start [rqst]
-;;   ;; (require 'config) ;;FIXME: one-time only
-;;   ;; (log/trace "dispatching http rqst: " (:uri rqst))
-;;   (go (>! mas/http-rqst-chan rqst))
-;;   (let [r (<!! mas/http-resp-chan)]
-;;     ;; (log/trace "responding " r)
-;;     r))
-
-;; (dump-dispatch-map :get)
-;; (dump-dispatch-map :head)
-;; (dump-dispatch-map :post)
-;; (dump-dispatch-map :put)
 
 (log/trace "loaded")
