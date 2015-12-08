@@ -397,10 +397,14 @@
     (if (mcomm/is-lambda? behavior)
       (do (log/trace "LAMBDA: " behavior)
           ((eval behavior) rqst))
-      (do (log/trace "LIST: " behavior)))
+      (do (log/trace "LIST: " behavior)
+          (response (str behavior))))
+          ;; (if (= 'quote (first behavior))
+          ;;   (response (str (first (rest behavior))))
+          ;;   (response (str (eval behavior))))))
 
     :else
-    (do (log/trace (str "UNKNOWN BEHAVIOR TYPE: " (type behavior) behavior))
+    (do (log/trace (str "UNKNOWN BEHAVIOR TYPE: " (type behavior) " " behavior))
         (response (str behavior)))))
 
   ;; if fn is symbol then match sig and apply if match
