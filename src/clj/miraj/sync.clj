@@ -38,8 +38,6 @@
    :styles  #(resource-request % "/")
    :themes  #(resource-request % "/")})
 
-(declare configure-netspace!)
-
 (defn ns-to-path
   [ns]
   (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
@@ -63,12 +61,50 @@
   [ns]
   (subs (str/replace (str ns) "/" ".") 1))
 
+(defn configure-netspace!
+  [method netspace-sym behavior]
+  (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) behavior (type behavior))
+  ;; (doseq [[netspace-sym behavior] disp-map]
+  (if (= '* netspace-sym)
+    (let [default (if (list? behavior) (eval behavior) behavior)]
+      (alter-var-root (var default-observer) (fn [f] default))
+      [nil behavior])
+    (let [path (if (= netspace-sym '$)
+                 "/"
+                 (ns-to-path (str netspace-sym)))
+
+          ;; f (cond (list? behavior) (eval behavior) ;;FIXME check for lambda
+          ;;         (symbol? behavior) behavior
+          ;;         (fn? behavior) behavior
+          ;;         :else
+          ;;         (throw
+          ;;          (Exception.
+          ;;           "behavior fn must be symbol, fn, or lambda")))
+
+          dispatch-map (mcomm/get-dispatch-map method)]
+      (log/trace "NEW NETSPACE: " method path behavior)
+      (swap! dispatch-map
+             (fn [old path fn] (assoc old path fn))
+             path behavior)
+      [path behavior])))
+;;      (configure-netspace! path ch co-fn))))
+
 ;;FIXME: only include polymer stuff on demand
-(defn config-polymer-defaults
+(defmacro config-polymer-defaults
   []
   (doseq [[chan-kw handler] polymer-map]
     (configure-netspace! :get (subs (str chan-kw) 1) handler))
-  (mcomm/dump-dispatch-map :get))
+  #_(mcomm/dump-dispatch-map :get))
+
+(defmacro poly-fn
+  [path]
+  (log/trace "poly-fn")
+  `(fn [rqst#]
+     (let [resp# (resource-request rqst# ~path)]
+       (if resp#
+         resp#
+         (do (log/trace "RESOURCE NOT FOUND: " (:uri rqst#))
+             (not-found (:uri rqst#)))))))
 
 (defn config-polymer-reqs
   [reqs]
@@ -78,13 +114,13 @@
           pm-path (ns-to-path nmsp)
           pm-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " pm-path)
-      (configure-netspace! :get nmsp
-                               #(do (log/trace "HANDLING POLYMER RQST: " (:uri %))
-                                    (let [resp (resource-request % "/")]
-                                      (if resp
-                                        resp
-                                        (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri %))
-                                            (not-found (:uri %)))))))))
+      (configure-netspace! :get nmsp #(resource-request % "/")))) ;; '(poly-fn "/"))))
+                           ;; (fn [rqst] (do (log/trace "HANDLING POLYMER RQST: " (:uri rqst))
+                           ;;                (let [resp (resource-request rqst "/")]
+                           ;;                  (if resp
+                           ;;                    resp
+                           ;;                    (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri rqst))
+                           ;;                        (not-found (:uri rqst))))))))))
   (mcomm/dump-dispatch-map :get))
 
 (defn config-js-reqs
@@ -95,14 +131,15 @@
           js-path (str nmsp ".*js")] ;;FIXME regex syntax
           ;; js-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " js-path)
-      (configure-netspace! :get (symbol js-path)
-                               #(do (log/trace "HANDLING JS RQST: " (:uri %))
-                                    (let [resp (resource-request % "scripts/")]
-                                      (if resp
-                                        resp
-                                        (do (log/trace "JS NOT FOUND: " (:uri %))
-                                            (not-found (:uri %)))))))))
-    (mcomm/dump-dispatch-map :get))
+      (configure-netspace! :get (symbol js-path) #(resource-request % "scripts/"))))
+; (poly-fn "scripts/"))))
+                           ;; '#(do (log/trace "HANDLING JS RQST: " (:uri %))
+                           ;;       (let [resp (resource-request % "scripts/")]
+                           ;;         (if resp
+                           ;;           resp
+                           ;;           (do (log/trace "JS NOT FOUND: " (:uri %))
+                           ;;               (not-found (:uri %)))))))))
+  #_(mcomm/dump-dispatch-map :get))
 
 (defn config-css-reqs
   [reqs]
@@ -112,15 +149,16 @@
           css-path (str nmsp ".*css")] ;;FIXME: regex syntax
           ;; css-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " css-path)
-      (configure-netspace! :get (symbol css-path)
-                     #(do (log/trace "HANDLING CSS RQST: " (:uri %))
-                          (let [resp (resource-request % "styles/")]
-                            ;; :styles.*  #(resource-request % "/")
-                            (if resp
-                              resp
-                              (do (log/trace "CSS NOT FOUND: " (:uri %))
-                                  (not-found (:uri %)))))))))
-    (mcomm/dump-dispatch-map :get))
+      (configure-netspace! :get (symbol css-path) #(resource-request % "styles/"))))
+;; (poly-fn "styles/"))))
+                           ;; '#(do (log/trace "HANDLING CSS RQST: " (:uri %))
+                           ;;       (let [resp (resource-request % "styles/")]
+                           ;;         ;; :styles.*  #(resource-request % "/")
+                           ;;         (if resp
+                           ;;           resp
+                           ;;           (do (log/trace "CSS NOT FOUND: " (:uri %))
+                           ;;               (not-found (:uri %)))))))))
+  #_(mcomm/dump-dispatch-map :get))
 
 (defn configure-namespace
   [nm refs]
@@ -314,37 +352,9 @@
     :else
     (do (log/trace "activating other: " (type component)))))
 
-(defn configure-netspace!
-  [method netspace-sym behavior]
-  (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) behavior (type behavior))
-  ;; (doseq [[netspace-sym behavior] disp-map]
-  (if (= '* netspace-sym)
-    (let [default (if (list? behavior) (eval behavior) behavior)]
-      (alter-var-root (var default-observer) (fn [f] default))
-      [nil behavior])
-    (let [path (if (= netspace-sym '$)
-                 "/"
-                 (ns-to-path (str netspace-sym)))
-
-          ;; f (cond (list? behavior) (eval behavior) ;;FIXME check for lambda
-          ;;         (symbol? behavior) behavior
-          ;;         (fn? behavior) behavior
-          ;;         :else
-          ;;         (throw
-          ;;          (Exception.
-          ;;           "behavior fn must be symbol, fn, or lambda")))
-
-          dispatch-map (mcomm/get-dispatch-map method)]
-      (log/trace "NEW NETSPACE: " method path behavior)
-      (swap! dispatch-map
-             (fn [old path fn] (assoc old path fn))
-             path behavior)
-      [path behavior])))
-;;      (configure-netspace! path ch co-fn))))
-
 (defn co-fn? [f]
   (if (mcomm/is-lambda? f)
-    false
+;;    false
     (if (symbol? f)
       ;; (:co-fn (meta (find-var f)))
       (-> f find-var meta :co-fn)
@@ -370,8 +380,8 @@
 
     (symbol? behavior)
     (do (log/trace "SYMBOL")
-        (if (fn? behavior)
-          (do (log/trace "FN")
+        (if (mcomm/is-lambda? behavior)
+          (do (log/trace "fn sym")
               (let [args (try+ (mcomm/match-params-to-sig rqst behavior)
                                (catch [:type :miraj.http.response/response]
                                    e ;;{:keys [type response]}
@@ -387,18 +397,26 @@
                       (do (log/trace (-> behavior find-var meta :name) " says: " res)
                           res)
                       (response (not-found))))))) ;;FIXME user-defined not-found
-          (do (log/trace "NOT FN: " behavior)
+          (do (log/trace "non-fn sym: " behavior)
               (response (str (deref (find-var behavior)))))))
 
     (var? behavior)
     (log/trace "VAR")
 
+    (fn? behavior)
+    (do (log/trace "FN " behavior (count (keys rqst)))
+        (if-let [res (behavior rqst)]
+          (do (log/trace behavior " says: " res)
+              res)
+          (not-found))) ;;FIXME user-defined not-found
+
+    (mcomm/is-lambda? behavior)
+    (do (log/trace "LAMBDA: " behavior)
+        ((eval behavior) rqst))
+
     (list? behavior)
-    (if (mcomm/is-lambda? behavior)
-      (do (log/trace "LAMBDA: " behavior)
-          ((eval behavior) rqst))
-      (do (log/trace "LIST: " behavior)
-          (response (str behavior))))
+    (do (log/trace "LIST: " behavior)
+        (response (str behavior)))
           ;; (if (= 'quote (first behavior))
           ;;   (response (str (first (rest behavior))))
           ;;   (response (str (eval behavior))))))

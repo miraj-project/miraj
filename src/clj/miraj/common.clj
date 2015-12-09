@@ -25,11 +25,14 @@
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
 
 (defmacro is-lambda? [f]
-  `(do (log/trace "is-lambda? " ~f (type ~f))
-     (cond
-       (= (type ~f) clojure.lang.Cons) (= 'fn* (first ~f))
-       (list? ~f) (or (= 'fn (first ~f)) (= 'fn* (first ~f)))
-       :else false)))
+  `(let [x# (cond
+              (symbol? ~f) (fn? (deref (find-var ~f)))
+              (fn? ~f) true
+              (= (type ~f) clojure.lang.Cons) (= 'fn* (first ~f))
+              (list? ~f) (or (= 'fn (first ~f)) (= 'fn* (first ~f)))
+              :else false)]
+     ;; (log/trace "is-lambda? " ~f (type ~f) ": " x#)
+     x#))
 
 ;; dispatch-map takes URIs to input channels
 (defonce dispatch-map-get (atom {}))
@@ -59,6 +62,9 @@
       (log/trace "dispatch-map " method ": "
                  (pprint-str (into (sorted-map) (deref dm)))))))
 
+(defn match-arglist
+  
+
 (defn match-params-to-sig
   [rqst func]
   (log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
@@ -81,6 +87,8 @@
 
         ;; now get the arglist from the fn defn
         ;; sig-args (first (:arglists (meta (find-var func))))
+        ;;FIXME support multi-arity fns
+        sig-arglists (-> func find-var meta :arglists)
         sig-args (-> func find-var meta :arglists first)
         sig-path-args (filter #(not (or (:? (meta %)) (:?? (meta %)))) sig-args)
         [sig-path-args sig-path-varargs] (split-with #(not= '& %) sig-path-args)

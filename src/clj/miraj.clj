@@ -193,40 +193,40 @@
   (let [ns (create-ns nm)
         ns-path (path-from-ns ns)
         refmap (into {} (map #(identity [(first %) (rest %)]) args))
-        log (log/trace "refmap: " refmap)
+        ;; log (log/trace "refmap: " refmap)
         title (first (:title refmap))
 
         polymer-reqs (:polymer refmap)
-        log (log/trace "polymer-reqs: " polymer-reqs)
+        ;; log (log/trace "polymer-reqs: " polymer-reqs)
 
         html-reqs (:html refmap)
-        log (log/trace "html-reqs: " html-reqs)
+        ;; log (log/trace "html-reqs: " html-reqs)
 
         clj-reqs (:require refmap)
-        log (log/trace "clj-reqs: " clj-reqs)
+        ;; log (log/trace "clj-reqs: " clj-reqs)
 
         all-reqs (concat clj-reqs polymer-reqs)
-        log (log/trace "ALL REQS: " all-reqs)
+        ;; log (log/trace "ALL REQS: " all-reqs)
 
         ;; pick out the :requires for components (co-fns defined in co-ns) only
         ;; and load them
         components (let [comps (filter #(not (some #{:js :css} %)) all-reqs)
                          c (doseq [c comps] (require c))]
-                     (filter #(do (log/trace "comp: " % " " (find-ns (first %)))
+                     (filter #(do ;(log/trace "comp: " % " " (find-ns (first %)))
                                   (:co-ns (meta (find-ns (first %))))) comps))
-        log (log/trace "components: " components)
+        ;; log (log/trace "components: " components)
 
         scripts (for [script (filter #(some #{:js} %) html-reqs)] (get-js script))
-        log (log/trace "SCRIPTS: " scripts)
+        ;; log (log/trace "SCRIPTS: " scripts)
 
         styles  (for [script (filter #(some #{:css} %) html-reqs)] (get-css script))
-        log (log/trace "STYLES: " styles)
+        ;; log (log/trace "STYLES: " styles)
 
         links (flatten (for [comp components] (do #_(log/trace "link? " comp) (get-link comp))))
-        log (log/trace "LINKS: " links)
+        ;; log (log/trace "LINKS: " links)
 
         polymer (concat scripts styles links)
-        log (log/trace "POLYMER: " polymer)
+        ;; log (log/trace "POLYMER: " polymer)
 
         preamble (miraj-header title ns-path polymer)
         ;; log (log/trace "PREAMBLE: " preamble)
