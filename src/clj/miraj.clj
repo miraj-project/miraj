@@ -1,6 +1,6 @@
+(println "starting load miraj.clj")
 (ns miraj
-  (:require [clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
-            [clojure.pprint :as pp]
+  (:require [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [clojure.tools.reader.reader-types :as readers]
@@ -12,11 +12,18 @@
             [potemkin.namespaces :refer [import-vars]]
             [miraj.common :as mrj]
             [miraj.sync :as msync]
-            [miraj.async :as masync]
+            ;;FIXME - load async stuff at config time, see below
+            ;;[clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
+            ;; [miraj.async :as masync]
             [miraj.data.xml :as xml]
             [miraj.html :as h]
-            [miraj.http.response :refer [bad-request bad-request! not-found]])
-  (:import [java.io StringReader StringWriter]))
+            [miraj.http.response :refer [bad-request bad-request! not-found]]
+            [ring.util.servlet :as servlet])
+  (:import [java.io StringReader StringWriter]
+           ;; [javax.servlet.http HttpServlet
+           ;;  HttpServletRequest
+           ;;  HttpServletResponse]
+           [javax.servlet ServletConfig]))
 
 ;;  (:require [clojure.pprint :as pp]))
 
@@ -24,22 +31,6 @@
 
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
-
-;; ;; dispatch-map takes URIs to input channels
-;; (defonce dispatch-map-get (atom {}))
-;; (defonce dispatch-map-head (atom {}))
-;; (defonce dispatch-map-post (atom {}))
-;; (defonce dispatch-map-put (atom {}))
-;; (defonce http-rqst-chan (chan 20))
-;; (defonce http-resp-chan (chan 20))
-;; (defonce default-chan (chan 20))
-
-;;TODO: support config of base path
-(def polymer-map
-  {:polymer #(resource-request % "/")
-   :scripts #(resource-request % "/")
-   :styles  #(resource-request % "/")
-   :themes  #(resource-request % "/")})
 
 (def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
@@ -189,77 +180,128 @@
   [nm & args]
   (log/trace "set-html-head! co-ns: " nm)
   (log/trace "set-html-head! this ns: " *ns*)
-  (log/trace "set-html-head! args: " args)
+  (log/trace "set-html-head! args: " (first args))
   (let [ns (create-ns nm)
         ns-path (path-from-ns ns)
-        refmap (into {} (map #(identity [(first %) (rest %)]) args))
+        refmap (into {} (map #(identity [(first %) (rest %)]) (rest (first args))))
         ;; log (log/trace "refmap: " refmap)
         title (first (:title refmap))
 
         polymer-reqs (:polymer refmap)
-        ;; log (log/trace "polymer-reqs: " polymer-reqs)
+        log (log/trace "polymer-reqs: " polymer-reqs)
 
         html-reqs (:html refmap)
-        ;; log (log/trace "html-reqs: " html-reqs)
+        log (log/trace "html-reqs: " html-reqs)
 
         clj-reqs (:require refmap)
-        ;; log (log/trace "clj-reqs: " clj-reqs)
+        log (log/trace "clj-reqs: " clj-reqs)
 
         all-reqs (concat clj-reqs polymer-reqs)
-        ;; log (log/trace "ALL REQS: " all-reqs)
+        log (log/trace "ALL REQS: " all-reqs)
 
-        ;; pick out the :requires for components (co-fns defined in co-ns) only
-        ;; and load them
+        ;; pick out the :requires for co-namespaces create the namespaces
         components (let [comps (filter #(not (some #{:js :css} %)) all-reqs)
-                         c (doseq [c comps] (require c))]
-                     (filter #(do ;(log/trace "comp: " % " " (find-ns (first %)))
-                                  (:co-ns (meta (find-ns (first %))))) comps))
-        ;; log (log/trace "components: " components)
+                         _ (doseq [c comps]
+                             (do (println "CREATE-NS: " (first c))
+                                 (create-ns (first c))))]
+                     (filter #(do (println "comp: " % " " (find-ns (first %)))
+                                  (:co-ns (meta (find-ns (first %)))))
+                             comps))
+        log (log/trace "components: " components)
 
         scripts (for [script (filter #(some #{:js} %) html-reqs)] (get-js script))
-        ;; log (log/trace "SCRIPTS: " scripts)
+        log (log/trace "SCRIPTS: " scripts)
 
         styles  (for [script (filter #(some #{:css} %) html-reqs)] (get-css script))
-        ;; log (log/trace "STYLES: " styles)
+        log (log/trace "STYLES: " styles)
 
         links (flatten (for [comp components] (do #_(log/trace "link? " comp) (get-link comp))))
-        ;; log (log/trace "LINKS: " links)
+        log (log/trace "LINKS: " links)
 
         polymer (concat scripts styles links)
-        ;; log (log/trace "POLYMER: " polymer)
+        log (log/trace "POLYMER: " polymer)
 
         preamble (miraj-header title ns-path polymer)
         ;; log (log/trace "PREAMBLE: " preamble)
         ]
     (log/trace (str "*ns*: " ns " " (type ns)))
-    ;; (log/trace "name: " nm (type nm))
-    ;; (log/trace "title: " title)
-    ;; (log/trace "reqs: " reqs)
-    ;; (log/trace "components: " components)
-    ;; (log/trace "links: " links)
-    ;; (log/trace "preamble: " preamble)
-    (let [;ns# (create-ns ~nm)
-                                        ;log# (log/trace "new-ns: " (str ns#))
-          ;; var# (intern '~ns (symbol "Miraj"))
-          log# (println "ns: " ns (type ns))
+    (let [_ (println "altering meta on ns: " ns (type ns) (meta ns))
           ;; (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
           newvar (alter-meta! ns
                               (fn [old new] ;;(merge old
                                 {:co-ns true :co-fn new})
                               preamble)
           ]
+      (log/trace "ns meta: " (meta ns))
       newvar)))
 
-(defn configure-namespace [nm refs]
-  (throw (Exception. "calling dummy configure-namespace")))
+(declare configure-namespace)
+
+(defn get-ns-opts
+  [nm refs]
+  (log/trace "get-ns-opts " nm)
+  (let [ref-map (into {} (clojure.core/map
+                          #(identity [(first %) (rest %)]) refs))
+        clj-reqs (:require ref-map)
+        html-reqs (:html ref-map)
+        js-reqs (filter #(some #{:js} %) html-reqs)
+        css-reqs (filter #(some #{:css} %) html-reqs)
+        libs (filter #(not (some #{:js :css} %)) clj-reqs)
+
+        polymer-reqs (:polymer ref-map)
+        ;; pm-reqs (filter #(.startsWith (str (first %)) "polymer.") polymer-reqs)
+
+        required (list (apply list ':require (concat libs polymer-reqs)))]
+    ;; (println "REFS: " refs)
+    (println "REQUIRED: " required)
+    ;; (if (not (nil? polymer-reqs))
+    ;;   (do (log/trace "POLYMER reqs: " polymer-reqs)
+    ;;       (config-polymer-reqs polymer-reqs)))
+
+    ;; (if (not (nil? js-reqs))
+    ;;   (do (log/trace "JS reqs: " js-reqs)
+    ;;       (config-js-reqs js-reqs)))
+
+    ;; (if (not (nil? css-reqs))
+    ;;   (do (log/trace "CSS reqs: " css-reqs)
+    ;;       (config-css-reqs css-reqs)))
+
+    ;; (log/trace "FOO A")
+
+    ;; (config-polymer-defaults)
+    ;; (log/trace "FOO B")
+    ;; (mcomm/dump-dispatch-map)
+    required))
 
 (defmacro co-ns
   [nm & refs]
-  (log/trace "def co-ns: " nm " " refs)
-  (eval (apply set-html-head! nm refs))
-  (let [required (configure-namespace nm refs)]
-    (log/trace "co-ns requireds: " required)
-    `(ns ~nm ~@required)))
+  (println "expanding co-ns: " nm " " refs)
+  (println "FOO C " *ns*)
+  (let [opts (get-ns-opts nm refs)]
+    (println "FOO D " opts)
+    (eval (macroexpand `(ns ~nm ~@opts)))
+    (configure-namespace nm refs)
+    (println "FOO E " *ns*)
+    `(do (println "invoking co-ns: " '~nm)
+       (ns ~nm ~@opts))))
+
+  ;; ;; (eval (apply set-html-head! nm refs))
+  ;; `(do (println "invoking co-ns")
+  ;;      (let [;;required# (configure-namespace '~nm '~refs)
+  ;;            required# (get-ns-args '~nm '~refs)
+  ;;            _# (println "FOO C " required#)
+  ;;            args# ['~nm required#]
+  ;;            _# (println "FOO CC " args#)
+  ;;            n# (set-html-head! '~nm '~refs)]
+  ;;        (println "FOO D " *ns*)
+  ;;        ;; (println "nm: " '~nm (type '~nm))
+  ;;        ;; (println "reqs: " '~@required)
+  ;;        ;;(configure-namespace '~nm '~refs)
+  ;;        `(ns ~'~nm '~required#)
+  ;;        (println "FOO E " *ns*)
+  ;;        `(ns ~'~nm)
+  ;;        (println "FOO F " *ns*)
+  ;;        #_(set-html-head! '~nm '~refs))))
 
 (defmacro handle-ctor
   [ctor]
@@ -436,7 +478,9 @@
   [nm args & body]
   (log/trace (str "def co-fn: " (ns-name *ns*) "/" nm))
   `(let [n# (defn ~nm ~args ~@body)]
+     ;; (println "COFUNC altering meta for " n# " meta: " (meta n#))
      (alter-meta! n# (fn [m#] (assoc m# :co-fn true)))
+     ;; (println "COFUNC altered meta " (meta n#))
      n#))
 
 ;;FIXME: only "main" allowed for now
@@ -508,15 +552,6 @@
   `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
   `(configure-netspace :post '~netspace '~behavior))
 
-;; ;;FIXME: only install default if user doesn't
-;; (do (log/trace "using default not-found co-fn")
-;;     (go (while true
-;;           (let [rqst (<! default-chan)
-;;                 uri (:uri rqst)]
-;;             (log/trace "default co-fn on: " uri)
-;;             (>! http-resp-chan (not-found)))))))
-
-
 (defn start [rqst])
 
 (defn dump-dispatch-map [& method]
@@ -531,34 +566,44 @@
        (log/trace "SYNC dispatching http rqst: " (:uri rqst))
        ))))
 
+(defn configure-namespace [nm refs]
+  (throw (Exception. "calling dummy configure-namespace")))
+
 (defn config-sync []
-  (log/trace "config-sync")
+  (println "config-sync")
   (alter-var-root (var configure-namespace) (fn [f] msync/configure-namespace))
   (alter-var-root (var configure-netspace) (fn [f] msync/configure-netspace!))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
   (alter-var-root (var start) (fn [f] msync/start)))
+;  (intern 'config '-service (servlet/make-service-method msync/start))
+;  (println "defservice " (find-var 'config/-service)))
 ;;  (msync/start-http-observer))
 
 (defn config-async []
   (log/trace "config-async")
-  (alter-var-root (var configure-namespace) (fn [f] masync/configure-namespace))
-  (alter-var-root (var configure-netspace) (fn [f] masync/start-netspace-observer))
-  (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
-  (alter-var-root (var start) (fn [f] masync/start))
-  (masync/start-http-observer))
+  ;;FIXME: load core.async
+  ;; (alter-var-root (var configure-namespace) (fn [f] masync/configure-namespace))
+  ;; (alter-var-root (var configure-netspace) (fn [f] masync/start-netspace-observer))
+  ;; (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
+  ;; (alter-var-root (var start) (fn [f] masync/start))
+  #_(masync/start-http-observer))
 
-     ;; (fn [rqst]
-     ;;   (log/trace "ASYNC dispatching http rqst: " (:uri rqst))
-     ;;   (go (>! masync/http-rqst-chan rqst))
-     ;;   (let [r (<!! masync/http-resp-chan)]
-     ;;     ;; (log/trace "responding " r)
-     ;;     r))))
+(defmacro config [mode]
+  `(do
+     (log/trace "config mode: " ~mode)
+     ;;(in-ns 'miraj)
+     (condp = ~mode
+       :sync (config-sync)
+       :async (config-async)
+       (throw (Exception. "unrecognized config mode: " ~mode)))))
+  ;; (println "expanding config " *ns*)
+  ;; (case mode
+  ;;   :sync (do
+  ;;           (eval (macroexpand '(ns config)))
+  ;;           (println "defining service " *ns*)
+  ;;           (eval (macroexpand (def config/ -service miraj.sync/start)))
+  ;;           (println "defservice " (find-var 'config/-service)))))
+  ;;           ;;(eval (macroexpand '(ring.util.servlet/defservice miraj.sync/start)))))
 
-(defn config [mode]
-  (log/trace "config " mode)
-  (condp = mode
-    :sync (config-sync)
-    :async (config-async)
-    (throw (Exception. "unrecognized config mode: " mode))))
 
 (log/trace "loaded")

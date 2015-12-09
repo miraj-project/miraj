@@ -1,6 +1,5 @@
 (ns miraj.common
-  (:require [clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
-            [miraj.data.xml :as xml]
+  (:require [miraj.data.xml :as xml]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
@@ -62,8 +61,7 @@
       (log/trace "dispatch-map " method ": "
                  (pprint-str (into (sorted-map) (deref dm)))))))
 
-(defn match-arglist
-  
+;; (defn match-arglist
 
 (defn match-params-to-sig
   [rqst func]

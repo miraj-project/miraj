@@ -1,6 +1,5 @@
 (ns miraj.sync
-  (:require [clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
-            [clojure.pprint :as pp]
+  (:require [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [clojure.tools.reader.reader-types :as readers]
@@ -20,16 +19,6 @@
   (:import [java.io StringReader StringWriter]))
 
 (log/trace "loading")
-
-;; dispatch-map takes URIs to input channels
-;; (defonce dispatch-map-get (atom {}))
-;; (defonce dispatch-map-head (atom {}))
-;; (defonce dispatch-map-post (atom {}))
-;; (defonce dispatch-map-put (atom {}))
-
-(defonce http-rqst-chan (chan 20))
-(defonce http-resp-chan (chan 20))
-(defonce default-chan (chan 20))
 
 ;;TODO: support config of base path
 (def polymer-map
@@ -90,8 +79,9 @@
 ;;      (configure-netspace! path ch co-fn))))
 
 ;;FIXME: only include polymer stuff on demand
-(defmacro config-polymer-defaults
+(defn config-polymer-defaults
   []
+  (log/trace "config-polymer-defaults")
   (doseq [[chan-kw handler] polymer-map]
     (configure-netspace! :get (subs (str chan-kw) 1) handler))
   #_(mcomm/dump-dispatch-map :get))
@@ -111,8 +101,7 @@
   (log/trace "config-polymer-reqs: " reqs)
   (doseq [req reqs]
     (let [nmsp (first req)
-          pm-path (ns-to-path nmsp)
-          pm-chan (chan)]
+          pm-path (ns-to-path nmsp)]
       (log/trace "reqd ns: " nmsp ", path: " pm-path)
       (configure-netspace! :get nmsp #(resource-request % "/")))) ;; '(poly-fn "/"))))
                            ;; (fn [rqst] (do (log/trace "HANDLING POLYMER RQST: " (:uri rqst))
@@ -121,7 +110,7 @@
                            ;;                    resp
                            ;;                    (do (log/trace "POLYMER RESOURCE NOT FOUND: " (:uri rqst))
                            ;;                        (not-found (:uri rqst))))))))))
-  (mcomm/dump-dispatch-map :get))
+  #_(mcomm/dump-dispatch-map :get))
 
 (defn config-js-reqs
   [reqs]
@@ -129,7 +118,6 @@
   (doseq [req reqs]
     (let [nmsp (first req)
           js-path (str nmsp ".*js")] ;;FIXME regex syntax
-          ;; js-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " js-path)
       (configure-netspace! :get (symbol js-path) #(resource-request % "scripts/"))))
 ; (poly-fn "scripts/"))))
@@ -147,7 +135,6 @@
   (doseq [req reqs]
     (let [nmsp (first req)
           css-path (str nmsp ".*css")] ;;FIXME: regex syntax
-          ;; css-chan (chan)]
       (log/trace "reqd ns: " nmsp ", path: " css-path)
       (configure-netspace! :get (symbol css-path) #(resource-request % "styles/"))))
 ;; (poly-fn "styles/"))))
@@ -159,6 +146,42 @@
                            ;;           (do (log/trace "CSS NOT FOUND: " (:uri %))
                            ;;               (not-found (:uri %)))))))))
   #_(mcomm/dump-dispatch-map :get))
+
+(defn get-ns-args
+  [nm refs]
+  (log/trace "get-ns-args " nm)
+  (let [ref-map (into {} (clojure.core/map
+                          #(identity [(first %) (rest %)]) refs))
+        clj-reqs (:require ref-map)
+        html-reqs (:html ref-map)
+        js-reqs (filter #(some #{:js} %) html-reqs)
+        css-reqs (filter #(some #{:css} %) html-reqs)
+        libs (filter #(not (some #{:js :css} %)) clj-reqs)
+
+        polymer-reqs (:polymer ref-map)
+        ;; pm-reqs (filter #(.startsWith (str (first %)) "polymer.") polymer-reqs)
+
+        required (list (apply list ':require (concat libs polymer-reqs)))]
+    ;; (println "REFS: " refs)
+    (println "REQUIRED: " required)
+    ;; (if (not (nil? polymer-reqs))
+    ;;   (do (log/trace "POLYMER reqs: " polymer-reqs)
+    ;;       (config-polymer-reqs polymer-reqs)))
+
+    ;; (if (not (nil? js-reqs))
+    ;;   (do (log/trace "JS reqs: " js-reqs)
+    ;;       (config-js-reqs js-reqs)))
+
+    ;; (if (not (nil? css-reqs))
+    ;;   (do (log/trace "CSS reqs: " css-reqs)
+    ;;       (config-css-reqs css-reqs)))
+
+    ;; (log/trace "FOO A")
+
+    ;; (config-polymer-defaults)
+    ;; (log/trace "FOO B")
+    ;; (mcomm/dump-dispatch-map)
+    required))
 
 (defn configure-namespace
   [nm refs]
@@ -189,7 +212,11 @@
       (do (log/trace "CSS reqs: " css-reqs)
           (config-css-reqs css-reqs)))
 
+    (log/trace "FOO A")
+
     (config-polymer-defaults)
+    (log/trace "FOO B")
+    (mcomm/dump-dispatch-map)
     required))
 
 ;; Match incoming URI+args against netspace and fn formal params
@@ -320,14 +347,14 @@
           (if (not (:co-fn (meta (find-var component))))
             (throw (RuntimeException. (str "only co-functions can be activated."))))
           (let [ns (find-ns (symbol (namespace component)))
-                ;; log (log/trace "ACTIVATE ns: " ns)
+                log (log/trace "ACTIVATE ns: " ns " meta: " (meta ns))
                 preamble (if-let [cofn (:co-fn (meta ns))]
                            cofn
-                           (throw (RuntimeException.
-                                   (str "co-functions must be defined in a co-namespace."))))]
-            ;; (log/trace "ACTIVATE PREAMBLE: " preamble)
+                           ;;(throw (RuntimeException.
+                           (log/trace (str "co-functions must be defined in a co-namespace.")))]
+            (log/trace "ACTIVATE PREAMBLE: " preamble)
             (let [body# (get-body ns component)
-                  ;; log# (log/trace "ACTIVATE BODY: " body#)
+                  log# (log/trace "ACTIVATE BODY: " body#)
                   tree# (h/html preamble body#)]
               ;; (log/trace "TREE: " tree#)
               tree#))))
@@ -435,8 +462,8 @@
 (defn start [rqst]
   (log/trace "START HTTP RQST: " (:uri rqst))
     (if-let [dispatch-entry (mcomm/get-dispatch-entry rqst)]
-      (do (log/trace "dispatch val: " dispatch-entry)
-          (log/trace "dispatch co-fn: " (last dispatch-entry))
+      (do (println "dispatch val: " dispatch-entry)
+          (println "dispatch co-fn: " (last dispatch-entry))
           (dispatch-rqst (assoc rqst :miraj-baseuri (first dispatch-entry)) (last dispatch-entry)))
       (default-observer rqst)))
 

@@ -28,9 +28,12 @@
 ;; (defonce dispatch-map-post (atom {}))
 ;; (defonce dispatch-map-put (atom {}))
 
-(defonce http-rqst-chan (chan 20))
-(defonce http-resp-chan (chan 20))
-(defonce default-chan (chan 20))
+(println "defoncing channels")
+(defonce channels
+  {:http-rqst (chan 20)
+   :http-resp (chan 20)
+   :default (chan 20)})
+(println "defoncing channels DONE")
 
 ;;TODO: support config of base path
 (def polymer-map
@@ -54,7 +57,7 @@
       (let [rqst (<! in-chan)
             uri (:uri rqst)]
         (log/trace "default dispatch on: " uri)
-        (>! http-resp-chan (behavior rqst))))))
+        (>! (channels :http-resp) (behavior rqst))))))
 
 (def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
@@ -323,7 +326,7 @@
   (log/trace "configure-netspace! " method netspace-sym (type netspace-sym) co-fn (type co-fn))
   ;; (doseq [[netspace-sym co-fn] disp-map]
   (if (= '* netspace-sym)
-    [nil default-chan co-fn]
+    [nil (channels :default) co-fn]
     (let [ch (chan)
           path (if (= netspace-sym '$)
                  "/"
@@ -342,7 +345,7 @@
   (log/trace "start-netspace-observer: " method netspace-sym co-fn)
   (let [[path in-chan behavior] (configure-netspace! method netspace-sym co-fn)]
     (if (nil? path)
-      (start-default-observer default-chan (if (list? co-fn) (eval co-fn) co-fn))
+      (start-default-observer (channels :default) (if (list? co-fn) (eval co-fn) co-fn))
       ;; [chan & behavior]
       ;; creates a pair of gochans
       (let [cofn? (if (symbol? behavior)
@@ -362,7 +365,7 @@
           (while true
             (let [rqst (<! in-chan)
                   uri (:uri rqst)]
-              ;; (log/trace "resuming netchan: " (str in-chan "->" 'http-resp-chan) " handling: " uri)
+              ;; (log/trace "resuming netchan: " (str in-chan "->" '(channels :http-resp)) " handling: " uri)
               (if cofn?
                 (do (log/trace "dispatching co-fn " uri (:miraj-baseuri rqst))
                     (if (= (:uri rqst) (:miraj-baseuri rqst))
@@ -370,15 +373,15 @@
                           (let [body (activate beh)
                                 r (xml/serialize :html body)]
                             ;; (log/trace "RESULT: " r)
-                            (>! http-resp-chan (response r))))
-                      (>! http-resp-chan (not-found))))
+                            (>! (channels :http-resp) (response r))))
+                      (>! (channels :http-resp) (not-found))))
                 (do
                   (if (symbol? behavior)
                     (let [args (try+ (mcomm/match-params-to-sig rqst behavior)
                                      (catch [:type :miraj.http.response/response]
                                          {:keys [response]}
                                        ;; (log/trace "caught exc " (:status response))
-                                       (>! http-resp-chan response)
+                                       (>! (channels :http-resp) response)
                                        nil))]
                       (if (not (nil? args))
                         (do
@@ -387,13 +390,13 @@
                                      "), for " (:uri rqst))
                           (if-let [res (apply (deref (-> behavior find-var)) args)]
                             (do (log/trace (-> behavior find-var meta :name) " says: " res)
-                                (>! http-resp-chan res))
-                            (>! http-resp-chan (not-found))))))
+                                (>! (channels :http-resp) res))
+                            (>! (channels :http-resp) (not-found))))))
                     (do (log/trace "applying lambda " (:uri rqst) beh)
                         (log/trace "type lambda " (type beh))
                         (log/trace "class lambda " (class beh))
                         (log/trace "meta lambda " (meta beh))
-                        (>! http-resp-chan
+                        (>! (channels :http-resp)
                             (if-let [res (beh rqst)]
                               (do ;;(log/trace "if-let " res)
                                 res)
@@ -405,18 +408,18 @@
   [] ;;[disp-map]
   (log/trace "start-http-observer")
   (go (while true
-        (let [rqst (<! http-rqst-chan)]
+        (let [rqst (<! (channels :http-rqst)]
           (log/trace "http dispatching rqst: " (:request-method rqst) (:uri rqst))
           (if-let [dispatch-entry (mcomm/get-dispatch-entry rqst)]
             (do (log/trace "dispatch val: " dispatch-entry)
                  (log/trace "dispatch chan: " (last dispatch-entry))
                 (>! (last dispatch-entry) (assoc rqst :miraj-baseuri (first dispatch-entry))))
-            (>! default-chan (assoc rqst :miraj-baseuri nil)))))))
+            (>! (channels default) (assoc rqst :miraj-baseuri nil)))))))
 
 (defn start [rqst]
   (log/trace "START HTTP RQST: " (:uri rqst))
-  (go (>! http-rqst-chan rqst))
-  (let [resp (<!! http-resp-chan)]
+  (go (>! (channels :http-rqst) rqst))
+  (let [resp (<!! (channels :http-resp))]
     ;; (log/trace "responding " resp)
     resp))
 
