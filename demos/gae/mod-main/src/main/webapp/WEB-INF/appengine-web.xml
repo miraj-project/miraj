@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appengine-web-app xmlns="http://appengine.google.com/ns/1.0">
+  <application>datafab2016</application>
+  <version>0-1-0</version>
+  <!--
+       We do not specify the module name so this is the default module.
+       There is only 1 default module per application.
+  -->
+  <!--module>mod-main</module-->
+
+  <threadsafe>true</threadsafe>
+
+  <system-properties>
+    <!-- <property name="java.util.logging.config.file" value="WEB-INF/classes/log4j.properties"/> -->
+    <property name="java.util.logging.config.file" value="WEB-INF/logging.properties"/>
+  </system-properties>
+</appengine-web-app>

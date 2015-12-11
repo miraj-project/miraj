@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<application xmlns="http://java.sun.com/xml/ns/javaee" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/application_5.xsd" version="5">
+  <display-name>migae-modules</display-name>
+  <module>
+    <web>
+      <web-uri>mod-main-0.1.0.war</web-uri>
+      <context-root>/main</context-root>
+    </web>
+  </module>
+  <module>
+    <web>
+      <web-uri>mod-worker-0.1.0.war</web-uri>
+      <context-root>/worker</context-root>
+    </web>
+  </module>
+  <library-directory>lib</library-directory>
+</application>

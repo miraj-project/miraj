@@ -1,34 +1,33 @@
-(require '[miraj :refer :all])
-(co-ns hello.world
+(miraj/co-ns hello.world
        "docstring here"
        (:title "my webpage")
        (:main 'main)
        (:polymer [polymer.paper :as paper :only [card]]
                  [polymer.iron :as iron :only [flex-layout]] ;; :refer :all :exclude [behaviors input]]
                  [polymer.font :as fnt :only [roboto]])
-       (:html [hello.world :css :refer [core]]
-              [hello.world :js :refer [core]]
-              [foo.bar :css :refer [baz]]
-              [foo.bar :js :refer [baz]])
+       (:html [styles.hello.world :css :refer [core]]
+              [scripts.hello.world :js :refer [core]]
+       ;;        ;; [foo.bar :css :refer [baz]]
+       ;;        ;; [foo.bar :js :refer [baz]]
+              )
                  ;;FIXME: also support: :html, maybe :theme?
        (:require [miraj :as miraj :refer :all]
                  [miraj.html :as h]
                  [miraj.http.response :refer [ok created]]
                  [cheshire.core :as json :refer :all]
-                 [clojure.data.xml :as xml]
                  [clojure.tools.logging :as log :only [trace debug error info]]
                  [clojure.pprint :as pp]
-                 [clojure.string :as string]
-                 [clojure.tools.reader :as reader]
-                 [clojure.tools.reader.edn :as edn]
-                 [clojure.tools.reader.reader-types :as readers]
-                 [clojure.test]
-                 [clojure.data.xml]
-                 [clojure.data.xml.test-utils :refer [test-stream lazy-parse*]]))
+                 [clojure.string :as string]))
+                 ;; [clojure.tools.reader :as reader]
+                 ;; [clojure.tools.reader.edn :as edn]
+                 ;; [clojure.tools.reader.reader-types :as readers]
+                 ;; [clojure.test]
+                 ;; [clojure.data.xml]
+                 ;; [clojure.data.xml.test-utils :refer [test-stream lazy-parse*]]))
 
 (log/trace "loading")
-
-(co-fn main []
+;;(println (meta hello.world))
+(miraj/co-fn main []
        (h/div {:id "cards"}
         (paper/card
          (h/div {:class "card-content"}
@@ -65,4 +64,4 @@
 
 (defn dump
   []
-  (miraj/dump-dispatch-map))
+  (ok (miraj/dump-dispatch-map)))

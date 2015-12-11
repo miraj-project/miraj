@@ -1,4 +1,4 @@
-(defproject miraj-test "0.0.1-SNAPSHOT"
+(defproject miraj-hello "0.0.1-SNAPSHOT"
   :description "Miraj - web components, the Clojure way"
   :url "https://github.com/mobileink/miraj"
   :license {:name "BSD License"
@@ -9,7 +9,8 @@
                  [org.clojure/core.async "0.2.374"]
                  [org.clojure/clojurescript "1.7.170"]
                  [mobileink/data.xml "0.0.10-SNAPSHOT"]
-                 [miraj "1.1.4-SNAPSHOT"]
+                 [miraj.polymer/iron "1.2.3-SNAPSHOT"]
+                 ;; [miraj "1.1.4-SNAPSHOT"]
                  [cheshire "5.5.0"]
                  [compojure "1.4.0"]
                  [ring/ring-core "1.4.0"]
@@ -34,5 +35,5 @@
   :repl-options {:port 4001}
   :plugins [[lein-ring "0.8.13"]
             [lein-cljsbuild "1.1.0"]]
-  :ring {:handler miraj/start :port 8087}
+  :ring {:handler miraj/start :init config/init :port 8087}
   :test-selectors {:polymer :polymer})

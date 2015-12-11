@@ -1,0 +1,47 @@
+repositories {
+      maven { url 'http://clojars.org/repo' }
+}
+
+buildscript {
+    repositories {
+      mavenCentral()
+      jcenter()
+      maven { url 'http://clojars.org/repo' }
+    }
+
+    dependencies {
+        classpath 'com.google.appengine:gradle-appengine-plugin:1.9.28'
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'ear'  // see https://docs.gradle.org/current/userguide/ear_plugin.html
+apply plugin: 'appengine'
+
+dependencies {
+    appengineSdk 'com.google.appengine:appengine-java-sdk:1.9.30'
+    deploy project(path: ':mod-main', configuration: 'archives')
+}
+
+appengine {
+    daemon = false
+    httpAddress = '0.0.0.0'  // to test android
+    httpPort = 8088
+    jvmFlags = [
+        '-Xmx512m',
+//	'-Dcom.google.appengine.devappserver_module.worker-0.1.0.port=8089'
+	]
+    downloadSdk = true
+    appcfg {
+        oauth2 = true
+	noCookies = true  // prevent spurious gae version warning
+    // 	email =
+    // 	password =
+    // 	app {
+    //         id = '0.5'
+    // 	}
+    }
+    logs {
+        outputFile = file('./gae.log')
+    }
+}

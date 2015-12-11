@@ -1,0 +1,71 @@
+repositories {
+      maven { url 'http://clojars.org/repo' }
+}
+
+buildscript {
+    repositories {
+      mavenCentral()
+      jcenter()
+      maven { url 'http://clojars.org/repo' }
+    }
+    dependencies {
+        classpath 'com.google.appengine:gradle-appengine-plugin:1.9.28'
+	classpath 'clojuresque:clojuresque:1.7.0'
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    repositories { mavenCentral() }
+}
+
+apply plugin: 'java'
+apply plugin: 'war'
+apply plugin: 'appengine'
+apply plugin: 'clojure'
+
+sourceCompatibility = rootProject.ext.sourceCompat
+targetCompatibility = rootProject.ext.targetCompat
+
+dependencies {
+    appengineSdk 'com.google.appengine:appengine-java-sdk:1.9.30'
+    compile 'javax.servlet:servlet-api:2.5'
+
+    compile 'org.clojure:clojure:1.7.0'
+    compile 'org.clojure:core.async:0.2.374'
+    compile 'org.clojure:tools.reader:0.8.16'
+    compile 'org.clojure:tools.logging:0.2.3'
+    compile 'ns-tracker:ns-tracker:0.3.0'
+
+    compile 'miraj:miraj:1.1.4-SNAPSHOT'
+    compile 'miraj:data.xml:0.1.0-SNAPSHOT'
+
+    compile 'metosin:compojure-api:0.22.0'
+    compile 'ring:ring-core:1.4.0'
+    compile 'ring:ring-devel:1.4.0'
+    compile 'ring:ring-servlet:1.4.0'
+    compile 'ring:ring-defaults:0.1.5'
+    compile 'fogus:ring-edn:0.2.0'
+
+    compile 'hiccup:hiccup:1.0.5'
+    // compile 'org.mobileink:migae.datastore:0.3.2-SNAPSHOT'
+}
+
+appengine {
+    daemon = false
+    httpAddress = '0.0.0.0'  // for android testing
+    httpPort = 8088
+    // jvmFlags =
+    downloadSdk = true
+    // appcfg {
+    //     oauth2 = true
+    // }
+    // logs {
+    //     outputFile = file('gae.sparky.log')
+    // }
+}
+
+clojure {
+    warnOnReflection = false
+    aotCompile = true
+}

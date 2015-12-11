@@ -1,7 +1,19 @@
 (ns config
-  (:require [hello.world]
-            [miraj :refer [>> >>!]]
-            [miraj.http.response :refer [not-found]]))
+  (:require [miraj :refer [>> >>! start]]
+            [miraj.http.response :refer [not-found]]
+            [ring.util.servlet :as servlet]))
+
+(println "LOADING config")
+
+(defn init []
+  (println "RUNNING config/init"))
+
+(miraj/config :sync)
+
+(println "config DONE, requiring hello.world")
+
+;;(load "/hello/world")
+(require '[hello.world])
 
 ;; (def dispatch-table {:$ 'hello.world/main
 ;;                      :employee 'hello.world/employee
@@ -34,3 +46,6 @@
 ;; ;; << : EXHIBIT THEN OBSERVE
 ;; (<< foo hello.world/or)
 
+(hello.world/dump)
+
+(servlet/defservice start)

@@ -1,0 +1,40 @@
+// task wrapper(type: Wrapper) {
+//     gradleVersion = '2.6'
+// }
+
+buildscript {
+    repositories {
+      jcenter()
+      mavenCentral()
+      maven { url 'http://clojars.org/repo' }
+    }
+    dependencies {
+     classpath 'com.google.appengine:gradle-appengine-plugin:1.9.28'
+     classpath 'clojuresque:clojuresque:1.7.0'
+//         // NOTE: Do not place your application dependencies here; they belong
+//         // in the individual module build.gradle files
+    }
+}
+
+allprojects {
+    version = '0.1.0'  // IMPORTANT! This governs the versioning in ear/build/exploded-app
+
+    repositories {
+	mavenCentral()
+        jcenter()
+	maven { url 'http://clojars.org/repo' }
+	mavenLocal()  //  ~/.m2, libs locally installed by `lein install`
+    }
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << "-Xlint:unchecked" << "-Xlint:deprecation"
+        }
+    }
+}
+
+ext {
+    sourceCompat = JavaVersion.VERSION_1_7
+    targetCompat = JavaVersion.VERSION_1_7
+    gaeGradle = 'com.google.appengine:gradle-appengine-plugin:1.9.28'
+    gaeSdk = 'com.google.appengine:appengine-java-sdk:1.9.30'
+}
