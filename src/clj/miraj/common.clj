@@ -1,5 +1,5 @@
 (ns miraj.common
-  (:require [miraj.data.xml :as xml]
+  (:require [miraj.markup :as xml]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
@@ -42,7 +42,7 @@
 ;;FIXME: implement dispatch-map using protocols/interfaces, e.g. IPersistentMap
 (defn get-dispatch-map
   [method]
-  ;; (log/trace "get-dispatch-map: " method)
+  ;; (println "get-dispatch-map: " method)
   (condp = method
     :get dispatch-map-get
     :head dispatch-map-head
@@ -52,21 +52,21 @@
 
 (defn dump-dispatch-map
   [& method]
-  (log/trace "dump-dispatch-map " method)
+  #_(log/trace "dump-dispatch-map " method)
   (if (empty? method)
     (doseq [method [:get :head :post :put]]
-      (log/trace "dispatch-map " method ": "
+      #_(log/trace "dispatch-map " method ": "
                  (pprint-str (into (sorted-map) (deref (get-dispatch-map method))))))
     (let [dm (get-dispatch-map (first method))]
-      (log/trace "dispatch-map " method ": "
+      #_(log/trace "dispatch-map " method ": "
                  (pprint-str (into (sorted-map) (deref dm)))))))
 
 ;; (defn match-arglist
 
 (defn match-params-to-sig
   [rqst func]
-  (log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
-  (log/trace "base uri: " (:miraj-baseuri rqst))
+  ;; #_(log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
+  ;; #_(log/trace "base uri: " (:miraj-baseuri rqst))
   ;; ring terminology: "params" are incoming, from rqst
   ;; so "args" are formal, defined by the fn signature
   ;; first put all the request params in the ring rqst map
@@ -77,11 +77,11 @@
                         [])
         uri-path-params (vec (filter #(not (empty? %)) (str/split (:uri rqst) #"/")))
         uri-path-params (subvec uri-path-params (count uri-pfx-nodes))
-        log (log/trace "uri-pfx-nodes: " uri-pfx-nodes)
-        log (log/trace "uri-path-params: " uri-path-params)
+        ;; log (log/trace "uri-pfx-nodes: " uri-pfx-nodes)
+        ;; log (log/trace "uri-path-params: " uri-path-params)
 
         uri-params (:params rqst)
-        log (log/trace "uri-params: " uri-params)
+        ;; log (log/trace "uri-params: " uri-params)
 
         ;; now get the arglist from the fn defn
         ;; sig-args (first (:arglists (meta (find-var func))))
@@ -90,13 +90,14 @@
         sig-args (-> func find-var meta :arglists first)
         sig-path-args (filter #(not (or (:? (meta %)) (:?? (meta %)))) sig-args)
         [sig-path-args sig-path-varargs] (split-with #(not= '& %) sig-path-args)
-        log (log/trace "sig-path-args: " sig-path-args)
-        log (log/trace "sig-path-varargs: " sig-path-varargs)
+        ;; log (log/trace "sig-path-args: " sig-path-args)
+        ;; log (log/trace "sig-path-varargs: " sig-path-varargs)
 
         required-params (map #(keyword %) (filter #(:? (meta %)) sig-args))
         optional-params (map #(keyword %) (filter #(:?? (meta %)) sig-args))
-        log (log/trace "required-params: " required-params)
-        log (log/trace "optional-params: " optional-params)]
+        ;; log (log/trace "required-params: " required-params)
+        ;;_log (log/trace "optional-params: " optional-params)
+        ]
 
     (if (empty? sig-path-varargs)
       (if (not= (count uri-path-params) (count sig-path-args))
@@ -107,69 +108,70 @@
           ;;                "following base path " (:miraj-baseuri rqst))
               (bad-request! (str s " URI path should have exactly " (count sig-path-args) " path nodes"
                                  " following base path " (:miraj-baseuri rqst))))
-        (log/trace "match: uri-path-params & sig-path-args"))
+        #_(log/trace "match: uri-path-params & sig-path-args"))
 
       (if (< (- (count uri-path-params) 1) (count sig-path-args))
         (do (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
                          ": " (-> http/bad-request http/status :description))]
-              (log/trace (str s " URI path should have at least " (count sig-path-args) " path nodes."))
+              #_(log/trace (str s " URI path should have at least " (count sig-path-args) " path nodes."))
               (bad-request!
                (str s "  URI path should have at least " (count sig-path-args) " path nodes."))))
-        (log/trace "match: uri-path-params & sig-path-args")))
+        #_(log/trace "match: uri-path-params & sig-path-args")))
 
     (if (not (every? (set (keys uri-params)) required-params))
       (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
                          ": " (-> http/bad-request http/status :description))]
             (bad-request! (str s  "  Missing required body/query param: "
                                (pr-str required-params) " != " (into '() (keys uri-params)))))
-      (log/trace "match: uri-params & required-params"))
+      #_(log/trace "match: uri-params & required-params"))
 
     (let [required-set (set required-params)
           param-arg-keys (keys uri-params)
           optional-param-args (remove #(contains? required-set %) param-arg-keys)
-          log (log/trace "optional-param-args: " optional-param-args)]
+          ;;log (log/trace "optional-param-args: " optional-param-args)
+          ]
     (if (not (every? (set optional-params) optional-param-args))
       (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
                          ": " (-> http/bad-request http/status :description))]
         (bad-request! (str s "  Unknown optional body/query param: "
                          (pr-str optional-params)
                          " != " (pr-str optional-param-args))))
-      (log/trace "match: uri-params & optional-params")))
+      #_(log/trace "match: uri-params & optional-params")))
 
     (let [args (map-indexed
                 (fn [i param]
-                  (do (log/trace "param: " param (if (meta param) (meta param)))
+                  (do #_(log/trace "param: " param (if (meta param) (meta param)))
                      (if (:? (meta param))
                        (do
                            (get uri-params (keyword param)))
                        (if (:?? (meta param))
                          (do
                            (get uri-params (keyword param)))
-                         (do (log/trace "path arg " (get uri-path-params i))
+                         (do #_(log/trace "path arg " (get uri-path-params i))
                              (get uri-path-params i))))))
                 sig-args)]
-      (log/trace "args: " args)
+      #_(log/trace "args: " args)
       args)))
 
 (defn get-dispatch-entry
   [rqst]
-  (log/trace "get-dispatch-entry") ; ": " rqst)
+  #_(log/trace "get-dispatch-entry") ; ": " rqst)
   (let [uri (:uri rqst)
         method (:request-method rqst)
         dispatch-map (get-dispatch-map method)]
     (if-let [dispatch-val (get (deref dispatch-map) uri)]
-      (do (log/trace "exact match: " uri dispatch-val)
+      (do #_(log/trace "exact match: " uri dispatch-val)
           [uri dispatch-val])
       (let [pfx-match? (fn [mapentry]
                          (let [uri-str (str (first mapentry))
                                re (re-pattern (if (= "/" uri-str) "/" (str uri-str ".*")))
                                match (re-matches re uri)]
-                           (if match (do (log/trace "match: " match " against " re)
+                           (if match (do #_(log/trace "match: " match " against " re)
                                          true)
                                          ;; [uri-str mapentry])
                                false)))
             matchings (filter pfx-match? (deref dispatch-map))]
-        (log/trace uri "matchings: " (pr-str matchings))
+        #_(log/trace uri "matchings: " (pr-str matchings))
         ;; each match is a pair [uri chan], so we can find longest matched uri
         (if (empty? matchings)
           nil
@@ -181,11 +183,11 @@
                                               longest
                                               current))
                                           matchings)]
-                (log/trace "longest match: " longest-match)
+                #_(log/trace "longest match: " longest-match)
                 longest-match)
               (first matchings))))))))
 
-
+;;
 ;; some of the cljs stuff is borrowed from
 ;;  http://swannodette.github.io/2014/01/14/clojurescript-analysis--compilation/
 ;;  https://github.com/swannodette/hello-cljsc
@@ -255,13 +257,13 @@
 
   ;; (defmacro handle-params
   ;;   [params]
-  ;;   (log/trace "handle-params: " params)
+  ;;   #_(log/trace "handle-params: " params)
   ;;   (let [parms (vec (flatten (merge []
   ;;                                    (for [param params]
   ;;                                      [param (keyword param)]))))]
-  ;;     (log/trace "new params: " parms)
+  ;;     #_(log/trace "new params: " parms)
   ;;     ;; (let [letparms (list 'let parms)]
-  ;;     ;;   (log/trace "let params: " letparms)
+  ;;     ;;   #_(log/trace "let params: " letparms)
   ;;     parms))
 
 

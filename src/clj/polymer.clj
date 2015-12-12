@@ -1,6 +1,6 @@
 (ns polymer
   (:refer-clojure :exclude [list map meta time])
-  (:require [miraj.data.xml :as xml]
+  (:require [miraj.markup :as xml]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [cheshire.core :as json :refer :all]))
 
@@ -21,7 +21,7 @@
                     (let [first# (first hargs#)
                           attrs# (if (map? first#)
                                    (do ;(log/trace "map? first")
-                                       (if (instance? miraj.data.xml.Element first#)
+                                       (if (instance? miraj.markup.Element first#)
                                          (do ;(log/trace "Element instance")
                                              {})
                                          (do ;(log/trace "NOT Element instance")
@@ -29,7 +29,7 @@
                                    (do ;(log/trace "NOT map? first")
                                        {}))
                           content# (if (map? first#)
-                                     (if (instance? miraj.data.xml.Element first#)
+                                     (if (instance? miraj.markup.Element first#)
                                        hargs#
                                        (rest hargs#))
                                      hargs#)

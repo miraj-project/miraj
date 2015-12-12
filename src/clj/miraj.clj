@@ -1,4 +1,4 @@
-(println "starting load miraj.clj")
+;(println "START load miraj.clj")
 (ns miraj
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
@@ -15,7 +15,7 @@
             ;;FIXME - load async stuff at config time, see below
             ;;[clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
             ;; [miraj.async :as masync]
-            [miraj.data.xml :as xml]
+            [miraj.markup :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]]
             [ring.util.servlet :as servlet])
@@ -42,6 +42,88 @@
   [ns]
   (let [s (str/replace (str ns) #"\.|-|\*" {"." "/" "-" "_" "*" ".*"})]
     (if (= \/ (first s)) s (str "/" s))))
+
+
+;; HTML 5.0 http://www.w3.org/TR/html5/
+;; HTML 5.1 http://www.w3.org/TR/html51/
+
+(def encoding-decl-regex
+  ;; https://encoding.spec.whatwg.org/#names-and-labels
+  [#"(?i)unicode-1-1-utf-8"
+   #"(?i)utf-8"
+   #"(?i)utf8"])
+
+(def html5-meta-attribs
+  {:charset :encoding-decl   ;; :content is implicit as value of map entry
+   ;; standard vals for name attrib
+   :application-name :string
+   :author :string
+   :description :string
+   :generator :string
+   :keywords :tokens
+   ;; extended name attribs https://wiki.whatwg.org/wiki/MetaExtensions
+   :viewport  {:width :pixels
+               :height :pixels
+               :initial-scale :number
+               :minimum-scale :number
+               :maximum-scale :number
+               :user-scalable #{:zoom :fixed}}
+   :apple {:itunes-app :_, :mobile-web-app-capable :_, :mobile-web-app-status-bar-style :_,
+           :touch-fullscreen :_, :mobile-web-app-title :_}
+   ;; dublin core
+   :dc {:created :_, :creator :_} ;; etc.
+   :dc-terms {:created :_, :creator :_} ;; etc.
+   :fragment "!"
+   :geo {:position :geocoord, :country :iso3166-1} ;; etc.
+   :mobile {:agent {:format :_, :url :_}
+            :web-app-capable :yes}
+   :msapplication {
+                   :config :uri
+                   :navbutton-color :color
+                   :notification [:uri]
+                   :square-70x70-logo :uri
+                   :square-150x150-logo :uri
+                   :square-310x310-logo :uri
+                   :starturl :uri
+                   :task {:name :string :action-uri :uri :icon-uri :uri
+                          :window-type #{:tab :self :window}}
+                   :tile-color :color
+                   :tile-image :uri
+                   :tooltip :string
+                   :tap-highlight :no
+                   :wide-310x150-logo :uri
+                   :window {:width :pixels, :height :pixels}}
+   ;; other ms metas https://msdn.microsoft.com/library/dn255024(v=vs.85).aspx
+   :ms-pinned ^:nonstandard {:allow-domain-api-calls :bool
+                             :allow-domain-meta-tags :bool
+                             :badge {:frequency #{30 60 360 720 1440}
+                                     :polling-uri :uri}
+                             :start-url :uri
+                             :task-separator :_}
+   :referrer #{:no-referrer :no-referrer-when-downgrade
+               :origin :origin-when-cross-origin
+               :unsafe-url}
+   :revision :_
+   :twitter {:card :_
+             :domain :_
+             :url :_
+             :title :_
+             :description :_
+             ;; etc.
+             }})
+
+(def html5-pragma-directives
+  "meta http-equiv pragma directives
+  http://www.w3.org/html/wg/drafts/html/master/semantics.html#pragma-directives"
+  [:content-language {:non-conforming "use 'lang' attrib instead"}
+   :content-type :encoding-decl
+   :default-style :string
+   :refresh :refresh-syntax
+   :set-cookie {:non-conforming "Real HTTP headers should be used instead"}
+   ;; HTML 5.1
+   :content-security-policy
+   ;; :x-ua-compatible
+   ])
 
 (defn android-header
   [docstr]
@@ -149,9 +231,6 @@
         options (apply hash-map (nnext comp))
         as-opt (:as options)
         refer-opts (:refer options)]
-    ;; (log/trace "component ns: " ns " :refer " refer-opts)
-    ;; (log/trace "component opts: " options)
-    ;; (log/trace "component as: " as-opt)
     (if (nil? refer-opts)
       (h/script {:type "text/javascript" :src (get-href ns nil)})
       (for [refer refer-opts]
@@ -165,9 +244,19 @@
         options (apply hash-map (nnext comp))
         as-opt (:as options)
         refer-opts (:refer options)]
-    ;; (log/trace "component ns: " ns " :refer " refer-opts)
-    ;; (log/trace "component opts: " options)
-    ;; (log/trace "component as: " as-opt)
+    (if (nil? refer-opts)
+      (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns nil)})
+      (for [refer refer-opts]
+        (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
+
+(defn get-meta
+  [comp]
+  (log/trace "get-meta " comp)
+  (if (not= :css (nth comp 1)) (throw (Exception. ":css key must be second item in vector: " comp)))
+  (let [ns (first comp)
+        options (apply hash-map (nnext comp))
+        as-opt (:as options)
+        refer-opts (:refer options)]
     (if (nil? refer-opts)
       (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns nil)})
       (for [refer refer-opts]
@@ -179,69 +268,73 @@
   ;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
   (log/trace "set-html-head! co-ns: " nm)
-  (log/trace "set-html-head! this ns: " *ns*)
-  (log/trace "set-html-head! args: " (first args))
+  ;; (log/trace "set-html-head! this ns: " *ns*)
+  ;; (log/trace "set-html-head! args: " (first args))
   (let [ns (create-ns nm)
         ns-path (path-from-ns ns)
-        refmap (into {} (map #(identity [(first %) (rest %)]) (rest (first args))))
-        ;; log (log/trace "refmap: " refmap)
-        title (first (:title refmap))
 
-        polymer-reqs (:polymer refmap)
-        log (log/trace "polymer-reqs: " polymer-reqs)
+        ;;FIXME deal with docstring, metadata
+        ;;FIXME this code won't work with e.g. multiple :meta opts
+        ;; use reduce to create a multimap
+        opts-map (into {} (map #(identity [(first %) (rest %)]) (rest (first args))))
+        ;; log (log/trace "opts-map: " opts-map)
+        title (first (:title opts-map))
 
-        html-reqs (:html refmap)
-        log (log/trace "html-reqs: " html-reqs)
+        polymer-reqs (:polymer opts-map)
+        ;; log (log/trace "polymer-reqs: " polymer-reqs)
 
-        clj-reqs (:require refmap)
-        log (log/trace "clj-reqs: " clj-reqs)
+        clj-reqs (:require opts-map)
+        ;; log (log/trace "clj-reqs: " clj-reqs)
 
         all-reqs (concat clj-reqs polymer-reqs)
-        log (log/trace "ALL REQS: " all-reqs)
+        ;; log (log/trace "ALL REQS: " all-reqs)
 
         ;; pick out the :requires for co-namespaces create the namespaces
-        components (let [comps (filter #(not (some #{:js :css} %)) all-reqs)
+        namespaces (let [comps (filter #(not (some #{:js :css} %)) all-reqs)
                          _ (doseq [c comps]
-                             (do (println "CREATE-NS: " (first c))
+                             (do ;(println "CREATE-NS: " (first c))
                                  (create-ns (first c))))]
-                     (filter #(do (println "comp: " % " " (find-ns (first %)))
+                     (filter #(do ;(println "comp: " % " " (find-ns (first %)))
                                   (:co-ns (meta (find-ns (first %)))))
                              comps))
-        log (log/trace "components: " components)
+        ;; log (log/trace "namespaces: " namespaces)
 
-        scripts (for [script (filter #(some #{:js} %) html-reqs)] (get-js script))
-        log (log/trace "SCRIPTS: " scripts)
+        ;; html-reqs (:html opts-map)
+        ;; log (log/trace "html-reqs: " html-reqs)
 
-        styles  (for [script (filter #(some #{:css} %) html-reqs)] (get-css script))
-        log (log/trace "STYLES: " styles)
+        metas (:meta opts-map)
+        viewports (:viewport opts-map)
+        scripts (:scripts opts-map) ;;(for [script (filter #(some #{:js} %) html-reqs)] (get-js script))
+        styles (:styles opts-map)
+        pragmas (:pragma opts-map)
 
-        links (flatten (for [comp components] (do #_(log/trace "link? " comp) (get-link comp))))
-        log (log/trace "LINKS: " links)
+        links (flatten (for [comp namespaces] (do #_(log/trace "link? " comp) (get-link comp))))
+        ;; log (log/trace "LINKS: " links)
 
         polymer (concat scripts styles links)
-        log (log/trace "POLYMER: " polymer)
+        ;; log (log/trace "POLYMER: " polymer)
 
         preamble (miraj-header title ns-path polymer)
         ;; log (log/trace "PREAMBLE: " preamble)
         ]
-    (log/trace (str "*ns*: " ns " " (type ns)))
-    (let [_ (println "altering meta on ns: " ns (type ns) (meta ns))
+    ;; (println "PREAMBLE: " preamble)
+    ;; (println (str "*ns*: " ns " " (type ns)))
+    (let [;; _ (println "altering meta on ns: " ns (type ns) (meta ns))
           ;; (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
           newvar (alter-meta! ns
-                              (fn [old new] ;;(merge old
-                                {:co-ns true :co-fn new})
+                              (fn [old new]
+                                (merge old
+                                       {:co-ns true :co-fn new}))
                               preamble)
           ]
-      (log/trace "ns meta: " (meta ns))
+      ;; (println "ns meta: " (meta ns))
       newvar)))
 
-(declare configure-namespace)
-
 (defn get-ns-opts
-  [nm refs]
+  [nm opts]
   (log/trace "get-ns-opts " nm)
   (let [ref-map (into {} (clojure.core/map
-                          #(identity [(first %) (rest %)]) refs))
+                          #(identity [(first %) (rest %)]) opts))
         clj-reqs (:require ref-map)
         html-reqs (:html ref-map)
         js-reqs (filter #(some #{:js} %) html-reqs)
@@ -251,44 +344,38 @@
         polymer-reqs (:polymer ref-map)
         ;; pm-reqs (filter #(.startsWith (str (first %)) "polymer.") polymer-reqs)
 
-        required (list (apply list ':require (concat libs polymer-reqs)))]
-    ;; (println "REFS: " refs)
-    (println "REQUIRED: " required)
-    ;; (if (not (nil? polymer-reqs))
-    ;;   (do (log/trace "POLYMER reqs: " polymer-reqs)
-    ;;       (config-polymer-reqs polymer-reqs)))
+        options (concat libs polymer-reqs)]
 
-    ;; (if (not (nil? js-reqs))
-    ;;   (do (log/trace "JS reqs: " js-reqs)
-    ;;       (config-js-reqs js-reqs)))
+    (log/trace "GET-NS-OPTS: " options)
+    (if (seq options)
+      (list (apply list ':require options))
+      nil)))
 
-    ;; (if (not (nil? css-reqs))
-    ;;   (do (log/trace "CSS reqs: " css-reqs)
-    ;;       (config-css-reqs css-reqs)))
-
-    ;; (log/trace "FOO A")
-
-    ;; (config-polymer-defaults)
-    ;; (log/trace "FOO B")
-    ;; (mcomm/dump-dispatch-map)
-    required))
+(defn config-co-ns [nm refs]
+  (log/warn "Using default implementation: miraj.sync")
+  (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns)))
+  ;; (throw (Exception. "calling dummy config-co-ns")))
 
 (defmacro co-ns
-  [nm & refs]
-  (println "expanding co-ns: " nm " " refs)
-  (println "FOO C " *ns*)
-  (let [opts (get-ns-opts nm refs)]
-    (println "FOO D " opts)
-    (eval (macroexpand `(ns ~nm ~@opts)))
-    (configure-namespace nm refs)
-    (println "FOO E " *ns*)
-    `(do (println "invoking co-ns: " '~nm)
-       (ns ~nm ~@opts))))
+  [nm & opts]
+  (log/trace "expanding co-ns: " nm " " (pprint-str opts))
+  (let [options (get-ns-opts nm opts)
+        _  (str "OPTIONS: " (pprint-str options))
+        newns (eval (macroexpand `(ns ~nm ~@options)))]
+    (log/trace "ns: " *ns*)
+    (set-html-head! nm opts)
+    (config-co-ns nm opts)
+    ;; `(do (log/trace "invoking co-ns: " '~nm)
+    ;;      (let [newns# (ns ~nm ~@options)]
+    ;;        (set-html-head! '~nm '~opts)
+    ;;        (config-co-ns '~nm '~opts)
+    ;;        newns#))
+    newns))
 
   ;; ;; (eval (apply set-html-head! nm refs))
   ;; `(do (println "invoking co-ns")
-  ;;      (let [;;required# (configure-namespace '~nm '~refs)
-  ;;            required# (get-ns-args '~nm '~refs)
+  ;;      (let [;;required# (config-co-ns '~nm '~refs)
+  ;;            required# (get-ns-opts '~nm '~refs)
   ;;            _# (println "FOO C " required#)
   ;;            args# ['~nm required#]
   ;;            _# (println "FOO CC " args#)
@@ -296,7 +383,7 @@
   ;;        (println "FOO D " *ns*)
   ;;        ;; (println "nm: " '~nm (type '~nm))
   ;;        ;; (println "reqs: " '~@required)
-  ;;        ;;(configure-namespace '~nm '~refs)
+  ;;        ;;(config-co-ns '~nm '~refs)
   ;;        `(ns ~'~nm '~required#)
   ;;        (println "FOO E " *ns*)
   ;;        `(ns ~'~nm)
@@ -357,89 +444,89 @@
     ;; (print "RESULT: " ctor)
     `(list ~@ctor)))
 
-  ;; FIXME:  intern as a func in co-ns
-  ;; `(let [n# (defn ~nm ~args ~@body)]
-  ;;    (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
+;; FIXME:  intern as a func in co-ns
+;; `(let [n# (defn ~nm ~args ~@body)]
+;;    (alter-meta! n# (fn [m#] (assoc m# :miraj :co-type)))
 
-  ;; (let [ctor (nth args 2)
-  ;;       ;;result (eval `(handle-ctor ~ctor))]
-  ;;       parms (nth ctor 1)
-  ;;       params (vec (flatten (merge [] ;; must be an easier way
-  ;;                                   (for [param parms]
-  ;;                                     [param (keyword param)]))))
-  ;;       id (str name)
-  ;;       body1 (list 'h/dom-module {:id id}
-  ;;                   (list 'h/template
-  ;;                         (first (nnext ctor))))
-  ;;       body    (list 'let params body1)
-  ;;       ]
-  ;;   (log/trace "params: " params)
-  ;;   (log/trace "body1: " body1)
-  ;;   (log/trace "body: " body)
-  ;;   `(let [body# ~body]
-  ;;      (log/trace "new body: " body#)
-  ;;     body#)))
+;; (let [ctor (nth args 2)
+;;       ;;result (eval `(handle-ctor ~ctor))]
+;;       parms (nth ctor 1)
+;;       params (vec (flatten (merge [] ;; must be an easier way
+;;                                   (for [param parms]
+;;                                     [param (keyword param)]))))
+;;       id (str name)
+;;       body1 (list 'h/dom-module {:id id}
+;;                   (list 'h/template
+;;                         (first (nnext ctor))))
+;;       body    (list 'let params body1)
+;;       ]
+;;   (log/trace "params: " params)
+;;   (log/trace "body1: " body1)
+;;   (log/trace "body: " body)
+;;   `(let [body# ~body]
+;;      (log/trace "new body: " body#)
+;;     body#)))
 
-  ;; (log/trace "result: " result)
-  ;; result))
+;; (log/trace "result: " result)
+;; result))
 
-  (defmacro ctor->dom-module
-    [ctor]
-    ;; eval body to get html string, then emit dom-module
-    ;; (log/trace "ctor->template args: " ctor (count ctor))
-    (let [nm (first ctor)
-          args (second ctor)
-          body (nthrest ctor 2)]
-      (let [binders (vec
-                     (flatten
-                      (merge (for [arg args]
-                               [(symbol arg)
-                                (if (= '% (:tag (meta arg)))
-                                  (str "{{" arg "}}")
-                                  (str "[[" arg "]]"))]))))]
-        ;; (str "{{" arg "}}")]))))]
-        (log/trace "ctor->template args: " args)
-        (log/trace "ctor->template binders: " binders)
-        ;; (log/trace "ctor->template nm: " 'nm)
-        (log/trace "ctor->template body: " body (type body) (count body))
-        `(let [~@binders]
-           (let [;; bod# ~@body
-                 mkup# (str "<dom-module id=\""
-                            '~nm "\">" \newline
-                            "<template>"
-                            (apply str ~@body)
-                            \newline "</template>"
-                            \newline "</dom-module>")]
-             ;;         (log/trace "BODY: " bod#)
-             mkup#)))))
+(defmacro ctor->dom-module
+  [ctor]
+  ;; eval body to get html string, then emit dom-module
+  ;; (log/trace "ctor->template args: " ctor (count ctor))
+  (let [nm (first ctor)
+        args (second ctor)
+        body (nthrest ctor 2)]
+    (let [binders (vec
+                   (flatten
+                    (merge (for [arg args]
+                             [(symbol arg)
+                              (if (= '% (:tag (meta arg)))
+                                (str "{{" arg "}}")
+                                (str "[[" arg "]]"))]))))]
+      ;; (str "{{" arg "}}")]))))]
+      (log/trace "ctor->template args: " args)
+      (log/trace "ctor->template binders: " binders)
+      ;; (log/trace "ctor->template nm: " 'nm)
+      (log/trace "ctor->template body: " body (type body) (count body))
+      `(let [~@binders]
+         (let [;; bod# ~@body
+               mkup# (str "<dom-module id=\""
+                          '~nm "\">" \newline
+                          "<template>"
+                          (apply str ~@body)
+                          \newline "</template>"
+                          \newline "</dom-module>")]
+           ;;         (log/trace "BODY: " bod#)
+           mkup#)))))
 
-  (defmacro for-dom
-    [binding & body]
-    (log/trace "for-dom " binding body)
+(defmacro for-dom
+  [binding & body]
+  (log/trace "for-dom " binding body)
                                         ;  (log/trace "TOP BINDERS (AUTHOR): " author)
-    (let [fst (first binding)]
-      (let [[index item] (if (and (vector? fst) (= (first fst) 'index) (= (second fst) 'item))
-                           fst
-                           [])
-            item (if index item fst)
-            for-items (second binding)]
-        (if (not (= item 'item))
-          (throw (RuntimeException. (str "binding form must be 'item' or '[index item]'")))
-          (let [binders ['item (if (= '% (:tag (meta item))) "{{item}}" "[[item]]")
-                         (symbol for-items) (if (= '% (:tag (meta for-items)))
-                                              (str "{{" for-items "}}")
-                                              (str "[[" for-items "]]"))]
-                binders (if (nil? index) binders
-                            (into binders
-                                  ['index (if (= '% (:tag (meta index))) "{{index}}" "[[index]]")]))]
-            `(let [~@binders]
-               (str \newline
-                    "<template is=\"dom-repeat\" items=\""
-                    ~for-items "\">"
-                    ;; {{" '~for-items "}}\">"
-                    ~@body
-                    \newline
-                    "</template>")))))))
+  (let [fst (first binding)]
+    (let [[index item] (if (and (vector? fst) (= (first fst) 'index) (= (second fst) 'item))
+                         fst
+                         [])
+          item (if index item fst)
+          for-items (second binding)]
+      (if (not (= item 'item))
+        (throw (RuntimeException. (str "binding form must be 'item' or '[index item]'")))
+        (let [binders ['item (if (= '% (:tag (meta item))) "{{item}}" "[[item]]")
+                       (symbol for-items) (if (= '% (:tag (meta for-items)))
+                                            (str "{{" for-items "}}")
+                                            (str "[[" for-items "]]"))]
+              binders (if (nil? index) binders
+                          (into binders
+                                ['index (if (= '% (:tag (meta index))) "{{index}}" "[[index]]")]))]
+          `(let [~@binders]
+             (str \newline
+                  "<template is=\"dom-repeat\" items=\""
+                  ~for-items "\">"
+                  ;; {{" '~for-items "}}\">"
+                  ~@body
+                  \newline
+                  "</template>")))))))
 
   ;; (defmacro dom-repeat
   ;;   [bindings & body]
@@ -534,8 +621,8 @@
         (handler request)))
     ))
 
-(defn configure-netspace [method netspace-sym co-fn]
-  (throw (Exception. "calling dummy configure-netspace")))
+(defn config-netspace [method netspace-sym co-fn]
+  (throw (Exception. "calling dummy config-netspace")))
 
 ;; (defn config-polymer-defaults []
 ;;   (throw (Exception. "calling dummy config-polymer-defaults")))
@@ -544,13 +631,13 @@
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " '~netspace '~behavior)
-  `(configure-netspace :get '~netspace '~behavior))
+  `(config-netspace :get '~netspace '~behavior))
 
 (defmacro >>!
   [netspace behavior]
   (log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " netspace behavior)
   `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
-  `(configure-netspace :post '~netspace '~behavior))
+  `(config-netspace :post '~netspace '~behavior))
 
 (defn start [rqst])
 
@@ -566,13 +653,10 @@
        (log/trace "SYNC dispatching http rqst: " (:uri rqst))
        ))))
 
-(defn configure-namespace [nm refs]
-  (throw (Exception. "calling dummy configure-namespace")))
-
 (defn config-sync []
   (println "config-sync")
-  (alter-var-root (var configure-namespace) (fn [f] msync/configure-namespace))
-  (alter-var-root (var configure-netspace) (fn [f] msync/configure-netspace!))
+  (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns))
+  (alter-var-root (var config-netspace) (fn [f] msync/config-netspace!))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
   (alter-var-root (var start) (fn [f] msync/start)))
 ;  (intern 'config '-service (servlet/make-service-method msync/start))
@@ -582,8 +666,8 @@
 (defn config-async []
   (log/trace "config-async")
   ;;FIXME: load core.async
-  ;; (alter-var-root (var configure-namespace) (fn [f] masync/configure-namespace))
-  ;; (alter-var-root (var configure-netspace) (fn [f] masync/start-netspace-observer))
+  ;; (alter-var-root (var config-co-ns) (fn [f] masync/config-co-ns))
+  ;; (alter-var-root (var config-netspace) (fn [f] masync/start-netspace-observer))
   ;; (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
   ;; (alter-var-root (var start) (fn [f] masync/start))
   #_(masync/start-http-observer))

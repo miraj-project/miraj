@@ -14,7 +14,7 @@
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
             [miraj.common :as mcomm]
-            [miraj.data.xml :as xml]
+            [miraj.markup :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]]
             [miraj.http.status :as http])
