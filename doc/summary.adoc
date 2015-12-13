@@ -1,0 +1,16 @@
+summary
+-------
+
+= markup
+
+* boolean attributes:  :foo _
+
+* boolean-valued attributes:  :foo true or :foo false
+
+* polymer annotations:
+
+** one-way:  'foo => [[foo]]
+
+** two-way:  :foo =>  {{foo}}
+
+* void elements:  hardcoded (link, meta, input, etc.)

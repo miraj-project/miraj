@@ -1,0 +1,97 @@
+
+A co-function is a routine whose input is externally observed behavior
+and whose output is externally observable behavior.
+
+Making a clean distinction between state and behavior means we can use
+functions to implement co-functions.  It's all a matter of perspective.
+
+For example, to handle a GET request, a web server uses a co-routine.
+The incoming request is client behavior observed by the server, and
+the outgoing response is server behavior observable by the client.
+The incoming request arrives from outside; before the server can route
+it to a handler function, it must observe it.  Having done so, it
+analyzes it and routes it to a handler.  The handler, too, must
+observe this input before it can compute; in most cases "routing the
+request to a handler" means making an internal function call, but it
+could mean sending the request to another server.  In any case, once
+the handler is finished it produces a response that is sent to the
+client - exhibited as server behavior for client observation.  Again,
+the normal case is that the handler returns its response to the
+webserver, whose job it is to send it to the client.
+
+= function, algorithm, program
+
+* mathematical function: well-known
+
+* algorithm: adds logic to mathematics; computational representation
+  of a mathematical function.
+
+* program: a text in a programming language designed to be executed by
+  a machine.  Algorithms are abstract; programs are concrete.
+
+So-called functions in programming languages are not really functions;
+rather, they are computational (algorithmic) approximations of
+mathematical functions.
+
+So we say e.g. a function is a program (routine) that ...
+
+= devices, states, side-effects, etc.
+
+A device is a combination of a program text and a (physical) machine.
+
+At one extreme: a micro-controller with no operating system, flashed
+with one program.  At the other extreme: a cluster of multi-core
+computers running a virtualization service hosting multiple operating
+systems.  In the middle: a machine running a multi-tasking operating
+system that runs multiple programs.
+
+We say that physical machines host devices, and devices host programs.
+But the device is the combination of machine and program.
+
+A device may host other devices; for example, we can think of the OS
+as a device that hosts application devices.
+
+Devices have three kinds of state: machine state, computation state,
+and information state. Machine state refers to the hardware;
+information state refers to the program's data; computation state
+refers to the information state of the device hosting the application
+device.  For example, OS control blocks, device nodes in the kernel,
+and so forth are part of the computation state.  The hosting device
+for an application device may be an OS or a language runtime;
+computation state will normally be split between OS (kernelspace) and
+runtime (control structures managed by the runtime in userspace).
+
+In other words, we're replacing "program" with the more general notion
+of "device".  This gives us a single uniform idiom for discussing both
+traditional (Turing machine, lambda calculus) models of computation
+and the newer notion of interactionist computation.  The concept of a
+device is intended to accomodate the conceptual changes required in
+moving to an interactionist perspective.
+
+Program execution always results in change of machine state; at the
+very least, running code consumes energy.  Strictly speaking, there
+are no pure functions, since all functions have the side effect of
+consuming energy.
+
+
+* function: makes no alteration in the information state or
+  computation state of the device.
+
+* quasi-function: alters computation state but not information state.
+  For example, operations that spawn threads or processes are
+  quasi-functions; they alter computation state by creating control
+  blocks in either kernel space or user space or both.  But they do
+  not alter information state.  Clojure's core.async/go, for example.
+
+* operation: a routine whose execution _may_ result in alteration of
+  information state.  For example, assignment in languages like C or
+  Java is an operation.
+
+* hygienic operation: an operation whose changes are localized or
+  limited.  For example, Clojure's swap!, reset!, core.async/>!,
+  etc. are hygienic operations; they only affect their arguments.
+
+* unhygienic operation: an operation whose changes are unbounded; for
+  example, assignment.  Clojure has no unhygienic operations (that I
+  know of).
+

@@ -1,0 +1,107 @@
+meta elements
+-------------
+
+link:http://www.w3.org/html/wg/drafts/html/master/semantics.html#the-meta-element[HTML 5.1 meta element]
+
+= miraj implementation
+
+The `co-ns` function supports a `:meta` option that takes a list of
+keyword-value pairs.  Attrib values become keyword keys, content
+values become vals; for example, `<meta http-equiv="refresh"
+content="2">` becomes `(:meta :refresh 2)`.
+
+Example:
+
+[source,clojure]
+----
+(co-ns foo
+  (:meta :title "Hello World!"
+  	 :description "demo Hellow World web app"
+	 :application-name "hello-world"
+	 :apple {:mobile-capable :true
+	 	 :status-bar-style "black"
+		 :title "Hello"
+		 :touch-icon "images/touch/apple-touch-icon.png"}))
+----
+
+The `http-equiv` attrib is implemented as the `:pragma` option, e.g.
+
+[source,clojure]
+----
+(co-ns foo
+  (:pragma :content-type "text/html; charset=utf-8"))
+  ;; => <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+----
+
+See `miraj/html5-meta-attribs`, `miraj/html5-pragma-directives
+
+= standards
+
+Attribs:
+
+* link:http://www.w3.org/html/wg/drafts/html/master/dom.html#global-attributes[global attribs]
+* http-equiv
+* charset
+* content
+
+== global attribs
+
+link:http://www.w3.org/html/wg/drafts/html/master/dom.html#global-attributes[HTML 5.1 Global Attributes]
+
+accesskey
+class
+contenteditable
+contextmenu
+dir
+draggable
+dropzone
+hidden
+id
+itemid
+itemprop
+itemref
+itemscope
+itemtype
+lang
+spellcheck
+style
+tabindex
+title
+translate
+
+== aria
+
+link:https://w3c.github.io/aria/aria/aria.html[ARIA spec]
+
+link:http://www.w3.org/html/wg/drafts/html/master/infrastructure.html#attr-aria-role[ARIA role attribs]
+
+== name attrib
+
+link:http://www.w3.org/html/wg/drafts/html/master/semantics.html#standard-metadata-names[Standard metadata names]:
+
+* :application-name
+* :author
+* :description
+* :generator
+* :keywords
+
+link:https://wiki.whatwg.org/wiki/MetaExtensions[MetaExtensions]
+
+;; global attrs: http://www.w3.org/html/wg/drafts/html/master/dom.html#global-attributes
+              ;; :charset;  :itemprop?
+              ;; extensions: https://wiki.whatwg.org/wiki/MetaExtensions
+              ;; see https://gist.github.com/kevinSuttle/1997924
+              ;; :viewport gets special treatment
+              ;; e.g.  :dc {:created ".." :creator "foo" ...}
+
+== pragma directives
+
+link:http://www.w3.org/html/wg/drafts/html/master/semantics.html#pragma-directives[Pragma directives]
+
+* content-language
+* content-type
+* default-style
+* refresh
+* set-cookie
+* x-ua-compatible
+* Content-Security-Policy
