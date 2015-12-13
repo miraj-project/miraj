@@ -50,6 +50,29 @@ correctly; for example, using hiccup:
     [:script {:src "polymer/webcomponentsjs/webcomponents-lite.js"}]
 ----
 
+= Webservers
+
+== HTTP
+
+* link:http://java-source.net/open-source/web-servers[Open Source Web Servers in Java] - nice list
+
+* link:http://www.eclipse.org/jetty/[Jetty]
+
+* link:http://webbitserver.org/[Webbit]
+
+* link:http://pygmy-httpd.sourceforge.net/[pygmy]
+
+* link:http://simpleweb.sourceforge.net/index.php[Simple]
+
+* link:https://github.com/tinspin/rupy[rupy]
+
+* link:http://winstone.sourceforge.net/[winstone]
+
+== Serlvet
+
+Jetty, Simple, Tomcat, Winstone
+
+
 ## License
 
 The Polymer code in the jar:
