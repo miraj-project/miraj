@@ -10,6 +10,15 @@
 
 (miraj/config :sync)
 
+(defn -init
+  ([this]
+  (println "Servlet Init A called"))
+  ([this sc]
+   (.initParent this sc)
+   (println "Servlet Init B called")))
+
+(servlet/defservice miraj.sync/start)
+
 (println "config DONE, requiring hello.world")
 
 ;;(load "/hello/world")

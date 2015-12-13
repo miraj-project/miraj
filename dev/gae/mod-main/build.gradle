@@ -35,9 +35,15 @@ dependencies {
     compile 'org.clojure:core.async:0.2.374'
     compile 'org.clojure:tools.reader:0.8.16'
     compile 'org.clojure:tools.logging:0.2.3'
+    compile 'org.slf4j:slf4j-log4j12:1.7.1'
+    compile 'log4j:log4j:1.2.17'
     compile 'ns-tracker:ns-tracker:0.3.0'
 
     compile 'miraj:miraj:1.1.4-SNAPSHOT'
+    compile 'polymer:iron:1.2.3-SNAPSHOT'
+    compile 'polymer:neon:1.2.3-SNAPSHOT'
+    compile 'polymer:paper:1.2.3-SNAPSHOT'
+    compile 'polymer:support:1.2.3-SNAPSHOT'
     compile 'miraj:data.xml:0.1.0-SNAPSHOT'
 
     compile 'metosin:compojure-api:0.22.0'
@@ -67,5 +73,5 @@ appengine {
 
 clojure {
     warnOnReflection = false
-    aotCompile = true
+    aotCompile = false
 }
