@@ -20,7 +20,7 @@
             [miraj.http.status :as http])
   (:import [java.io StringReader StringWriter]))
 
-(log/trace "loading")
+;;(log/trace "loading")
 
 ;; dispatch-map takes URIs to input channels
 ;; (defonce dispatch-map-get (atom {}))

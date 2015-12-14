@@ -580,17 +580,17 @@
 (defn dump-dispatch-map [& method]
   (throw (Exception. "calling dummy dump-dispatch-map")))
 
-(defn config-sync []
-  (log/trace "config-sync")
-  (alter-var-root
-   (var start)                     ; var to alter
-   (fn [f]                       ; fn to apply to the var's value
-     (fn [rqst]
-       (log/trace "SYNC dispatching http rqst: " (:uri rqst))
-       ))))
+;; (defn config-sync []
+;;   ;; (log/trace "config-sync")
+;;   (alter-var-root
+;;    (var start)                     ; var to alter
+;;    (fn [f]                       ; fn to apply to the var's value
+;;      (fn [rqst]
+;;        #_(log/trace "SYNC dispatching http rqst: " (:uri rqst))
+;;        ))))
 
 (defn config-sync []
-  (println "config-sync")
+  ;; (println "config-sync")
   (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns))
   (alter-var-root (var config-netspace) (fn [f] msync/config-netspace!))
   (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
