@@ -27,12 +27,10 @@
 
 ;;  (:require [clojure.pprint :as pp]))
 
-(log/trace "loading")
+;; (log/trace "loading")
 
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
-
-(def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
 
 (defn path-to-ns
   [ns]
@@ -82,7 +80,7 @@
    ;; :href "styles/panels-theme.html"}) ;; {{project}}.css
    (h/link {:rel "import" :href "styles/shared/style_modules.html"})
    (h/style {:is "custom-style" :include "shared-styles"})
-   (h/script {:src "polymer/webcomponentsjs/webcomponents-lite.js"})])
+   (h/script {:src "scripts/webcomponentsjs/webcomponents-lite.js"})])
 
 (defn meta-header
   [docstr]
@@ -111,9 +109,11 @@
   [ns]
   (str/replace (str ns) #"\.|-" {"." "/" "-" "_"}))
 
+(def polymer-nss #{"iron" "paper" "google" "gold" "neon" "platinum" "font" "molecules"})
+
 (defn get-href
   [pfx only]
-  ;; (log/trace "get-href: " pfx " - " only)
+  ;; (log/trace "get-href: " pfx " - " only (type only))
   (let [pfx (str/split (str pfx) #"\.")
         hd (first pfx)]
     ;; (log/trace "get-href pxf: " pfx)
@@ -124,6 +124,10 @@
           (throw (RuntimeException. (str "unsupported namespace: " pns " | " pfx " | " polymer-nss))))
         (if only
           (cond
+            (and (= pns "paper") (= only 'textarea))
+            (do ;;(log/trace "TEXTAREA!!!!!!!!!!!!!!!!")
+                (str "polymer/paper-input/paper-textarea.html"))
+
             (= pns "font") (str hd "/" pns "-" only "/" only ".html")
             :else (str hd "/" pns "-" only "/" pns "-" only ".html"))
           (str hd "/" pns "-elements.html")))
@@ -136,14 +140,16 @@
  (let [ns (first comp)
        options (apply hash-map (rest comp))
        as-opt (:as options)
-       only-opts (:only options)]
+       refer-opts (:refer options)
+       only-opts (:only options)
    ;; (log/trace "component ns: " ns " :only " only-opts)
    ;; (log/trace "component opts: " options)
    ;; (log/trace "component as: " as-opt)
-   (if (nil? only-opts)
-     (h/link {:rel "import" :href (get-href ns nil)})
-     (for [only only-opts]
-       (h/link {:rel "import" :href (get-href ns only)})))))
+       link (if (nil? only-opts)
+              (h/link {:rel "import" :href (get-href ns nil)})
+              (for [only only-opts]
+                (h/link {:rel "import" :href (get-href ns only)})))]
+   link))
 
 (defn get-js
   [comp]
@@ -189,7 +195,7 @@
   ;; [docstr reqs & body]
   ;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
-  (log/trace "set-html-head! co-ns: " nm)
+  ;; (log/trace "set-html-head! co-ns: " nm)
   ;; (log/trace "set-html-head! this ns: " *ns*)
   ;; (log/trace "set-html-head! args: " (first args))
   (let [ns (create-ns nm)
@@ -203,7 +209,7 @@
         title (first (:title opts-map))
 
         polymer-reqs (:polymer opts-map)
-        ;; log (log/trace "polymer-reqs: " polymer-reqs)
+        ;; log (println "POLYMER-REQS: " polymer-reqs)
 
         clj-reqs (:require opts-map)
         ;; log (log/trace "clj-reqs: " clj-reqs)
@@ -230,11 +236,11 @@
         scripts (for [script  (:scripts opts-map)]
                   ;; (filter #(some #{:js} %) html-reqs)]
                   (get-js script))
-        _ (log/trace "SCRIPTS: " scripts)
+        ;; _ (log/trace "SCRIPTS: " scripts)
 
         styles (for [style (:styles opts-map)]
                  (get-css style))
-        _ (log/trace "STYLES: " styles)
+        ;; _ (log/trace "STYLES: " styles)
 
         pragmas (:pragma opts-map)
 
@@ -262,7 +268,7 @@
 
 (defn get-ns-opts
   [nm opts]
-  (log/trace "get-ns-opts " nm)
+  ;; (log/trace "get-ns-opts " nm)
   (let [ref-map (into {} (clojure.core/map
                           #(identity [(first %) (rest %)]) opts))
         clj-reqs (:require ref-map)
@@ -276,7 +282,7 @@
 
         options (concat libs polymer-reqs)]
 
-    (log/trace "GET-NS-OPTS: " options)
+    ;; (log/trace "GET-NS-OPTS: " options)
     (if (seq options)
       (list (apply list ':require options))
       nil)))
@@ -288,11 +294,11 @@
 
 (defmacro co-ns
   [nm & opts]
-  (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
+  ;; (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
   (let [options (get-ns-opts nm opts)
         ;; _  (str "OPTIONS: " (pprint-str options))
         newns (eval (macroexpand `(ns ~nm ~@options)))]
-    (log/trace "ns: " *ns*)
+    ;; (log/trace "ns: " *ns*)
     (set-html-head! nm opts)
     (config-co-ns nm opts)
     ;; `(do (log/trace "invoking co-ns: " '~nm)
@@ -493,7 +499,7 @@
   "define a co-function. i.e. a web component. co-functions can be
   defined in any namespace, but used in co-routines."
   [nm args & body]
-  (log/trace (str "def co-fn: " (ns-name *ns*) "/" nm))
+  ;; (log/trace (str "def co-fn: " (ns-name *ns*) "/" nm))
   `(let [n# (defn ~nm ~args ~@body)]
      ;; (println "COFUNC altering meta for " n# " meta: " (meta n#))
      (alter-meta! n# (fn [m#] (assoc m# :co-fn true)))
@@ -559,14 +565,14 @@
 
 (defmacro >>
   [netspace behavior]
-  (log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " netspace behavior)
-  `(log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " '~netspace '~behavior)
+  ;; (log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " netspace behavior)
+  ;; `(log/trace "EXHIBIT-FOR-OBSERVATION, IMMUTABLE: " '~netspace '~behavior)
   `(config-netspace :get '~netspace '~behavior))
 
 (defmacro >>!
   [netspace behavior]
-  (log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " netspace behavior)
-  `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
+  ;; (log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " netspace behavior)
+  ;; `(log/trace "EXHIBIT-FOR-OBSERVATION, MUTABLE: " '~netspace '~behavior)
   `(config-netspace :post '~netspace '~behavior))
 
 (defn start [rqst])
@@ -620,4 +626,4 @@
   ;;           ;;(eval (macroexpand '(ring.util.servlet/defservice miraj.sync/start)))))
 
 
-(log/trace "loaded")
+;; (log/trace "loaded")

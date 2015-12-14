@@ -18,7 +18,7 @@
             [miraj.http.status :as http])
   (:import [java.io StringReader StringWriter]))
 
-(log/trace "loading")
+;; (log/trace "loading")
 
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
@@ -267,4 +267,4 @@
   ;;     parms))
 
 
-(log/trace "loaded")
+;; (log/trace "loaded")

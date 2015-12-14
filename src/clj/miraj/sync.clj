@@ -1,12 +1,12 @@
-(println "START loading miraj.sync")
+;; (println "START loading miraj.sync")
 (ns miraj.sync
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
-            [clojure.tools.reader.reader-types :as readers]
-            [cljs.compiler :as c]
-            [cljs.closure :as cc]
-            [cljs.env :as env]
+            ;; [clojure.tools.reader.reader-types :as readers]
+            ;; [cljs.compiler :as c]
+            ;; [cljs.closure :as cc]
+            ;; [cljs.env :as env]
             [slingshot.slingshot :refer [try+]]
             [ring.util.response :as ring :refer [response]]
             [ring.middleware.keyword-params :refer [keyword-params-request]]
@@ -19,7 +19,7 @@
             [miraj.http.response :refer [bad-request bad-request! not-found]])
   (:import [java.io StringReader StringWriter]))
 
-(log/trace "LOADING UP")
+;; (log/trace "LOADING UP")
 
 ;;TODO: support config of base path
 (def polymer-map
@@ -72,7 +72,7 @@
           ;;           "behavior fn must be symbol, fn, or lambda")))
 
           dispatch-map (mcomm/get-dispatch-map method)]
-      (log/trace "NEW NETSPACE: " method path behavior)
+      ;; (log/trace "NEW NETSPACE: " method path behavior)
       (swap! dispatch-map
              (fn [old path fn] (assoc old path fn))
              path behavior)
@@ -82,7 +82,7 @@
 ;;FIXME: only include polymer stuff on demand
 (defn config-polymer-defaults
   []
-  (log/trace "config-polymer-defaults")
+  ;; (log/trace "config-polymer-defaults")
   (doseq [[chan-kw handler] polymer-map]
     (config-netspace! :get (subs (str chan-kw) 1) handler))
   #_(mcomm/dump-dispatch-map :get))
@@ -99,11 +99,11 @@
 
 (defn config-polymer-reqs
   [reqs]
-  (log/trace "config-polymer-reqs: " reqs)
+  ;; (println "config-polymer-reqs: " reqs) ;LOG
   (doseq [req reqs]
     (let [nmsp (first req)
           pm-path (ns-to-path nmsp)]
-      (log/trace "reqd ns: " nmsp ", path: " pm-path)
+      ;; (log/trace "reqd ns: " nmsp ", path: " pm-path)
       (config-netspace! :get nmsp #(resource-request % "/")))) ;; '(poly-fn "/"))))
                            ;; (fn [rqst] (do (log/trace "HANDLING POLYMER RQST: " (:uri rqst))
                            ;;                (let [resp (resource-request rqst "/")]
@@ -136,7 +136,7 @@
   (doseq [req reqs]
     (let [nmsp (first req)
           css-path (str nmsp ".*css")] ;;FIXME: regex syntax
-      (log/trace "reqd ns: " nmsp ", path: " css-path)
+      ;; (log/trace "reqd ns: " nmsp ", path: " css-path)
       (config-netspace! :get (symbol css-path) #(resource-request % "styles/"))))
 ;; (poly-fn "styles/"))))
                            ;; '#(do (log/trace "HANDLING CSS RQST: " (:uri %))
@@ -150,7 +150,7 @@
 
 (defn config-co-ns
   [nm refs]
-  (log/trace "config-co-ns " nm)
+  ;; (log/trace "config-co-ns " nm)
   (let [ref-map (into {} (clojure.core/map
                           #(identity [(first %) (rest %)]) refs))
         clj-reqs (:require ref-map)
@@ -166,15 +166,15 @@
     ;; (println "REFS: " refs)
     ;; (println "REQUIRED: " required)
     (if (not (nil? polymer-reqs))
-      (do (log/trace "POLYMER reqs: " polymer-reqs)
+      (do ;(log/trace "POLYMER reqs: " polymer-reqs)
           (config-polymer-reqs polymer-reqs)))
 
     (if (not (nil? js-reqs))
-      (do (log/trace "JS reqs: " js-reqs)
+      (do ;(log/trace "JS reqs: " js-reqs)
           (config-js-reqs js-reqs)))
 
     (if (not (nil? css-reqs))
-      (do (log/trace "CSS reqs: " css-reqs)
+      (do ;(log/trace "CSS reqs: " css-reqs)
           (config-css-reqs css-reqs)))
 
     (config-polymer-defaults)
@@ -298,10 +298,10 @@
 
 ;; (defmacro activate [component]
 (defn activate [component]
-  (log/trace "ACTIVATE: " component (type component))
+  ;; (log/trace "ACTIVATE: " component (type component))
   (cond
     (symbol? component)
-    (do (log/trace "activating symbol")
+    (do ;(log/trace "activating symbol")
         (let [ns-sym (symbol (namespace component))
               ;; log (log/trace "ns-sym: " ns-sym)
               ns (find-ns ns-sym)
@@ -316,7 +316,7 @@
                            cofn
                            ;;(throw (RuntimeException.
                            (log/trace (str "co-functions must be defined in a co-namespace.")))]
-            ;; (log/trace "ACTIVATE PREAMBLE: " (xml/pprint preamble))
+            ;; (log/trace "ACTIVATE PREAMBLE: " preamble) ;; (xml/pprint preamble))
             (let [body# (get-body ns component)
                   ;; log# (log/trace "ACTIVATE BODY: " body#)
                   tree# (h/html preamble body#)]
@@ -324,7 +324,7 @@
               tree#))))
 
     (var? component)
-    (do (log/trace "activating var meta:" (meta component))
+    (do ;(log/trace "activating var meta:" (meta component))
         (if (not (:co-fn (meta component)))
           (throw (RuntimeException. (str "only co-functions can be activated.")))
           (log/trace "found co-fn"))
@@ -362,9 +362,9 @@
   ;; if fn is co-fn then activate
   (cond
     (co-fn? behavior)
-    (do (log/trace "dispatching co-fn " (:uri rqst) (:miraj-baseuri rqst))
+    (do ;(log/trace "dispatching co-fn " (:uri rqst) (:miraj-baseuri rqst))
         (if (= (:uri rqst) (:miraj-baseuri rqst))
-          (do (log/trace "activating co-fn " behavior)
+          (do ;(log/trace "activating co-fn " behavior)
               (let [body (activate behavior)
                     r (xml/serialize :html body)]
                 ;; (log/trace "RESULT: " r)
@@ -378,7 +378,7 @@
               (let [args (try+ (mcomm/match-params-to-sig rqst behavior)
                                (catch [:type :miraj.http.response/response]
                                    e ;;{:keys [type response]}
-                                 (log/trace "CATCH: " e (:type e) (type e))
+                                 #_(log/trace "CATCH: " e (:type e) (type e))
                                  e))]
                 (if (= (:type args) :miraj.http.response/response)
                   (:response args)
@@ -440,4 +440,4 @@
   ;;   ;; (log/trace "responding " r)
   ;;   r))
 
-(log/trace "loaded")
+;; (log/trace "loaded")
