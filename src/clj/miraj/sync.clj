@@ -210,20 +210,21 @@
         baseuri (vec (filter #(not (empty? %)) (str/split (:miraj-baseuri rqst) #"/")))
         path-args (vec (filter #(not (empty? %)) (str/split (:uri rqst) #"/")))
         path-args (subvec path-args (count baseuri))
-        log (log/trace "baseuri: " baseuri)
-        log (log/trace "path-args: " path-args)
+        ;; log (log/trace "baseuri: " baseuri)
+        ;; log (log/trace "path-args: " path-args)
 
         path-params (filter #(not (or (:? (meta %)) (:?? (meta %)))) params)
         [path-params varargs] (split-with #(not= '& %) path-params)
-        log (log/trace "path-params: " path-params)
-        log (log/trace "varargs: " varargs)
+        ;; log (log/trace "path-params: " path-params)
+        ;; log (log/trace "varargs: " varargs)
 
         param-args (:params rqst)
-        log (log/trace "param-args: " param-args)
+        ;; log (log/trace "param-args: " param-args)
         required-params (map #(keyword %) (filter #(:? (meta %)) params))
         optional-params (map #(keyword %) (filter #(:?? (meta %)) params))
-        log (log/trace "required-params: " required-params)
-        log (log/trace "optional-params: " optional-params)]
+        ;; log (log/trace "required-params: " required-params)
+        ;; log (log/trace "optional-params: " optional-params)
+        ]
 
     (if (empty? varargs)
       (if (not= (count path-args) (count path-params))
@@ -315,7 +316,7 @@
                            cofn
                            ;;(throw (RuntimeException.
                            (log/trace (str "co-functions must be defined in a co-namespace.")))]
-            ;; (log/trace "ACTIVATE PREAMBLE: " preamble)
+            ;; (log/trace "ACTIVATE PREAMBLE: " (xml/pprint preamble))
             (let [body# (get-body ns component)
                   ;; log# (log/trace "ACTIVATE BODY: " body#)
                   tree# (h/html preamble body#)]
@@ -343,7 +344,7 @@
     (do (log/trace "activating other: " (type component)))))
 
 (defn co-fn? [f]
-  (log/trace "co-fn? " f)
+  ;; (log/trace "co-fn? " f)
   (if (mcomm/is-lambda? f)
 ;;    false
     (if (symbol? f)
@@ -356,8 +357,8 @@
 
 (defn dispatch-rqst
   [rqst behavior]
-  (log/trace "dispatch-rqst: " (:uri rqst) behavior (type behavior))
-  (log/trace "ns: " *ns*)
+  ;; (log/trace "dispatch-rqst: " (:uri rqst) behavior (type behavior))
+  ;; (log/trace "ns: " *ns*)
   ;; if fn is co-fn then activate
   (cond
     (co-fn? behavior)
@@ -386,7 +387,7 @@
                                (-> behavior find-var meta :name) args
                                "), for " (:uri rqst))
                     (if-let [res (apply (deref (-> behavior find-var)) args)]
-                      (do (log/trace (-> behavior find-var meta :name) " says: " res)
+                      (do ;;(log/trace (-> behavior find-var meta :name) " says: " res)
                           res)
                       (response (not-found))))))) ;;FIXME user-defined not-found
           (do (log/trace "non-fn sym: " behavior)
@@ -396,9 +397,9 @@
     (log/trace "VAR")
 
     (fn? behavior)
-    (do (log/trace "FN " behavior (count (keys rqst)))
+    (do ;(log/trace "FN " behavior (count (keys rqst)))
         (if-let [res (behavior rqst)]
-          (do (log/trace behavior " says: " res)
+          (do ;;(log/trace behavior " says: " res)
               res)
           (not-found))) ;;FIXME user-defined not-found
 
@@ -423,9 +424,8 @@
   ;; NB: lambda exprs are the way to get the entire request as a param
   ;; - a lambda expression is a ring handler
 
-
 (defn start [rqst]
-  (log/trace "START HTTP RQST: " (:uri rqst))
+  ;; (log/trace "START HTTP RQST: " (:uri rqst))
     (if-let [dispatch-entry (mcomm/get-dispatch-entry rqst)]
       (do ;(println "dispatch val: " dispatch-entry)
           ;(println "dispatch co-fn: " (last dispatch-entry))

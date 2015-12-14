@@ -47,84 +47,6 @@
 ;; HTML 5.0 http://www.w3.org/TR/html5/
 ;; HTML 5.1 http://www.w3.org/TR/html51/
 
-(def encoding-decl-regex
-  ;; https://encoding.spec.whatwg.org/#names-and-labels
-  [#"(?i)unicode-1-1-utf-8"
-   #"(?i)utf-8"
-   #"(?i)utf8"])
-
-(def html5-meta-attribs
-  {:charset :encoding-decl   ;; :content is implicit as value of map entry
-   ;; standard vals for name attrib
-   :application-name :string
-   :author :string
-   :description :string
-   :generator :string
-   :keywords :tokens
-   ;; extended name attribs https://wiki.whatwg.org/wiki/MetaExtensions
-   :viewport  {:width :pixels
-               :height :pixels
-               :initial-scale :number
-               :minimum-scale :number
-               :maximum-scale :number
-               :user-scalable #{:zoom :fixed}}
-   :apple {:itunes-app :_, :mobile-web-app-capable :_, :mobile-web-app-status-bar-style :_,
-           :touch-fullscreen :_, :mobile-web-app-title :_}
-   ;; dublin core
-   :dc {:created :_, :creator :_} ;; etc.
-   :dc-terms {:created :_, :creator :_} ;; etc.
-   :fragment "!"
-   :geo {:position :geocoord, :country :iso3166-1} ;; etc.
-   :mobile {:agent {:format :_, :url :_}
-            :web-app-capable :yes}
-   :msapplication {
-                   :config :uri
-                   :navbutton-color :color
-                   :notification [:uri]
-                   :square-70x70-logo :uri
-                   :square-150x150-logo :uri
-                   :square-310x310-logo :uri
-                   :starturl :uri
-                   :task {:name :string :action-uri :uri :icon-uri :uri
-                          :window-type #{:tab :self :window}}
-                   :tile-color :color
-                   :tile-image :uri
-                   :tooltip :string
-                   :tap-highlight :no
-                   :wide-310x150-logo :uri
-                   :window {:width :pixels, :height :pixels}}
-   ;; other ms metas https://msdn.microsoft.com/library/dn255024(v=vs.85).aspx
-   :ms-pinned ^:nonstandard {:allow-domain-api-calls :bool
-                             :allow-domain-meta-tags :bool
-                             :badge {:frequency #{30 60 360 720 1440}
-                                     :polling-uri :uri}
-                             :start-url :uri
-                             :task-separator :_}
-   :referrer #{:no-referrer :no-referrer-when-downgrade
-               :origin :origin-when-cross-origin
-               :unsafe-url}
-   :revision :_
-   :twitter {:card :_
-             :domain :_
-             :url :_
-             :title :_
-             :description :_
-             ;; etc.
-             }})
-
-(def html5-pragma-directives
-  "meta http-equiv pragma directives
-  http://www.w3.org/html/wg/drafts/html/master/semantics.html#pragma-directives"
-  [:content-language {:non-conforming "use 'lang' attrib instead"}
-   :content-type :encoding-decl
-   :default-style :string
-   :refresh :refresh-syntax
-   :set-cookie {:non-conforming "Real HTTP headers should be used instead"}
-   ;; HTML 5.1
-   :content-security-policy
-   ;; :x-ua-compatible
-   ])
-
 (defn android-header
   [docstr]
   ;; Chrome for Android theme color
@@ -304,8 +226,16 @@
 
         metas (:meta opts-map)
         viewports (:viewport opts-map)
-        scripts (:scripts opts-map) ;;(for [script (filter #(some #{:js} %) html-reqs)] (get-js script))
-        styles (:styles opts-map)
+
+        scripts (for [script  (:scripts opts-map)]
+                  ;; (filter #(some #{:js} %) html-reqs)]
+                  (get-js script))
+        _ (log/trace "SCRIPTS: " scripts)
+
+        styles (for [style (:styles opts-map)]
+                 (get-css style))
+        _ (log/trace "STYLES: " styles)
+
         pragmas (:pragma opts-map)
 
         links (flatten (for [comp namespaces] (do #_(log/trace "link? " comp) (get-link comp))))
@@ -358,9 +288,9 @@
 
 (defmacro co-ns
   [nm & opts]
-  (log/trace "expanding co-ns: " nm " " (pprint-str opts))
+  (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
   (let [options (get-ns-opts nm opts)
-        _  (str "OPTIONS: " (pprint-str options))
+        ;; _  (str "OPTIONS: " (pprint-str options))
         newns (eval (macroexpand `(ns ~nm ~@options)))]
     (log/trace "ns: " *ns*)
     (set-html-head! nm opts)
