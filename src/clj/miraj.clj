@@ -1,4 +1,3 @@
-;(println "START load miraj.clj")
 (ns miraj
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
@@ -10,7 +9,7 @@
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
-            [miraj.common :as mrj]
+            [miraj.common :as mcomm]
             [miraj.sync :as msync]
             ;;FIXME - load async stuff at config time, see below
             ;;[clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
@@ -94,13 +93,16 @@
    (h/link {:rel "manifest" :href "manifest.json"})))
 
 (defn miraj-header
-  [docstr ns-path & reqs]
+  [docstr ns-path metas & reqs]
+  (log/trace "miraj-header: " docstr ns-path metas reqs)
   (let [hdr (h/head (apply
-                     concat (meta-header docstr)
-                     (android-header docstr)
-                     (safari-header docstr)
-                     (win8-header docstr)
-                     (polymer-header ns-path)
+                     concat
+                     metas
+                     ;; (meta-header docstr)
+                     ;; (android-header docstr)
+                     ;; (safari-header docstr)
+                     ;; (win8-header docstr)
+                     ;; (polymer-header ns-path)
                      reqs))]
     ;; (log/trace "MIRAJ HEADER: " hdr)
     hdr))
@@ -177,18 +179,41 @@
       (for [refer refer-opts]
         (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
-(defn get-meta
-  [comp]
-  (log/trace "get-meta " comp)
-  (if (not= :css (nth comp 1)) (throw (Exception. ":css key must be second item in vector: " comp)))
-  (let [ns (first comp)
-        options (apply hash-map (nnext comp))
-        as-opt (:as options)
-        refer-opts (:refer options)]
-    (if (nil? refer-opts)
-      (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns nil)})
-      (for [refer refer-opts]
-        (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
+;;FIXME - move this to miraj.html?
+(defn get-metas
+  [metas]
+  #_[{:keys [description title application-name apple msapplication mobile-capable
+           theme-color
+           foo bar baz]}]
+  (log/trace "get-metas " metas)
+  ;;FIXME - do not hardcode.  use rules, maybe in miraj.html
+  (let [ms (for [[tag val] metas]
+             (let [rule (get h/html5-meta-attribs tag)]
+               (log/trace "meta: " tag val rule)
+               (if (nil? rule) (throw (Exception. (str "unknown meta name: " (str tag)))))
+               (case tag
+                 ;; :description	(h/meta {:name "description" :content val})
+                 ;; :title		(h/meta {:name "description" :content val})
+                 ;; :application-name	(h/meta {:name "description" :content val})
+                 :apple 	(h/meta {:name "apple" :content "test"})
+                 :msapplication	(h/meta {:name "ms" :content "test"})
+                 ;; :mobile-capable	(h/meta {:name "description" :content val})
+                 ;; :theme-color	(h/meta {:name "description" :content val})
+                 ;; :foo	(h/meta {:name "foo" :content val})
+                 ;; :bar	(h/meta {:name "bar" :content val})
+                 ;; :baz	(h/meta {:name "baz" :content val})
+                 (h/meta {:name (subs (str tag) 1)
+                          :content (str val)}))))]
+    (log/trace "Metas: " ms)
+    ms))
+  ;; (let [ns (first metas)
+  ;;       options (apply hash-map (nnext metas))
+  ;;       as-opt (:as options)
+  ;;       refer-opts (:refer options)]
+  ;;   (if (nil? refer-opts)
+  ;;     (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns nil)})
+  ;;     (for [refer refer-opts]
+  ;;       (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
 ;; set html preamble as namespace metadata
 (defn set-html-head!
@@ -231,6 +256,10 @@
         ;; log (log/trace "html-reqs: " html-reqs)
 
         metas (:meta opts-map)
+        _ (log/trace "raw metas: " metas)
+        metas (apply get-metas (:meta opts-map))
+        _ (log/trace "html metas: " metas)
+
         viewports (:viewport opts-map)
 
         scripts (for [script  (:scripts opts-map)]
@@ -250,7 +279,7 @@
         polymer (concat scripts styles links)
         ;; log (log/trace "POLYMER: " polymer)
 
-        preamble (miraj-header title ns-path polymer)
+        preamble (miraj-header title ns-path metas polymer)
         ;; log (log/trace "PREAMBLE: " preamble)
         ]
     ;; (println "PREAMBLE: " preamble)
@@ -260,7 +289,7 @@
           newvar (alter-meta! ns
                               (fn [old new]
                                 (merge old
-                                       {:co-ns true :co-fn new}))
+                                       {:co-ns true :co-config new}))
                               preamble)
           ]
       ;; (println "ns meta: " (meta ns))
@@ -280,12 +309,19 @@
         polymer-reqs (:polymer ref-map)
         ;; pm-reqs (filter #(.startsWith (str (first %)) "polymer.") polymer-reqs)
 
-        options (concat libs polymer-reqs)]
+        requirements (apply list ':require (concat libs polymer-reqs))
+        _ (log/trace "REQUIREMENTS: " requirements)
+        _ (log/trace "REQUIREMENTS: " (seq (rest requirements)))
 
-    ;; (log/trace "GET-NS-OPTS: " options)
-    (if (seq options)
-      (list (apply list ':require options))
-      nil)))
+        imports (apply list ':import (:import ref-map))
+        _ (log/trace "IMPORTS: " (seq (:import imports)))
+
+        options (if (seq (rest requirements)) requirements '())
+        options (if (seq (rest imports))
+                  (list options imports)
+                  options)]
+    (if-let [o (seq options)]
+      (list options))))
 
 (defn config-co-ns [nm refs]
   (log/warn "Using default implementation: miraj.sync")
@@ -294,18 +330,13 @@
 
 (defmacro co-ns
   [nm & opts]
-  ;; (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
+  (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
   (let [options (get-ns-opts nm opts)
-        ;; _  (str "OPTIONS: " (pprint-str options))
+        _  (log/trace (str "OPTIONS: " (pprint-str options)))
         newns (eval (macroexpand `(ns ~nm ~@options)))]
-    ;; (log/trace "ns: " *ns*)
+    ;; (log/trace "newns: " newns)
     (set-html-head! nm opts)
-    (config-co-ns nm opts)
-    ;; `(do (log/trace "invoking co-ns: " '~nm)
-    ;;      (let [newns# (ns ~nm ~@options)]
-    ;;        (set-html-head! '~nm '~opts)
-    ;;        (config-co-ns '~nm '~opts)
-    ;;        newns#))
+    ;; (config-co-ns nm opts)
     newns))
 
   ;; ;; (eval (apply set-html-head! nm refs))
@@ -578,6 +609,7 @@
 (defn start [rqst])
 
 (defn dump-dispatch-map [& method]
+  (println "miraj dump-dispatch-map: " method)
   (throw (Exception. "calling dummy dump-dispatch-map")))
 
 ;; (defn config-sync []
@@ -593,7 +625,7 @@
   ;; (println "config-sync")
   (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns))
   (alter-var-root (var config-netspace) (fn [f] msync/config-netspace!))
-  (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
+  (alter-var-root (var dump-dispatch-map) (fn [f] mcomm/dump-dispatch-map))
   (alter-var-root (var start) (fn [f] msync/start)))
 ;  (intern 'config '-service (servlet/make-service-method msync/start))
 ;  (println "defservice " (find-var 'config/-service)))
@@ -604,13 +636,13 @@
   ;;FIXME: load core.async
   ;; (alter-var-root (var config-co-ns) (fn [f] masync/config-co-ns))
   ;; (alter-var-root (var config-netspace) (fn [f] masync/start-netspace-observer))
-  ;; (alter-var-root (var dump-dispatch-map) (fn [f] mrj/dump-dispatch-map))
+  ;; (alter-var-root (var dump-dispatch-map) (fn [f] mcomm/dump-dispatch-map))
   ;; (alter-var-root (var start) (fn [f] masync/start))
   #_(masync/start-http-observer))
 
 (defmacro config [mode]
   `(do
-     (log/trace "config mode: " ~mode)
+     ;; (println "config mode: " ~mode)
      ;;(in-ns 'miraj)
      (condp = ~mode
        :sync (config-sync)
@@ -627,3 +659,12 @@
 
 
 ;; (log/trace "loaded")
+
+(defn co-compile
+  [co-ns]
+  (let [myns (find-ns co-ns)]
+    (meta myns)))
+;    (ns-interns myns)))
+;; 1.  find main fn for ns
+;; 2.  activate it
+;; 3.  write output to ns file 
