@@ -4,9 +4,9 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
             [clojure.tools.reader.reader-types :as readers]
-            [cljs.compiler :as c]
-            [cljs.closure :as cc]
-            [cljs.env :as env]
+            ;; [cljs.compiler :as c]
+            ;; [cljs.closure :as cc]
+            ;; [cljs.env :as env]
             ;; [slingshot.slingshot :refer [try+ throw+]]
             [ring.util.response :as ring :refer [response]]
             [ring.middleware.keyword-params :refer [keyword-params-request]]
@@ -24,6 +24,7 @@
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
 
 (defmacro is-lambda? [f]
+  ;; (println "is-lambda? " f)
   `(let [x# (cond
               (symbol? ~f) (fn? (deref (find-var ~f)))
               (fn? ~f) true
@@ -52,7 +53,7 @@
 
 (defn dump-dispatch-map
   [& method]
-  #_(log/trace "dump-dispatch-map " method)
+  ;; (println "common dump-dispatch-map " method)
   (if (empty? method)
     (doseq [method [:get :head :post :put]]
       #_(log/trace "dispatch-map " method ": "
@@ -65,8 +66,8 @@
 
 (defn match-params-to-sig
   [rqst func]
-  ;; #_(log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
-  ;; #_(log/trace "base uri: " (:miraj-baseuri rqst))
+  ;; (log/trace "match-params-to-sig uri: " (:uri rqst) ", fn: " func (type func))
+  ;; (log/trace "base uri: " (:miraj-baseuri rqst))
   ;; ring terminology: "params" are incoming, from rqst
   ;; so "args" are formal, defined by the fn signature
   ;; first put all the request params in the ring rqst map
@@ -81,7 +82,7 @@
         ;; log (log/trace "uri-path-params: " uri-path-params)
 
         uri-params (:params rqst)
-        ;; log (log/trace "uri-params: " uri-params)
+        ;; _ (log/trace "uri-params: " uri-params)
 
         ;; now get the arglist from the fn defn
         ;; sig-args (first (:arglists (meta (find-var func))))
@@ -95,8 +96,8 @@
 
         required-params (map #(keyword %) (filter #(:? (meta %)) sig-args))
         optional-params (map #(keyword %) (filter #(:?? (meta %)) sig-args))
-        ;; log (log/trace "required-params: " required-params)
-        ;;_log (log/trace "optional-params: " optional-params)
+        ;; _ (log/trace "required-params: " required-params)
+        ;; _ (log/trace "optional-params: " optional-params)
         ]
 
     (if (empty? sig-path-varargs)
@@ -104,19 +105,19 @@
         ;;FIXME: should response be 404 not found?
         (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
                      ": " (-> http/bad-request http/status :description))]
-          ;; (do (log/trace s "  URI path should have exactly " (count sig-path-args) "path nodes"
-          ;;                "following base path " (:miraj-baseuri rqst))
+          (do (log/trace s "  URI path should have exactly " (count sig-path-args) "path nodes"
+                         "following base path " (:miraj-baseuri rqst))
               (bad-request! (str s " URI path should have exactly " (count sig-path-args) " path nodes"
                                  " following base path " (:miraj-baseuri rqst))))
-        #_(log/trace "match: uri-path-params & sig-path-args"))
+          #_(log/trace "match: uri-path-params & sig-path-args"))
 
-      (if (< (- (count uri-path-params) 1) (count sig-path-args))
+      (if (< (count uri-path-params) (count sig-path-args))
         (do (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
                          ": " (-> http/bad-request http/status :description))]
-              #_(log/trace (str s " URI path should have at least " (count sig-path-args) " path nodes."))
+              (log/trace (str s " URI path should have at least " (count sig-path-args) " path nodes."))
               (bad-request!
                (str s "  URI path should have at least " (count sig-path-args) " path nodes."))))
-        #_(log/trace "match: uri-path-params & sig-path-args")))
+        #_(log/trace "match: uri-path-params & sig-path-args"))))
 
     (if (not (every? (set (keys uri-params)) required-params))
       (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
@@ -128,29 +129,31 @@
     (let [required-set (set required-params)
           param-arg-keys (keys uri-params)
           optional-param-args (remove #(contains? required-set %) param-arg-keys)
-          ;;log (log/trace "optional-param-args: " optional-param-args)
+          ;; _ (log/trace "optional-param-args: " optional-param-args)
           ]
     (if (not (every? (set optional-params) optional-param-args))
       (let [s (str http/bad-request " " (-> http/bad-request http/status :name)
-                         ": " (-> http/bad-request http/status :description))]
-        (bad-request! (str s "  Unknown optional body/query param: "
+                         ": " (-> http/bad-request http/status :description)
+                         "  Unknown optional body/query param: "
                          (pr-str optional-params)
-                         " != " (pr-str optional-param-args))))
+                         " != " (pr-str optional-param-args))]
+        (log/trace s)
+        (bad-request! s))
       #_(log/trace "match: uri-params & optional-params")))
 
     (let [args (map-indexed
                 (fn [i param]
-                  (do #_(log/trace "param: " param (if (meta param) (meta param)))
+                  (do ;(log/trace "param: " param (if (meta param) (meta param)))
                      (if (:? (meta param))
                        (do
                            (get uri-params (keyword param)))
                        (if (:?? (meta param))
                          (do
                            (get uri-params (keyword param)))
-                         (do #_(log/trace "path arg " (get uri-path-params i))
+                         (do ;(log/trace "path arg " (get uri-path-params i))
                              (get uri-path-params i))))))
                 sig-args)]
-      #_(log/trace "args: " args)
+      ;; (log/trace "args: " args)
       args)))
 
 (defn get-dispatch-entry
