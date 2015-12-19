@@ -362,7 +362,7 @@
   ;; if fn is co-fn then activate
   (cond
     (co-fn? behavior)
-    (do ;(log/trace "dispatching co-fn " (:uri rqst) (:miraj-baseuri rqst))
+    (do ;;(log/trace "dispatching co-fn " (:uri rqst) (:miraj-baseuri rqst))
         (if (= (:uri rqst) (:miraj-baseuri rqst))
           (do ;(log/trace "activating co-fn " behavior)
               (let [body (activate behavior)
@@ -372,22 +372,23 @@
           (default-observer rqst)))
 
     (symbol? behavior)
-    (do (log/trace "SYMBOL")
+    (do ;(log/trace "SYMBOL")
         (if (mcomm/is-lambda? behavior)
-          (do (log/trace "fn sym")
+          (do ;(log/trace "fn sym")
               (let [args (try+ (mcomm/match-params-to-sig rqst behavior)
                                (catch [:type :miraj.http.response/response]
                                    e ;;{:keys [type response]}
-                                 #_(log/trace "CATCH: " e (:type e) (type e))
+                                 (log/trace "CATCH: " e (:type e) (type e))
                                  e))]
+                ;; (log/trace "ARGS: ")
                 (if (= (:type args) :miraj.http.response/response)
                   (:response args)
                   (do
-                    (log/trace "calling ("
+                    #_(log/trace "calling ("
                                (-> behavior find-var meta :name) args
                                "), for " (:uri rqst))
                     (if-let [res (apply (deref (-> behavior find-var)) args)]
-                      (do ;;(log/trace (-> behavior find-var meta :name) " says: " res)
+                      (do #_(log/trace (-> behavior find-var meta :name) " says: " res)
                           res)
                       (response (not-found))))))) ;;FIXME user-defined not-found
           (do (log/trace "non-fn sym: " behavior)
@@ -399,13 +400,15 @@
     (fn? behavior)
     (do ;(log/trace "FN " behavior (count (keys rqst)))
         (if-let [res (behavior rqst)]
-          (do ;;(log/trace behavior " says: " res)
+          (do ;;(log/trace (str "RESULT: " (:status res) " : " (:uri rqst)))
               res)
           (not-found))) ;;FIXME user-defined not-found
 
     (mcomm/is-lambda? behavior)
     (do (log/trace "LAMBDA: " behavior)
-        ((eval behavior) rqst))
+        (let [r ((eval behavior) rqst)]
+          (log/trace "RESULT: " r)
+          r))
 
     (list? behavior)
     (do (log/trace "LIST: " behavior)
