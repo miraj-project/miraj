@@ -408,16 +408,16 @@
   [] ;;[disp-map]
   (log/trace "start-http-observer")
   (go (while true
-        (let [rqst (<! (channels :http-rqst)]
+        (let [rqst (<! (channels :http-rqst))]
           (log/trace "http dispatching rqst: " (:request-method rqst) (:uri rqst))
           (if-let [dispatch-entry (mcomm/get-dispatch-entry rqst)]
             (do (log/trace "dispatch val: " dispatch-entry)
                  (log/trace "dispatch chan: " (last dispatch-entry))
                 (>! (last dispatch-entry) (assoc rqst :miraj-baseuri (first dispatch-entry))))
-            (>! (channels default) (assoc rqst :miraj-baseuri nil)))))))
+            (>! (channels :default) (assoc rqst :miraj-baseuri nil)))))))
 
 (defn start [rqst]
-  (log/trace "START HTTP RQST: " (:uri rqst))
+  (println "START HTTP RQST: " (:uri rqst))
   (go (>! (channels :http-rqst) rqst))
   (let [resp (<!! (channels :http-resp))]
     ;; (log/trace "responding " resp)
