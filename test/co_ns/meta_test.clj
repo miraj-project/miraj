@@ -1,26 +1,46 @@
-(require 'miraj)
-;(println
-; (macroexpand
-(miraj/co-ns meta-test
-                            "docstring here"
-                            (:main index)
-                            (:meta :description "Miraj Hello World demo"
-                                   :title "Hello World!"
-                                   ;; global attrs: http://www.w3.org/html/wg/drafts/html/master/dom.html#global-attributes
-                                   ;; meta standard names: :application-name, :author, :description, :generator, :keywords
-                                   ;; :charset;  :itemprop?
-                                   ;; extensions: https://wiki.whatwg.org/wiki/MetaExtensions
-                                   ;; see https://gist.github.com/kevinSuttle/1997924
-                                   ;; :viewport gets special treatment
-                                   ;; e.g.  :dc {:created ".." :creator "foo" ...}
-                                   :application-name "hello-world"
-                                   :apple {:mobile-capable :true
-                                           :status-bar-style "black"
-                                           :title "Hello"
-                                           :touch-icon "images/touch/apple-touch-icon.png"}
-                                   :msapplication {:navbutton-color "..."
-                                                   :tile-color "#3372DF"
-                                                   :tile-image "images/ms-touch-icon-144x144-precomposed.png"}
-                                   :mobile-capable true
-                                   :theme-color "#2E3AA1"))
+;;(require 'miraj)
+;;(println
+;; (macroexpand
+(miraj/co-ns co-ns.meta-test
+             "docstring here"
+             (:main index)
+             (:title "meta test")
+             (:meta {:description "Miraj Hello World demo"
+                     :application-name "hello-world"})
+             (:apple {:mobile-web-app {:capable true
+                                       :status-bar-style :black
+                                       :title "Hello"}})
+                     ;; apple-touch-icon is a <link> thing, not <meta>
+                             ;; :touch-icon "images/touch/apple-touch-icon.png"}
+             (:msapp {:navbutton-color "#FFCCAA"
+                      :tile-color "#3372DF"
+                      :tile-image "images/ms-touch-icon-144x144-precomposed.png"})
+             (:mobile {:agent {:format :html5
+                               :url "http://3g.sina.com.cn/"}
+                       :web-app-capable true
+                       :theme-color "#2E3AA1"})
+             ;; (:scripts [foo.bar :refer [baz]])
+             ;; (:styles [foo.bar :refer [baz]])
+             )
+
+             ;; (:polymer [polymer.iron :as iron]
+             ;;           [polymer.paper :as paper])
+             ;; (:require [miraj.html :as h]
+             ;;           [clojure.pprint :as pp]))
+
+(miraj.markup/pprint
+ :html
+ (:co-config (meta (find-ns 'co-ns.meta-test))))
+
+;; (println (h/span))
+
+;; (println (paper/button))
+
+;; (println (iron/list))
+
+;; (clojure.pprint/pprint
+;;  (macroexpand
+;;   '(ns miraj
+;;     (:require [miraj.html :as h]
+;;               [clojure.pprint :as pp]))))
 

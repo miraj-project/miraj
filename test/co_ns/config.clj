@@ -1,25 +1,23 @@
 (ns co-ns.config
-  (:require [miraj :refer [config >> >>!]]
-            [polymer.iron :as iron]
+  (:require [miraj :refer [config >> >>!]] :reload)
+  (:require [miraj.markup :as ml] :reload)
+  (:require [miraj.html :as h]
             [miraj.http.response :refer [not-found]]))
 
-(println "LOADING config")
-
-(defn init []
-  (println "RUNNING config/init"))
-
 (miraj/config :sync)
-
+(remove-ns 'co-ns.meta-test)
+;(remove-ns 'miraj)
 (require '[co-ns.meta-test] :reload)
 
-(iron/list "foo")
+(ml/pprint
+ :html
+ (:co-config (meta (find-ns 'co-ns.meta-test))))
+
+(ml/pprint (meta (find-ns 'co-ns.meta-test)))
 
 
-;; (def dispatch-table {:$ 'hello.world/main
-;;                      :employee 'hello.world/employee
-;;                      :foo 'hello.world/f1
-;;                      :foo.bar 'hello.world/f2
-;;                      :* #(not-found (str "not found: " (:uri %)))})
+(println *ns*)
+
 
 
 ;; >> : OBSERVE THEN EXHIBIT

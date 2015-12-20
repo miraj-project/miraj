@@ -179,25 +179,83 @@
       (for [refer refer-opts]
         (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
+(defn apply-meta-rule
+  [tag key val ruleset]
+  (log/trace (str "APPLY META RULE: " tag " | " key " | " val " | " ruleset))
+  (let [this-tag (subs (str key) 1)]
+    (for [[k v] val]
+      (do (log/trace "key: " k ", val: " val)
+          (if-let [rule (get ruleset k)]
+            (let [k-tag (subs (str k) 1)]
+              (log/trace "rule: " rule)
+              (cond
+                (keyword? rule)
+                (do (log/trace "meta keyword rule: " k ", " val ": " rule)
+                    (let [val-param (get val k)
+                          elt (condp = rule
+                                :string (h/meta {:name (str tag this-tag "-" k-tag)
+                                                 :content (str val-param)})
+                                :number (h/meta {:name (str tag this-tag "-" k-tag)
+                                                :content (str val-param)})
+                                :color (h/meta {:name (str tag this-tag "-" k-tag)
+                                                :content (str val-param)})
+                                :uri (h/meta {:name (str tag this-tag "-" k-tag)
+                                              :content (str val-param)})
+                                :_ (h/meta {:name (str tag this-tag "-" k-tag)
+                                              :content (str val-param)})
+                                ;; :tokens
+                                )]
+                      (log/trace "elt: " elt)
+                      elt))
+
+                (map? rule) (do (log/trace "meta map rule: " k rule)
+                                (apply-meta-rule (str this-tag "-") k (get val k) rule))
+
+                (set? rule)
+                (do (log/trace "meta set rule: " k rule)
+                    (let [val-param (get val k)]
+                      (log/trace "val: " val-param)
+                      (if (contains? rule val-param)
+                        (let [nm (str tag this-tag "-" k-tag)
+                              content (subs (str val-param) 1)]
+                          (h/meta {:name nm :content content}))
+                        (throw (Exception. (str "META: unrecognized enum option: "
+                                                key " {" k " " v"}"))))))
+
+                (vector? rule)
+                (do (log/trace "meta vector rule: " k ", " val ": " rule)
+                    (let [v (val k)]
+                      (log/trace "found val: " v)
+                      (if (= v (first rule))
+                        (let [nm (str tag this-tag "-" k-tag)
+                              content (second rule)]
+                          (log/trace nm  "=\"" content "\"")
+                          (h/meta {:name nm :content content}))
+                        (throw (Exception. (str "META: unrecognized option: " key " {" k " " v"}"))))))
+                :else (throw (Exception.
+                              (str "META: unrecognized option type: "
+                                   key " {" k " " v"}" (type rule)))))))))))
+
 ;;FIXME - move this to miraj.html?
 (defn get-metas
   [metas]
-  #_[{:keys [description title application-name apple msapplication mobile-capable
-           theme-color
-           foo bar baz]}]
-  (log/trace "get-metas " metas)
+  (log/trace "GET-METAS " metas)
+  ;; (log/trace "HTML5-METAS " (keys h/html5-meta-attribs))
   ;;FIXME - do not hardcode.  use rules, maybe in miraj.html
   (let [ms (for [[tag val] metas]
              (let [rule (get h/html5-meta-attribs tag)]
-               (log/trace "meta: " tag val rule)
+               (log/trace "META: " tag val rule)
                (if (nil? rule) (throw (Exception. (str "unknown meta name: " (str tag)))))
                (case tag
                  ;; :description	(h/meta {:name "description" :content val})
                  ;; :title		(h/meta {:name "description" :content val})
                  ;; :application-name	(h/meta {:name "description" :content val})
-                 :apple 	(h/meta {:name "apple" :content "test"})
-                 :msapplication	(h/meta {:name "ms" :content "test"})
-                 ;; :mobile-capable	(h/meta {:name "description" :content val})
+                 :apple (let [apple (apply-meta-rule "" tag val rule)]
+                          (log/trace "APPLE: " apple) apple)
+                 :msapp (let [ms (apply-meta-rule "msapplication" tag val rule)]
+                                  (log/trace "MSAPP: " ms) ms)
+                 :mobile (let [ms (apply-meta-rule "" tag val rule)]
+                           (log/trace "MOBILE: " ms) ms)
                  ;; :theme-color	(h/meta {:name "description" :content val})
                  ;; :foo	(h/meta {:name "foo" :content val})
                  ;; :bar	(h/meta {:name "bar" :content val})
@@ -206,6 +264,7 @@
                           :content (str val)}))))]
     (log/trace "Metas: " ms)
     ms))
+
   ;; (let [ns (first metas)
   ;;       options (apply hash-map (nnext metas))
   ;;       as-opt (:as options)
@@ -257,7 +316,12 @@
 
         metas (:meta opts-map)
         _ (log/trace "raw metas: " metas)
-        metas (apply get-metas (:meta opts-map))
+        metas (let [ms (apply merge (concat (:meta opts-map)
+                                            {:apple (first (:apple opts-map))}
+                                            {:msapp (first (:msapp opts-map))}
+                                            {:mobile (first (:mobile opts-map))}))]
+                (log/trace "META MERGE: " ms)
+                (get-metas ms))
         _ (log/trace "html metas: " metas)
 
         viewports (:viewport opts-map)
@@ -667,4 +731,4 @@
 ;    (ns-interns myns)))
 ;; 1.  find main fn for ns
 ;; 2.  activate it
-;; 3.  write output to ns file 
+;; 3.  write output to ns file
