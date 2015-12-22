@@ -124,9 +124,9 @@
                                   (not-found (:uri %)))))))))
   #_(mcomm/dump-dispatch-map :get))
 
-(defn configure-namespace
+(defn config-adapter
   [nm refs]
-  (log/trace "configure-namespace " nm)
+  (log/trace "config-adapter " nm)
   (let [ref-map (into {} (clojure.core/map
                           #(identity [(first %) (rest %)]) refs))
         clj-reqs (:require ref-map)

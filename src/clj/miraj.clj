@@ -17,12 +17,12 @@
             [miraj.markup :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]]
-            [ring.util.servlet :as servlet])
+            #_[ring.util.servlet :as servlet])
   (:import [java.io StringReader StringWriter]
            ;; [javax.servlet.http HttpServlet
            ;;  HttpServletRequest
            ;;  HttpServletResponse]
-           [javax.servlet ServletConfig]))
+           #_[javax.servlet ServletConfig]))
 
 ;;  (:require [clojure.pprint :as pp]))
 
@@ -179,92 +179,6 @@
       (for [refer refer-opts]
         (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
-(defn apply-meta-rule
-  [tag key val ruleset]
-  (log/trace (str "APPLY META RULE: " tag " | " key " | " val " | " ruleset))
-  (let [this-tag (subs (str key) 1)]
-    (for [[k v] val]
-      (do (log/trace "key: " k ", val: " val)
-          (if-let [rule (get ruleset k)]
-            (let [k-tag (subs (str k) 1)]
-              (log/trace "rule: " rule)
-              (cond
-                (keyword? rule)
-                (do (log/trace "meta keyword rule: " k ", " val ": " rule)
-                    (let [val-param (get val k)
-                          elt (condp = rule
-                                :string (h/meta {:name (str tag this-tag "-" k-tag)
-                                                 :content (str val-param)})
-                                :number (h/meta {:name (str tag this-tag "-" k-tag)
-                                                :content (str val-param)})
-                                :color (h/meta {:name (str tag this-tag "-" k-tag)
-                                                :content (str val-param)})
-                                :uri (h/meta {:name (str tag this-tag "-" k-tag)
-                                              :content (str val-param)})
-                                :_ (h/meta {:name (str tag this-tag "-" k-tag)
-                                              :content (str val-param)})
-                                ;; :tokens
-                                )]
-                      (log/trace "elt: " elt)
-                      elt))
-
-                (map? rule) (do (log/trace "meta map rule: " k rule)
-                                (apply-meta-rule (str this-tag "-") k (get val k) rule))
-
-                (set? rule)
-                (do (log/trace "meta set rule: " k rule)
-                    (let [val-param (get val k)]
-                      (log/trace "val: " val-param)
-                      (if (contains? rule val-param)
-                        (let [nm (str tag this-tag "-" k-tag)
-                              content (subs (str val-param) 1)]
-                          (h/meta {:name nm :content content}))
-                        (throw (Exception. (str "META: unrecognized enum option: "
-                                                key " {" k " " v"}"))))))
-
-                (vector? rule)
-                (do (log/trace "meta vector rule: " k ", " val ": " rule)
-                    (let [v (val k)]
-                      (log/trace "found val: " v)
-                      (if (= v (first rule))
-                        (let [nm (str tag this-tag "-" k-tag)
-                              content (second rule)]
-                          (log/trace nm  "=\"" content "\"")
-                          (h/meta {:name nm :content content}))
-                        (throw (Exception. (str "META: unrecognized option: " key " {" k " " v"}"))))))
-                :else (throw (Exception.
-                              (str "META: unrecognized option type: "
-                                   key " {" k " " v"}" (type rule)))))))))))
-
-;;FIXME - move this to miraj.html?
-(defn get-metas
-  [metas]
-  (log/trace "GET-METAS " metas)
-  ;; (log/trace "HTML5-METAS " (keys h/html5-meta-attribs))
-  ;;FIXME - do not hardcode.  use rules, maybe in miraj.html
-  (let [ms (for [[tag val] metas]
-             (let [rule (get h/html5-meta-attribs tag)]
-               (log/trace "META: " tag val rule)
-               (if (nil? rule) (throw (Exception. (str "unknown meta name: " (str tag)))))
-               (case tag
-                 ;; :description	(h/meta {:name "description" :content val})
-                 ;; :title		(h/meta {:name "description" :content val})
-                 ;; :application-name	(h/meta {:name "description" :content val})
-                 :apple (let [apple (apply-meta-rule "" tag val rule)]
-                          (log/trace "APPLE: " apple) apple)
-                 :msapp (let [ms (apply-meta-rule "msapplication" tag val rule)]
-                                  (log/trace "MSAPP: " ms) ms)
-                 :mobile (let [ms (apply-meta-rule "" tag val rule)]
-                           (log/trace "MOBILE: " ms) ms)
-                 ;; :theme-color	(h/meta {:name "description" :content val})
-                 ;; :foo	(h/meta {:name "foo" :content val})
-                 ;; :bar	(h/meta {:name "bar" :content val})
-                 ;; :baz	(h/meta {:name "baz" :content val})
-                 (h/meta {:name (subs (str tag) 1)
-                          :content (str val)}))))]
-    (log/trace "Metas: " ms)
-    ms))
-
   ;; (let [ns (first metas)
   ;;       options (apply hash-map (nnext metas))
   ;;       as-opt (:as options)
@@ -275,13 +189,13 @@
   ;;       (h/link {:rel "stylesheet" :type "text/css" :href (get-href ns (str refer ".css"))})))))
 
 ;; set html preamble as namespace metadata
-(defn set-html-head!
+(defn elaborate-ns!
   ;; [docstr reqs & body]
   ;;FIXME: use docstring for <meta name="description"...>
   [nm & args]
-  ;; (log/trace "set-html-head! co-ns: " nm)
-  ;; (log/trace "set-html-head! this ns: " *ns*)
-  ;; (log/trace "set-html-head! args: " (first args))
+  ;; (log/trace "elaborate-ns! co-ns: " nm)
+  ;; (log/trace "elaborate-ns! this ns: " *ns*)
+  ;; (log/trace "elaborate-ns! args: " (first args))
   (let [ns (create-ns nm)
         ns-path (path-from-ns ns)
 
@@ -321,7 +235,7 @@
                                             {:msapp (first (:msapp opts-map))}
                                             {:mobile (first (:mobile opts-map))}))]
                 (log/trace "META MERGE: " ms)
-                (get-metas ms))
+                (h/get-metas ms))
         _ (log/trace "html metas: " metas)
 
         viewports (:viewport opts-map)
@@ -359,9 +273,9 @@
       ;; (println "ns meta: " (meta ns))
       newvar)))
 
-(defn get-ns-opts
+(defn ns-resources
   [nm opts]
-  ;; (log/trace "get-ns-opts " nm)
+  ;; (log/trace "ns-resources " nm)
   (let [ref-map (into {} (clojure.core/map
                           #(identity [(first %) (rest %)]) opts))
         clj-reqs (:require ref-map)
@@ -387,39 +301,39 @@
     (if-let [o (seq options)]
       (list options))))
 
-(defn config-co-ns [nm refs]
+(defn config-adapter [nm refs]
   (log/warn "Using default implementation: miraj.sync")
-  (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns)))
-  ;; (throw (Exception. "calling dummy config-co-ns")))
+  (alter-var-root (var config-adapter) (fn [f] msync/config-adapter)))
+  ;; (throw (Exception. "calling dummy config-adapter")))
 
 (defmacro co-ns
   [nm & opts]
   (log/trace "expanding co-ns: " nm "\n " (pprint-str opts))
-  (let [options (get-ns-opts nm opts)
-        _  (log/trace (str "OPTIONS: " (pprint-str options)))
-        newns (eval (macroexpand `(ns ~nm ~@options)))]
+  (let [resources (ns-resources nm opts)
+        _  (log/trace (str "OPTIONS: " (pprint-str resources)))
+        newns (eval (macroexpand `(ns ~nm ~@resources)))]
     ;; (log/trace "newns: " newns)
-    (set-html-head! nm opts)
-    ;; (config-co-ns nm opts)
+    (elaborate-ns! nm opts)
+    ;; (config-adapter nm opts)
     newns))
 
-  ;; ;; (eval (apply set-html-head! nm refs))
+  ;; ;; (eval (apply elaborate-ns! nm refs))
   ;; `(do (println "invoking co-ns")
-  ;;      (let [;;required# (config-co-ns '~nm '~refs)
-  ;;            required# (get-ns-opts '~nm '~refs)
+  ;;      (let [;;required# (config-adapter '~nm '~refs)
+  ;;            required# (ns-resources '~nm '~refs)
   ;;            _# (println "FOO C " required#)
   ;;            args# ['~nm required#]
   ;;            _# (println "FOO CC " args#)
-  ;;            n# (set-html-head! '~nm '~refs)]
+  ;;            n# (elaborate-ns! '~nm '~refs)]
   ;;        (println "FOO D " *ns*)
   ;;        ;; (println "nm: " '~nm (type '~nm))
   ;;        ;; (println "reqs: " '~@required)
-  ;;        ;;(config-co-ns '~nm '~refs)
+  ;;        ;;(config-adapter '~nm '~refs)
   ;;        `(ns ~'~nm '~required#)
   ;;        (println "FOO E " *ns*)
   ;;        `(ns ~'~nm)
   ;;        (println "FOO F " *ns*)
-  ;;        #_(set-html-head! '~nm '~refs))))
+  ;;        #_(elaborate-ns! '~nm '~refs))))
 
 (defmacro handle-ctor
   [ctor]
@@ -687,7 +601,7 @@
 
 (defn config-sync []
   ;; (println "config-sync")
-  (alter-var-root (var config-co-ns) (fn [f] msync/config-co-ns))
+  (alter-var-root (var config-adapter) (fn [f] msync/config-adapter))
   (alter-var-root (var config-netspace) (fn [f] msync/config-netspace!))
   (alter-var-root (var dump-dispatch-map) (fn [f] mcomm/dump-dispatch-map))
   (alter-var-root (var start) (fn [f] msync/start)))
@@ -698,7 +612,7 @@
 (defn config-async []
   (log/trace "config-async")
   ;;FIXME: load core.async
-  ;; (alter-var-root (var config-co-ns) (fn [f] masync/config-co-ns))
+  ;; (alter-var-root (var config-adapter) (fn [f] masync/config-adapter))
   ;; (alter-var-root (var config-netspace) (fn [f] masync/start-netspace-observer))
   ;; (alter-var-root (var dump-dispatch-map) (fn [f] mcomm/dump-dispatch-map))
   ;; (alter-var-root (var start) (fn [f] masync/start))
