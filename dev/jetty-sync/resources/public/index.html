@@ -1,0 +1,25 @@
+<!DOCTYPE html><html><head><title>my webpage</title><meta charset="utf-8"><meta name="description" content="my webpage"><meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1, user-scalable=yes"><link rel="manifest" href="manifest.json"><meta name="theme-color" content="#2E3AA1"><meta name="mobile-web-app-capable" content="yes"><meta name="application-name" content="PSK"><link rel="icon" sizes="192x192" href="images/touch/chrome-touch-icon-192x192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black"><meta name="apple-mobile-web-app-title" content="my webpage"><link rel="apple-touch-icon" href="images/touch/apple-touch-icon.png"><meta name="msapplication-TileColor" content="#3372DF"><meta name="msapplication-TileImage" content="images/touch/ms-touch-icon-144x144-precomposed.png"><link rel="import" href="themes/hello/world/core.html"><link rel="import" href="styles/shared/style_modules.html"><style is="custom-style" include="shared-styles"></style><script src="scripts/webcomponentsjs/webcomponents-lite.js"></script><script type="text/javascript" src="scripts/hello/world/core.js"></script><script type="text/javascript" src="scripts/foo/bar/baz.js"></script><link rel="stylesheet" type="text/css" href="styles/hello/world/core.css"><link rel="stylesheet" type="text/css" href="styles/foo/bar/baz.css"><link rel="import" href="polymer/paper-button/paper-button.html"><link rel="import" href="polymer/paper-card/paper-card.html"><link rel="import" href="polymer/paper-checkbox/paper-checkbox.html"><link rel="import" href="polymer/paper-dialog/paper-dialog.html"><link rel="import" href="polymer/paper-dialog-scrollable/paper-dialog-scrollable.html"><link rel="import" href="polymer/paper-input/paper-input.html"><link rel="import" href="polymer/paper-input/paper-textarea.html"><link rel="import" href="polymer/iron-flex-layout/iron-flex-layout.html"><link rel="import" href="polymer/iron-form/iron-form.html"><link rel="import" href="polymer/neon-animation/neon-animation.html"></head><body>
+<h1>TESTING</h1>
+<div id="cards"><paper-card><div class="card-content"><div>Hello, world!<br><br><span>Hoorah!</span></div></div></paper-card></div><paper-textarea></paper-textarea><div><paper-button data-dialog="scrolling" raised onclick="clickHandler(event)">Register</paper-button></div><paper-dialog id="scrolling"><h2>Dialog Title</h2><div class="horizontal-section"><form is="iron-form" id="formPost" method="post" action="/"><paper-input name="applicant-name" label="Applicant Name" required></paper-input><br><paper-input name="affiliation" label="Affiliation" required></paper-input><paper-input name="address1" label="address line 1" required></paper-input><paper-input name="address2" label="address line 2" required></paper-input><paper-input name="city" label="city" required></paper-input><paper-input name="state" label="state" required></paper-input><paper-input name="zip" label="zip" required></paper-input><paper-input name="email" label="email" required></paper-input><label>Interest</label><select name="interest"><option value="culture">Organizational culture</option><option value="methods">New methods</option><option value="i18n">International</option><option value="synthetic">Synthetic data methods</option><option value="reporting">Reporting and storing</option><option value="practical">Practical/Ethical considerations</option></select><br><br><br><div class="buttons"><paper-button dialog-dismiss>Cancel</paper-button><paper-button dialog-confirm onclick="submitHandler(event)" autofocus>Submit</paper-button></div></form></div></paper-dialog><br><br><div class="horizontal-section-container"><div><h4>Submitted form data</h4><div class="horizontal-section wide"><div id="output"></div></div></div></div><script>
+    document.getElementById('formPost').addEventListener('iron-form-submit', display);
+    function display(event) {
+      var output = document.getElementById('output');
+      output.innerHTML = JSON.stringify(event.detail);
+    }
+    function submitHandler(event) {
+      Polymer.dom(event).localTarget.parentElement.parentElement.submit();
+    }
+    function resetHandler(event) {
+      Polymer.dom(event).localTarget.parentElement.reset();
+    }</script><script>
+    function clickHandler(e) {
+      var button = e.target;
+      if (!button.hasAttribute('data-dialog')) {
+        return;
+      }
+      var id = button.getAttribute('data-dialog');
+      var dialog = document.getElementById(id);
+      if (dialog) {
+        dialog.open();
+      }
+    }</script></body></html>

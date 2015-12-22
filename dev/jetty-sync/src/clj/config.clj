@@ -1,15 +1,33 @@
 (ns config
-  (:require [miraj :refer [config >> >>!]]
+  (:require [miraj :refer [config >> >>! co-compile]]
+            [miraj.markup :as mk]
             [miraj.http.response :refer [not-found]]))
 
-(println "LOADING config")
+;; (println "LOADING config")
 
 (defn init []
-  (println "RUNNING config/init"))
+  (println "RUNNING jetty config/init"))
 
 (miraj/config :sync)
 
-(require '[hello.world])
+(require 'polymer.iron)
+
+(polymer.iron/list)
+
+(require 'hello.world)
+
+(hello.world/main)
+
+(clojure.core/find-ns (quote hello.world))
+
+(co-compile 'hello.world)
+
+(miraj.sync/activate 'hello.world/main)
+
+(mk/serialize (miraj.sync/activate 'hello.world/main))
+
+(let [fname "./index.html"]
+  (spit fname (mk/pprint :html (miraj.sync/activate 'hello.world/main))))
 
 ;; (def dispatch-table {:$ 'hello.world/main
 ;;                      :employee 'hello.world/employee

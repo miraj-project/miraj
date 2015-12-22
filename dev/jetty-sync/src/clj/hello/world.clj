@@ -3,14 +3,15 @@
        "docstring here"
        (:title "my webpage")
        (:main 'main)
-       (:polymer [polymer.paper :as paper :only [button card checkbox dialog dialog-scrollable input]]
+       (:polymer [polymer.paper :as paper :only [button card checkbox dialog dialog-scrollable
+                                                 input textarea]]
                  [polymer.iron :as iron :only [flex-layout form]] ;; :refer :all :exclude [behaviors input]]
-                 [polymer.font :as fnt :only [roboto]]
                  [polymer.neon :as neon :only [animation]])
-       (:html [hello.world :css :refer [core]]
-              [hello.world :js :refer [core]]
-              [foo.bar :css :refer [baz]]
-              [foo.bar :js :refer [baz]])
+                 ;; [polymer.font :only [roboto]])
+       (:styles [styles.hello.world :css :refer [core]]
+                [styles.foo.bar :css :refer [baz]])
+       (:scripts [scripts.hello.world :js :refer [core]]
+                 [scripts.foo.bar :js :refer [baz]])
                  ;;FIXME: also support: :html, maybe :theme?
        (:require [miraj :as miraj :refer :all] ;;FIXME
                  [miraj.html :as h]
@@ -20,12 +21,6 @@
                  [clojure.tools.logging :as log :only [trace debug error info]]
                  [clojure.pprint :as pp]
                  [clojure.string :as string]))
-                 ;; [clojure.tools.reader :as reader]
-                 ;; [clojure.tools.reader.edn :as edn]
-                 ;; [clojure.tools.reader.reader-types :as readers]
-                 ;; [clojure.test]
-                 ;; [clojure.data.xml]
-                 ;; [clojure.data.xml.test-utils :refer [test-stream lazy-parse*]]))
 
 (log/trace "loading")
 
@@ -83,6 +78,7 @@
                                                       ;; :raised "raised"
 
 (co-fn main []
+       (log/info "loading hello.world/main")
        (h/body
         (h/div {:id "cards"}
                (paper/card
@@ -90,6 +86,9 @@
                        (h/div "Hello, world!"
                               (h/br)(h/br)
                               (h/span "Hoorah!")))))
+
+        (paper/textarea)
+
         (h/div
          (paper/button {:data-dialog "scrolling"
                         :raised "raised"
