@@ -415,6 +415,7 @@
 ;; (log/trace "result: " result)
 ;; result))
 
+;;FIXME migrate to miraj.html? polymer.dom?
 (defmacro ctor->dom-module
   [ctor]
   ;; eval body to get html string, then emit dom-module
@@ -445,6 +446,7 @@
            ;;         (log/trace "BODY: " bod#)
            mkup#)))))
 
+;;FIXME migrate to miraj.html?  polymer.dom?
 (defmacro for-dom
   [binding & body]
   (log/trace "for-dom " binding body)

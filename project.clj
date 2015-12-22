@@ -1,19 +1,18 @@
 (defproject miraj "1.1.4-SNAPSHOT"
-  :description "Miraje - web components, the Clojure way"
-  :url "https://github.com/mobileink/polymeraj"
-  :license {:name "BSD License"
-            :url "http://polymer.github.io/LICENSE.txt"}
+  :description "miraj - web components, the Clojure way"
+  :url "https://github.com/mobileink/miraj"
+  :license {:name "EPL License"
+            :url "http://opensource.org/licenses/eclipse-1.0.php"}
   :source-paths ["src/clj"]
   :resource-paths ["resources/public"]
-  ;; :aot [miraj]
   :dependencies [[org.clojure/clojure "1.8.0-RC3"] ;; "1.7.0"]
                  [org.clojure/core.async "0.2.374"]
-                 ;; [org.clojure/core.async "0.2.375-HACK"]
                  [org.clojure/clojurescript "1.7.170"]
                  ;; [org.clojure/tools.analyzer.jvm "0.6.8"]
-                 [org.clojure/tools.namespace "0.2.11"]
                  ;; [org.clojure/data.xml "0.0.8"]
-                 [miraj/markup "0.1.0-SNAPSHOT"]
+                 [miraj/html "5.1.0-SNAPSHOT"]
+                 ;; [miraj/markup "0.1.0-SNAPSHOT"]
+                 ;; [polymer/iron "1.2.3-SNAPSHOT"]
                  [clj-http "2.0.0"]
                  [cheshire "5.5.0"]
                  [ring/ring-core "1.4.0"]
