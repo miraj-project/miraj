@@ -6,7 +6,6 @@
 
 (miraj/config :sync)
 (remove-ns 'co-ns.meta-test)
-;(remove-ns 'miraj)
 (require '[co-ns.meta-test] :reload)
 
 (ml/pprint
