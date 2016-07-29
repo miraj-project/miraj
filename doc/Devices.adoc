@@ -1,0 +1,73 @@
+devices, states, side-effects, etc.
+===================================
+
+A device is a combination of a program text and a (physical) machine.
+And maybe an OS or some other kind of supervisory program text.
+
+At one extreme: a micro-controller with no operating system, flashed
+with one program.  At the other extreme: a cluster of multi-core
+computers running a virtualization service hosting multiple operating
+systems.  In the middle: a machine running a multi-tasking operating
+system that runs multiple programs.
+
+We say that physical machines host devices, and devices host programs.
+But the device is the combination of machine and program.
+
+A device may host other devices; for example, we can think of the OS
+as a device that hosts application devices.
+
+Devices have three kinds of state: machine state, computation state,
+and information state. Machine state refers to the hardware;
+information state refers to the program's data; computation state
+refers to the information state of the device hosting the application
+device.  For example, OS control blocks, device nodes in the kernel,
+and so forth are part of the computation state.  The hosting device
+for an application device may be an OS or a language runtime;
+computation state will normally be split between OS (kernelspace) and
+runtime (control structures managed by the runtime in userspace).
+
+In other words, we're replacing "program" with the more general notion
+of "device".  This gives us a single uniform idiom for discussing both
+traditional (Turing machine, lambda calculus) models of computation
+and the newer notion of interactionist computation.  The concept of a
+device is intended to accomodate the conceptual changes required in
+moving to an interactionist perspective.
+
+Program execution always results in change of machine state; at the
+very least, running code consumes energy.  Strictly speaking, there
+are no pure functions, since all functions have the side effect of
+consuming energy.
+
+
+* function: makes no alteration in the information state or
+  computation state of the device.
+
+* quasi-function: alters computation state but not information state.
+  For example, operations that spawn threads or processes are
+  quasi-functions; they alter computation state by creating control
+  blocks in either kernel space or user space or both.  But they do
+  not alter information state.  Clojure's core.async/go, for example.
+
+* operation: a routine whose execution _may_ result in alteration of
+  information state.  For example, assignment in languages like C or
+  Java is an operation.  Clojure contains many operations, including
+  `def`, `defn`, and `ns`; all of these operations change the
+  information state.  For example, `defn` interns symbols, which
+  changes the information state.
+
+* hygienic operation: an operation whose changes to information state
+  are localized or limited.  For example, Clojure's swap!, reset!,
+  core.async/>!, etc. are hygienic operations; they only affect their
+  arguments.
+
+* unhygienic operation: an operation whose changes to information
+  state are unbounded; for example, assignment.  In Clojure, `def` is
+  an example of an unhygienic operation: it changes the state of the
+  namespace by interning a new symbol.  Any program depending on the
+  "current" list of interned symbols for a namespace would have to
+  take this into account.  (On the other hand, might it be better to
+  treat interned symbols as part of the computation state rather than
+  the information state, or perhaps as a kind of hybird?  But since
+  such symbols are available as information within the program, they
+  must be part of the information state.)
+

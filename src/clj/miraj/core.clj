@@ -12,8 +12,8 @@
             [boot.core :as boot]
             [boot.pod :as pod]
             [boot.util :as util]
-            [boot-bowdlerize :as bow]
-            [miraj.polymer :as polymer :refer :all]
+            ;; [mobileink.boot-bowdlerize :as bow]
+            [polymer :refer :all]
             [miraj.markup :as x])
             ;; [clojure.tools.reader :as reader]
             ;; [clojure.tools.reader.reader-types :as readers]
@@ -38,6 +38,8 @@
 ;;           [java.util Date]))
 
 (println "loading miraj/core.clj")
+
+(def bower-repo "bower_components")
 
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
@@ -995,7 +997,7 @@
             ;; (println "REFER " sym v (meta v))
             (. *ns* (refer (or (rename sym) sym) v))
             (:uri (meta v))
-            #_(str "bower_components/" (:uri (meta v)))))))))
+            #_(str bower-repo "/" (:uri (meta v)))))))))
 
 (defn- libspec?
   "Returns true if x is a libspec"
@@ -1023,9 +1025,9 @@
      "True while a verbose load is pending"}
   *loading-verbosely* false)
 
-(defn construct-html
+(defn declare-webcomponent
   [ns-sym nm-sym type & docstring]
-  ;; (println "CONSTRUCT-HTML:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
+  ;; (println "DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
   (let [ds (if (empty? docstring) ""
                (if (string? (first docstring))
                  (first docstring)
@@ -1038,9 +1040,9 @@
             html-tag (str polymer-cat "-" nm-sym)
             ;; _ (println "html-tag: " html-tag)
             html-kw (keyword html-tag)
-            uri (str "bower_components/" (if (vector? (first docstring))
-                                           (ffirst docstring)
-                                           (str html-tag "/" html-tag ".html")))
+            uri (str bower-repo "/" (if (vector? (first docstring))
+                                      (ffirst docstring)
+                                      (str html-tag "/" html-tag ".html")))
             ;; _ (println "uri:      " uri)
             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
                            (fn [& args]
@@ -1054,12 +1056,13 @@
                                elt)))]
         ;; (println "NS-SYM: " ns-sym)
         ;; (println "NM-SYM: " nm-sym)
-        ;; (println "VAR: " newvar)
+        ;; (println "NEWVAR: " newvar)
         newvar)
       ;; else custom component
       (let [html-tag nm-sym
             html-kw (keyword html-tag)
-            uri (str (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
+            uri (str "/" (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
+            uri (str/replace uri #"-" "_")
             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
                            (fn [& args]
                              (let [elt (if (empty? args)
@@ -1072,16 +1075,20 @@
                                elt)))]
         ;; (println "NS-SYM: " ns-sym)
         ;; (println "NM-SYM: " nm-sym)
-        ;; (println "VAR: " newvar)
+        ;; (println "NEWVAR: " newvar)
         newvar))))
 
 (defn- load-polymer-lib
+  "Load a polymer lib. Create the namespace (e.g. polymer.x); for each
+  var y, get config data from the polymer/x map, then intern
+  polymer.x/y"
   [lib need-ns require]
-  ;; (println "load-polymer-lib: " lib need-ns require)
+  (println "load-polymer-lib: " lib need-ns require)
   (let [lns (create-ns lib)
         segs (str/split (str lib) #"\.")
-        pns (find-ns 'miraj.polymer)
-        v (find-var (symbol "miraj.polymer" (str need-ns)))
+        pns (find-ns 'polymer)
+        ;; _ (println "PNS: " pns)
+        v (find-var (symbol "polymer" (str need-ns)))
         kw-docstring-map (deref v)]
     ;; (println "created ns:  " lns)
     ;; (println "polymer ns:  " pns)
@@ -1095,7 +1102,7 @@
     (doseq [[kw docstring] kw-docstring-map]
       (do
         (let [sym (symbol (name kw))
-              elt (construct-html lns sym :polymer docstring)]
+              elt (declare-webcomponent lns sym :polymer docstring)]
           ;; (println "ELT: " elt)
           #_(load (root-resource lib))
           (throw-if (and need-ns (not (find-ns lib)))
@@ -1106,18 +1113,49 @@
              (commute *loaded-libs* conj lib)))
           elt)))))
 
-(defn- load-custom-lib
+(defn- load-miraj-lib-static-resource
+  [ns-sym nm-sym]
+  (let [uri (str "/" (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
+        uri (str/replace uri #"-" "_")
+        _ (println "CHECKING: " uri)
+        resource (io/resource uri)]
+    (println "RESOURCE: " resource)
+    (if (nil? resource) (throw (java.io.FileNotFoundException. (format "web resource %s not found" uri))))
+    #_(declare-webcomponent lns sym :_cowebcomponent "")))
+
+(defn- load-miraj-lib
+  "load miraj web component lib"
   [lib need-ns require opts]
-  ;; (println "load-custom-lib: " lib need-ns require opts)
-  (let [lns (create-ns lib)]
-        ;; segs (str/split (str lib) #"\.")
-        ;; pns (symbol "miraj.polymer" (str (last segs)))]
-    ;; (println "created ns: " lns)
+  (println "load-miraj-lib: " lib need-ns require opts)
+
+  ;; in dynamic mode, component is loadable from the defweb-component ns
+  ;; in static mode, the component is static html/cljs, not loadable
+  ;; so: try to require the lib; if ok then done
+  ;; else declare webcomponent var whose metadata is href, not defn
+
+  (let [reqns (try
+                (do (clojure.core/require lib)
+                    (clojure.core/find-ns lib))
+                (catch java.io.FileNotFoundException e
+                  (do ;; (println "LOAD_MIRAJ_LIB EXCEPTION" (.getMessage e))
+                      nil)))
+        lns (if (nil? reqns)
+              (clojure.core/create-ns lib)
+              reqns)]
+    (println "required ns: " reqns)
     (if need-ns
       (alias (symbol need-ns) (symbol lib)))
     ;; TODO: find and load jarfile?
     (doseq [sym (:refer (apply hash-map opts))]
-      (let [elt (construct-html lns sym :cowebcomponent "")]
+      (let [elt (if (nil? reqns)
+                  (load-miraj-lib-static-resource lns sym)
+                  (find-var (symbol (str lib) (str sym))))]
+        ;; (if (nil? resource) (throw (Exception. (format ":require resource %s not found on classpath" uri))))
+        ;; (println "ELT: " elt)
+        ;; (println "DEREF ELT: " (deref elt))
+        ;; (println "META ELT: " (meta elt))
+        ;; (println "ELT URI: " uri)
+        ;; (println "ELT RESOURCE: " resource)
         #_(load (root-resource lib))
         (throw-if (and need-ns (not (find-ns lib)))
                   "namespace '%s' not found after loading '%s'"
@@ -1141,7 +1179,7 @@
       (let [pl (load-polymer-lib lib need-ns require)]
         ;; (println "PL: " pl)
         pl)
-      (let [cl (load-custom-lib lib need-ns require opts)]
+      (let [cl (load-miraj-lib lib need-ns require opts)]
         ;; (println "custom lib: " cl)
         cl)
       )))
@@ -1216,7 +1254,7 @@
       (when as
         (when *loading-verbosely*
           (printf "(clojure.core/alias '%s '%s)\n" as lib))
-        #_(alias as lib))
+        (alias as lib))
       (when (or use (:refer filter-opts))
         (when *loading-verbosely*
           (printf "(miraj.core/refer '%s" lib)
@@ -1231,7 +1269,7 @@
   "Loads libs, interpreting libspecs, prefix lists, and flags for
   forwarding to load-lib"
   [& args]
-  ;; (println "LOAD-LIBS " args)
+  ;; (println "load-libs " args)
   ;; step 1: clojure.core/require the namespaces, without options
   ;;(doseq [arg args]
     (let [;; ns-basic (first arg)
@@ -1264,7 +1302,7 @@
 (defn require
   ""
   [page-var & args]
-  ;; (println ":REQUIRE " page-var args)
+  (println ":require " page-var args)
   (let [reqres (remove nil? (flatten (apply load-libs :require args)))
         reqelts (for [req reqres]
                   (x/element :link {:rel "import" :href req}))]
@@ -1283,28 +1321,27 @@
         ]
     ))
 
-(defn get-imports-config
+;;FIXME: put this in webc?
+(defn get-imports-config-map
   []
   (let [home-imports-path (str (System/getProperty "user.home") "/.miraj/imports.edn")
         ;; _ (println "home-imports-path: " home-imports-path)
         home-imports (try (slurp home-imports-path)
-                          (catch java.io.FileNotFoundException e
-                            (do (println "EXCEPTION: " (.getMessage e)) nil)))
+                          (catch java.io.FileNotFoundException e nil))
         home-imports (if home-imports (read-string home-imports) nil)
         ;; _ (println "HOME IMPORTS.EDN: " home-imports)
         proj-imports (try (slurp ".miraj/imports.edn")
-                          (catch java.io.FileNotFoundException e
-                            (do (println "EXCEPTION: " (.getMessage e)) nil)))
+                          (catch java.io.FileNotFoundException e nil))
         proj-imports (if proj-imports (read-string proj-imports) nil)
-        ;; _ (println "PROJ IMPORTS.EDN: " proj-imports)
+        _ (println "PROJ IMPORTS.EDN: " proj-imports)
         ]
     (merge-with merge home-imports proj-imports)))
 
 (defn import
   ""
   [page-var & args]
-  ;; (println ":IMPORT " page-var args)
-  (let [imports-config-map (get-imports-config)
+  (println ":import " page-var args)
+  (let [imports-config-map (get-imports-config-map)
         ;; _ (println "IMPORTS CONFIG MAP: " imports-config-map)
         imports (for [arg args]
                     (let [ns-basic (first arg)
@@ -1373,7 +1410,7 @@
   {:arglists '([name docstring? attr-map? references*])
    :added "1.0"}
   [name & references]
-  (println "defweb-page " name " in ns " *ns*)
+  (println "DEFWEB-PAGE " name " in ns " *ns*)
   (let [page-var (intern *ns* name)
         ;; _ (println "PAGE VAR: " page-var)
         process-reference
@@ -1428,65 +1465,130 @@
            (clojure.core/alter-var-root ~page-var
                                         (fn [old# & args#] html#))
            (clojure.core/alter-meta! ~page-var
-                                     (fn [old# & args#] (merge old# ~metadata {:doc ~docstring :_webpage true}))))))))
+                                     (fn [old# & args#] (merge old# ~metadata {:doc ~docstring :_webpage true})))
+           ~page-var)))))
 
 ;;OBSOLETE
-#_(defmacro co-fn
-  [fn-tag docstring elt-kw elt-uri typ]
-  (do #_(println "co-fn:" typ fn-tag elt-kw elt-uri docstring)
-              (eval `(defn ~fn-tag ~docstring
-                       [& args#]
-;;                       (println "invoking " ~fn-tag)
-                       (let [elt# (if (empty? args#)
-                                    (with-meta (element ~elt-kw)
-                                      {:miraj
-                                       {:co-fn true
-                                        :component ~typ
-                                        :doc ~docstring
-                                        :elt-kw ~elt-kw
-                                        :elt-uri ~elt-uri}})
-                                    (let [first# (first args#)
-                                          rest# (rest args#)
-                                          [attrs# content#] (parse-elt-args first# rest#)]
-                                      (with-meta (apply element ~elt-kw attrs# content#)
-                                        {:miraj {:co-fn true
-                                                 :component ~typ
-                                                 :doc ~docstring
-                                                 :elt-kw ~elt-kw
-                                                 :elt-uri ~elt-uri}})))]
-                         elt#)))
-              (alter-meta! (find-var (symbol (str *ns*) (str fn-tag)))
-                            (fn [old new]
-                              (merge old new))
-                            {:miraj {:co-fn true
-                                     :component typ
-                                     :doc docstring
-                                     :elt-kw elt-kw
-                                     :elt-uri elt-uri}})))
+;; #_(defmacro co-fn
+;;   [fn-tag docstring elt-kw elt-uri typ]
+;;   (do #_(println "co-fn:" typ fn-tag elt-kw elt-uri docstring)
+;;               (eval `(defn ~fn-tag ~docstring
+;;                        [& args#]
+;; ;;                       (println "invoking " ~fn-tag)
+;;                        (let [elt# (if (empty? args#)
+;;                                     (with-meta (element ~elt-kw)
+;;                                       {:miraj
+;;                                        {:co-fn true
+;;                                         :component ~typ
+;;                                         :doc ~docstring
+;;                                         :elt-kw ~elt-kw
+;;                                         :elt-uri ~elt-uri}})
+;;                                     (let [first# (first args#)
+;;                                           rest# (rest args#)
+;;                                           [attrs# content#] (parse-elt-args first# rest#)]
+;;                                       (with-meta (apply element ~elt-kw attrs# content#)
+;;                                         {:miraj {:co-fn true
+;;                                                  :component ~typ
+;;                                                  :doc ~docstring
+;;                                                  :elt-kw ~elt-kw
+;;                                                  :elt-uri ~elt-uri}})))]
+;;                          elt#)))
+;;               (alter-meta! (find-var (symbol (str *ns*) (str fn-tag)))
+;;                             (fn [old new]
+;;                               (merge old new))
+;;                             {:miraj {:co-fn true
+;;                                      :component typ
+;;                                      :doc docstring
+;;                                      :elt-kw elt-kw
+;;                                      :elt-uri elt-uri}})))
+
+(defn codom
+  "called by defweb-codom processing"
+  [page-var & args]
+  (let [content (map #(eval %) args)]
+        ;;bod (x/element :body content)]
+    ;; (println ":BODY " content)
+    [:codom content]))
 
 (defmacro defweb-codom
-  [nm & args]
-  ;; (println "DEF-CODOM: " (str nm)) ;; " ARGS: " args)
-  (let [ns-sym *ns* ; (ns-name *ns*)
-        nm-sym (symbol (name nm))
-        [docstr args] (if (string? (first args))
-                        [(first args) (rest args)]
-                        ["" args])
-        [argvec args] [(first args) (rest args)]]
-    ;; (println "    NS: " (pr-str ns-sym))
-    ;; (println "    NM_SYM: " (pr-str nm-sym))
-    ;; (println "    DOCSTR: " (pr-str docstr))
-    ;; (println "    DOCSTR: " (pr-str docstr))
-    ;; (println "    ARGVEC: " (pr-str argvec))
-    ;; (println "    ARGS: " (pr-str args))
-  `(do ;;(println "codom: " ~(str nm) ~@args)
-       (let [tree# (apply x/element ;;~(keyword nm)
-                          :CODOM_56477342333109
-                          {:id ~(str nm)} (list ~@args))
-             codom# (x/xsl-xform x/xsl-normalize-codom tree#)]
-         (intern *ns* (with-meta (symbol ~(str nm-sym)) {:doc ~docstr :codom true})
-                 codom#)
-         codom#))))
+  ""
+  {:arglists '([name docstring? attr-map? references*])
+   :added "1.0"}
+  [name & references]
+  (println "DEFWEB-CODOM " name " in ns " *ns*)
+  (let [codom-var (intern *ns* name)
+        ;; _ (println "PAGE VAR: " codom-var)
+        process-reference
+        (fn [[kname & args]]
+          `(do
+             ;; (println "PROCESSING: " '~(symbol "miraj.core" (clojure.core/name kname)))
+             ;; (println "ARGS: " '~args)
+             (~(symbol "miraj.core" (clojure.core/name kname))
+              ~codom-var
+              ~@(map #(list 'quote %) args))))
+        docstring  (when (string? (first references)) (first references))
+        ;; _ (println "DOCSTRING: " docstring)
+        [args references] (if docstring
+                            [(fnext references) (nnext references)]
+                            [(first references) (next references)])
+        ;; _ (println "ARGS: " args)
+        ;; references (if docstring (next references) references)
+        ;; _ (println "REFS: " references)
+        name (if docstring
+               (vary-meta name assoc :doc docstring)
+               name)
+        ;; _ (println "NAME: " name (meta name))
+        metadata {}
+        ;; metadata (eval `(let [maybe-meta#  ~(first references)]
+        ;;            (cond (map? maybe-meta#) maybe-meta#
+        ;;                  (symbol? maybe-meta#) (if (map? maybe-meta#) maybe-meta#))))
+        ;; ;; _ (println "metadata: " metadata)
+        ;; references (if metadata (next references) references)
+        ;; name (if metadata
+        ;;        (vary-meta name merge metadata)
+        ;;        name)
+        name-metadata (meta name)]
+    `(do
+       (with-loading-context
+         ;; (let [[reqs# imports# body#] [~@(map process-reference references)]
+         ;;       head# (x/element :head reqs# imports#)
+         ;;       html# (x/element :html head# body#)]
+         (let [reqs# (into {} [~@(map process-reference references)])
+               ;; head# (apply x/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
+               head# (flatten (list (:require reqs#) (:import reqs#)))
+               ;; _# (println "HEAD# " head#)
+               ;; body# (apply x/element :codom {} (:codom reqs#))
+               body# (:codom reqs#)
+               ;; html# (apply x/element :html {} (vec (flatten (list head# body#))))
+               codom# (concat head# body#)
+
+               ;; _# (println "ALL: " reqs#)
+               ;; _# (println "HEAD# " head#)
+               ;; _# (println "BODY# " body#)
+               ;; _# (println "CODOM# " codom#)
+
+           ;; (println "HTML# " html#)
+           ;; (clojure.core/intern *ns* '~name html#)
+           ;; (intern *ns*
+           ;;         (with-meta
+           ;;           (symbol ~(str name))
+           ;;           (merge {:doc ~docstring :_webpage true} ~metadata)))
+
+               tree# (apply x/element ;;~(keyword nm)
+                            :CODOM_56477342333109
+                            {:id ~(str name)} codom#)
+               codom-norm# (x/xsl-xform x/xsl-normalize-codom tree#)]
+           (clojure.core/alter-var-root ~codom-var
+                                        (fn [old# & args#] codom-norm#))
+           (clojure.core/alter-meta! ~codom-var
+                                     (fn [old# & args#]
+                                       (merge old# ~metadata {:doc ~docstring :codom true})))
+           ~codom-var)))))
+
+         ;; (intern *ns* (with-meta (symbol ~(str nm-sym)) {:doc ~docstr :codom true})
+         ;;         codom#)
+         ;; codom#))))
+
 
 (defn props->cljs
   [propmap]
@@ -1585,12 +1687,22 @@
         ;; namesp (:ns (meta cvar))
         ;; ns-name (ns-name namesp)
         uri (str "tmp/" (var->path cvar) ".cljs")
-        cljs-ns (var->cljs-ns cvar)
+        cljs-ns (symbol (str (var->cljs-ns cvar) ".core"))
         propmap (props->cljs rawprops)
         listeners (listeners->cljs rawlisteners)
         methmap (methods->cljs (merge rawprops rawlisteners rawbehaviors rawmethods))
         ;; _ (println "METHODS MAP: " methmap)
         behaviors (behaviors->cljs rawbehaviors)
+        ;; cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns))
+        ;;                      (pprint-str '(enable-console-print!))
+        ;;                      (pprint-str '(println "hello"))])
+        ;;                      ;; (pprint-str (list 'js/Polymer
+        ;;                      ;;                   (list 'clj->js
+        ;;                      ;;                         (merge {:is (keyword (:name (meta cvar)))}
+        ;;                      ;;                                propmap
+        ;;                      ;;                                listeners
+        ;;                      ;;                                methmap
+        ;;                      ;;                                behaviors))))])
         cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns))
                              ;; (pprint-str '(enable-console-print!))
                              (pprint-str (list 'js/Polymer
@@ -1599,7 +1711,8 @@
                                                             propmap
                                                             listeners
                                                             methmap
-                                                            behaviors))))])]
+                                                            behaviors))))])
+        ]
     ;; (println "CLJS:\n" cljs)
     ;; (println "URI: " uri)
     ;; (io/make-parents uri)
@@ -1612,7 +1725,7 @@
 (defmacro defweb-component
   "Define a web component (Polymer flavor)"
   [nm & args]
-  ;; (println "COMPONENT: " (str nm)) ;; " ARGS: " args)
+  (println "DEFWEB-COMPONENT: " (str nm)) ;; " ARGS: " args)
   (if (not (str/includes? nm "-")) (throw (IllegalArgumentException.
                                            (str "Component name must contain at least one dash '-'."))))
   ;; (println "COMPONENT ARGS: " (pr-str args))
@@ -1677,7 +1790,7 @@
                                                   new#)})))
                       {:_webcomponent true
                        :codom result#})
-         ;; (println "ALTERED META FOR " cvar#)
+         ;; (println "ALTERED META FOR " cvar# (meta cvar#))
          cvar#)))
 
 (defn- get-webcomponents
@@ -1734,158 +1847,5 @@
 ;;                                            [nm ivar]))))))))
 ;;       (core/sync! root-dir tmp-dir)
 ;;       fileset)))
-
-(defn- get-webvars
-  "Search namespaces for vars"
-  [web-var & nss]
-  (println "get-webvars: " web-var nss)
-  (let [nss (or nss (all-ns))]
-    (for [the-ns nss]
-      ;; (println "NS: " the-ns)
-      (let [interns-map (ns-interns the-ns)]
-        (filter (fn [entry] (get (meta (last entry)) web-var)) interns-map)))))
-
-(def bower-repo "bower_components")
-
-(defn- bowerize
-  [bower-pkg assets-out]
-  (println "bowerize " bower-pkg assets-out)
-  ;;  (bow/install-bower :pkg-name entry :pkg-type :bower)
-  (let [local-bower  (io/as-file "./node_modules/bower/bin/bower")
-        global-bower (io/as-file "/usr/local/bin/bower")
-        bcmd         (cond (.exists local-bower) (.getPath local-bower)
-                           (.exists global-bower) (.getPath global-bower)
-                           :else "bower")
-        bower-dir (str assets-out bower-repo)]
-    ;; (io/make-parents bower-dir)
-    (let [c [bcmd "install" bower-pkg :dir assets-out]]
-      (println "bower cmd: " c)
-      (println (format "Installing bower pkg:   %s\n" bower-pkg))
-      (apply sh c))))
-
-(defn- compile-import
-  "Compile web import forms."
-   [import imports-config-map assets-out]
-  (println "compile-import: " import)
-  (let [ns-basic (first import)
-        items (next import)]
-    (doseq [item items]
-      (let [entry (get-in imports-config-map [ns-basic item])]
-        (println "IMPORT CONFIG: " entry)
-        (if-let [bower (:bower entry)]
-          (bowerize (:bower entry) assets-out)
-          (if-let [cdn (:cdn entry)]
-            (println "CDN: " entry)
-            (if-let [f (:file entry)]
-              (println "FILE: " entry)
-              (throw (Exception. "bad entry in imports.edn: must have :bower, :cdn, or :file " entry)))))
-          ))))
-
-(defn- compile-component-import
-  "Compile web component import forms."
-   [import imports-config-map assets-out]
-  (println "compile-import: " import)
-  (let [ns-basic (first import)
-        items (apply hash-map (next import))
-        segs (str/split (str ns-basic) #"\.")
-        seg1 (first segs)
-        seg2 (fnext segs)]
-    (println "segs: " segs)
-    (println "seg1: " seg1)
-    (println "seg2: " seg2)
-    (doseq [item (:refer items)]
-      (println "ITEM: " item)
-      (if (= seg1 "polymer")
-        (let [pkg-name (str "PolymerElements/" seg2 "-" item)]
-          (println "IMPORT POLYMER: " pkg-name)
-          (bowerize pkg-name assets-out))
-        (println "NONPOLYMER: " ns-basic item)))))
-
-(defn- compile-imports
-  "Process all webimports in the project."
-  [assets-out & nss]
-  (println "compile-imports")
-  (let [pages (apply hash-map (flatten (remove empty? (apply get-webvars :_webpage nss))))
-        imports-config-map (get-imports-config)]
-    (println "PAGES: " pages)
-    (doseq [[psym pvar] pages]
-      (let [page-meta (meta pvar)]
-        (doseq [import (:_webimports page-meta)]
-          (compile-import import imports-config-map assets-out))
-        (doseq [component (:_webcomponents page-meta)]
-          (compile-component-import component imports-config-map assets-out))))))
-
-(defn- compile-webcomponent
-  "Compile defweb-component forms to html+js and write to files."
-   [csym cvar html-out cljs-out]
-  ;; [^clojure.lang.Symbol component & mode]
-  ;; [file doc & mode]
-  (println "compile-webcomponent: " csym cvar)
-  (println "Output dirs: " html-out cljs-out)
-  (let [path (str/replace (str (:ns (meta cvar))) #"\." "/")
-        csym (str/replace csym #"-" "_")
-        hfile (str/join "/" [html-out path (str csym ".html")])
-        cfile (str/join "/" [cljs-out path (str csym ".cljs")])]
-    (println "hfile: " hfile)
-    (println "cfile: " cfile)
-    (io/make-parents hfile)
-    (io/make-parents cfile)
-    (spit hfile (with-out-str (x/pprint (-> cvar meta :miraj :codom))))
-    (spit cfile (-> cvar meta :miraj :prototype))))
-
-(defn- compile-webcomponents
-  "Process all webcomponents in the project."
-  [html-out cljs-out & nss]
-  (println "compile-webcomponenents, html-out: " html-out "; cljs-out: " cljs-out ", nss: " nss)
-  (let [components (apply hash-map (flatten (remove empty?
-                                                    (apply get-webvars :_webcomponent nss))))]
-    ;;(println "webcomponents: " components)
-    (doseq [c components]
-      (compile-webcomponent (first c) (last c) html-out cljs-out))))
-
-(defn- compile-webpage
-  "Compile defweb-page forms to html+js and write to files."
-   [csym cvar html-out cljs-out]
-  ;; [^clojure.lang.Symbol component & mode]
-  ;; [file doc & mode]
-  (println "compile-webpage: " csym cvar)
-  (println "Output dirs: " html-out cljs-out)
-  (let [path (str/replace (str (:ns (meta cvar))) #"\." "/")
-        csym (str/replace csym #"-" "_")
-        hfile (str/join "/" [html-out path (str csym ".html")])
-        cfile (str/join "/" [cljs-out path (str csym ".cljs")])
-        web-ns (.. cvar -ns -name)]
-    ;; (println "hfile: " hfile)
-    ;; (println "web-ns: " web-ns)
-    ;; (println "webpage: " (do (in-ns web-ns) (x/pprint (var-get cvar))))
-    (io/make-parents hfile)
-    ;; (io/make-parents cfile)
-    (in-ns web-ns)
-    (spit hfile (with-out-str (-> cvar x/normalize x/pprint)))
-    #_(spit cfile (-> cvar meta :miraj :prototype))))
-
-(defn- compile-webpages
-  "Process all webpages in the project."
-  [html-out cljs-out & nss]
-  (println "compile-webpages, html-out: " html-out "; cljs-out: " cljs-out ", nss: " nss)
-  (let [pages (apply hash-map (flatten (remove empty? (apply get-webvars :_webpage nss))))]
-    (println "webpages: " pages)
-    (doseq [page pages]
-      (compile-webpage (first page) (last page) html-out cljs-out))))
-(defn webc
-  "Compile clj+cljs to html+js. Optional args: html-out (string),
-  cljs-out (string) nss (vector of ns symbols). With no args, process
-  all namespaces and write output to './'.  Each namespace will be
-  searched for defcomponent and defpage forms, which will be processed
-  to generate HTML and Javascript files."
-  [& {:keys [html-out cljs-out assets-out nss]
-      :or   {html-out "./"
-             cljs-out   "./"
-             assets-out "./"
-             nss nil}}]
-  (println "webc " *ns*)
-  ;(compile-webcomponents html-out cljs-out)
-  ;(compile-webpages html-out cljs-out)
-  (compile-imports assets-out))
 
 (println "loaded miraj/core.clj")

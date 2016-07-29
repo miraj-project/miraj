@@ -1,0 +1,238 @@
+HTTP rethink
+============
+
+[NOTE]
+====
+RFC 2616 has been superceded.  See
+link:https://www.mnot.net/blog/2014/06/07/rfc2616_is_dead[RFC2616 is
+dead].
+====
+
+HTTP methods do not have semantics.  What they have is rules; a
+protocol is a collection of rules governing behavior, not
+representations.
+
+The device: "Sorry Mr. Protocol, what I do with my internal state is
+none of your business.  You set the rules for externally observable
+and exhibitable behavior, and that's all.  As long as I follow the
+rules in my interactions with other devices, I can do whatever I
+please internally."
+
+There is no necessary connection between HTTP interactions and
+internal state.  The proof of this is easy to show by example: a
+server that responds to "PUT /led/on" by turning on an LED need not
+maintain any internal information representing LED state.  And nothing
+says that a server that delivers an HTML page in reponse to "GET
+/index.html" cannot change its internal state as part of its response
+process; for example, by incrementing a counter or writing to a log.
+
+In particular, HTTP methods have no intrinsic connection with the
+internal states of devices.  What the HTTP rules govern is _observable
+behavior_, not _unobservable state_.
+
+# [[postput]] POST and PUT
+
+link:http://tools.ietf.org/html/rfc7231#section-4.3.4
+
+[quote]
+====
+The fundamental difference between the POST and PUT methods is
+highlighted by the different intent for the enclosed
+representation. The target resource in a POST request is intended to
+handle the enclosed representation according to the resource's own
+semantics, whereas the enclosed representation in a PUT request is
+defined as replacing the state of the target resource.  Hence, the
+intent of PUT is idempotent and visible to intermediaries, even though
+the exact effect is only known by the origin server.
+
+...
+
+Proper interpretation of a PUT request presumes that the user agent
+knows which target resource is desired.  A service that selects a
+proper URI on behalf of the client, after receiving a state-changing
+request, SHOULD be implemented using the POST method rather than
+PUT. If the origin server will not make the requested PUT state change
+to the target resource and instead wishes to have it applied to a
+different resource, such as when the resource has been moved to a
+different URI, then the origin server MUST send an appropriate 3xx
+(Redirection) response; the user agent MAY then make its own decision
+regarding whether or not to redirect the request.
+
+====
+
+## [[post]] POST
+
+For example, a POST request must target a URI that is already
+_registered_ at the server.  It has nothing to do with "resources" or
+"representations" of resources.  So long as the target URI is
+registered, the PUT request is valid; what the server does with the
+request is out of scope for the protocol definition.  What the HTTP
+1.1. spec says is this:
+
+.HTTP 1.1 (link:http://tools.ietf.org/html/rfc7231[RFC7231]) link:http://tools.ietf.org/html/rfc7231#section-4.3.3[POST]
+[quote]
+====
+The POST method requests that the target resource process the representation enclosed in the request according to the resource's own specific semantics.
+====
+
+I'm not convinced that this is an improvement over what the superceded
+RFC2616
+link:http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.5[has
+to say about POST]:
+
+[quote]
+====
+The POST method is used to request that the origin server accept the entity enclosed in the request as a new subordinate of the resource identified by the Request-URI in the Request-Line....The actual function performed by the POST method is determined by the server and is usually dependent on the Request-URI. The posted entity is subordinate to that URI in the same way that a file is subordinate to a directory containing it, a news article is subordinate to a newsgroup to which it is posted, or a record is subordinate to a database.
+====
+
+Either way, I think these are bad definitions, mainly because they
+rely on the hazy notions of "resource" and "representation", which are
+not just unecessary and out of scope for a protocol definition, but
+positively harmful.  Even worse, they both omit the critical element
+of the definition, which is that POST requests are only "defined" for
+target URIs that are already registered at the server.
+
+One obvious problem with these definitions is that neither says what
+it means for a POST request to "enclose" an entity or resource.  Is a
+POST request required to have a body or not?  I can see no reason why
+we should not treat URI parameters as an "enclosed
+representation/entity", in which case a body is optional.
+
+Another problem with the definition in RFC7231 is that it implies (but
+does not explicitly state) that the server must have a mapping from
+the target URI to a "resource", and furthermore that said "resource"
+must have its "own specific semantics".  But neither of these
+conditions is necessary for a POST request to be meaningful.  And by
+"meaningful" I mean valid according to the rules of behavior set down
+(or at least implied) by the protocol definition.  And the only rule
+for POST is that the target URI be registered.  If it is not
+registered, the server responds by saying so; but since the HTTP
+definition is expressed (wrongly, IMHO) in terms of resources and
+representations, there is no standard way to say "Sorry, that URI is
+not registered"; instead, we're forced to make do with "404 Not
+Found", which means
+
+[quote]
+====
+The 404 (Not Found) status code indicates that the origin server did
+not find a current representation for the target resource or is not
+willing to disclose that one exists.
+====
+
+But "I can't find a resource for that URI" means something entirely
+different from "I can't find that URI."
+
+Another problem with the official definition is that it assumes that
+the POST request must involve ("enclose") a "representation".  This
+assumption is not only unnecessary, it is harmful, in that it
+forecloses other possibilities that are simpler and clearer.  There is
+absolutely no reason compelling us to treat the payload of a POST
+request as a representation of anything.  It's just syntax, and what
+it means is determined entirely by the way the server handles it; this
+is a matter of pragmatics, and it has no necessary connection with any
+concept of representation.  Of course anyone is free to think of it in
+terms of representations, but that is optional, and making
+representational notions a part of the definition just conflates
+things that should be kept separate.
+
+## [[put]] PUT
+
+link:http://tools.ietf.org/html/rfc7231#section-4.3.4[RFC7231 4.3.4 PUT]
+
+[quote]
+====
+The PUT method requests that the state of the target resource be created or replaced with the state defined by the representation enclosed in the request message payload.
+
+...
+
+HTTP does not define exactly how a PUT method affects the state of an
+origin server beyond what can be expressed by the intent of the user
+agent request and the semantics of the origin server response. It does
+not define what a resource might be, in any sense of that word, beyond
+the interface provided via HTTP.  It does not define how resource
+state is "stored", nor how such storage might change as a result of a
+change in resource state, nor how the origin server translates
+resource state into representations.  Generally speaking, all
+implementation details behind the resource interface are intentionally
+hidden by the server.
+
+...
+
+A PUT request applied to the target resource can have side effects on
+other resources.  For example, an article might have a URI for
+identifying "the current version" (a resource) that is separate from
+the URIs identifying each particular version (different resources that
+at one point shared the same state as the current version resource).
+A successful PUT request on "the current version" URI might therefore
+create a new version resource in addition to changing the state of the
+target resource, and might also cause links to be added between the
+related resources.
+====
+
+link:http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html#sec9.6[RFC2616 9.6 PUT]
+[quote]
+====
+The PUT method requests that the enclosed entity be stored under the supplied Request-URI. If the Request-URI refers to an already existing resource, the enclosed entity SHOULD be considered as a modified version of the one residing on the origin server. If the Request-URI does not point to an existing resource, and that URI is capable of being defined as a new resource by the requesting user agent, the origin server can create the resource with that URI.
+====
+
+
+As an example, consider a server device that controls an LED.  Assume
+that the URI "/led" is registered; assume further that the server does
+_not_ maintain an internal state variable "representing" the state of
+the LED.  You turn the LED on and off by sending "PUT /led/on" or
+"PUT /led/off".  According to my reading of the spec, this means we
+should treat "/led" as the target URI, and the LED itself as the
+"target resource", and the target resouce is to "process the
+representation enclosed in the request according to the resource's own
+specific semantics."  I guess the "representation enclosed in the
+request" would be "/on".  But "/on" is not a representation of
+anything; it is no more than a syntactic form.  Don't be fooled by our
+use of the English-language word "on"; we could use any string, such
+as "/led/c059181ed44a0f44ef84" (a random hex string).  The server has
+an internal rule that says "when you observe
+/led/c059181ed44a0f44ef84, turn on the LED".  There is no
+representation here, only pragmatic rules of conduct.  But even if you
+prefer to think of it as a representation, what are we to make of the
+idea that the target resource itself should process the request
+"according to the resource's own specific semantics."  Remember that
+our "target resource" is the LED itself, the physical device, and not
+some internal representation of the device.  How can a physical LED
+device process an HTTP request?  The obvious answer is that it cannot;
+it is not the target resource identified by the target URI that does
+the processing, it is the program component of the server device.  And
+it does so not "according to the resource's own semantics" but
+according to the server program's own rules of behavior - which are
+expressly _not_ semantic (representational), but purely syntactic
+rules of conduct.  Look at it this way: the elements of this
+interaction - URI, rules, LED, etc. - could have any
+(representational) semantics whatsoever - the "representation
+enclosed" could represent the Mona Lisa, or the number of molecules in
+the solar system, or the itch that Joseph Stalin scratched at 10 am on
+May 3, 1916 - and it would make no difference whatsoever to the
+functioning of the system.  **_Representations are irrelevant!_**
+
+Now suppose the server can find the target URI in its list of
+registered URIs; does it follow that it must have a mapping from the
+URI to a "resource"?  No - it is sufficient, but not necessary, to
+have a mapping from the target URI to a rule of behavior.  Of course
+you could call a rule of behavior a "resource", but what would be the
+point?  You wouldn't send back a representation of such a "resource",
+and more importantly, such rules are purely internal so it wouldn't
+even make sense for a client to try to represent them in any way.
+
+I said it was sufficient but not necessary to have a mapping from
+target URI to rule of behavior.  What happens if there is no such
+mapping for a registered URI?  In that case, there server can just
+respond by doing nothing, but sending "OK" in some fashion.  This is
+entirely consistent with the official definition, which does not
+require that the server actually _do_ anything, except process the
+request "according to the resource's own semantics".  If we are forced
+to use the language of the official definition, then we just treat
+treat such URIs as targeting a null resource.  But we can also ignore
+the official language - we do not need the concept of a "resource" -
+and just say that in the case where a URI is registered but not
+explicitly mapped to a behavior we default to the null behavior.
+
+# "Resource" considered harmful
+
+# Against Representational Semantics

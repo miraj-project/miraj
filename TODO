@@ -1,0 +1,19 @@
+* rename data.xml to miraj.data.xml+ or miraj.data._ml or miraj.doc.xml+
+
+* rename miraj/html.clj to miraj/html/polymer.clj
+
+* add css DSL?  e.g. "div {color:red;}" =>  (css/div {:color :red})
+
+  selectors:
+
+      div#foo {} =>  (css/div :foo ...)
+
+      #foo {} => (css/# :foo ...)
+
+      foo > bar {} =>  (css/> foo bar ...)
+
+      but a better way is to treat selectors as predicates rather than ctors:
+
+      (css [preds ...] {:foo :bar})
+
+      that's pretty much how garden does it

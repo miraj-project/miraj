@@ -1,6 +1,25 @@
-(ns miraj.polymer
+(ns polymer
   (:refer-clojure :exclude [list meta]))
   ;; (:require [miraj.markup :refer [make-resource-fns]]))
+
+(println "loading polymer")
+
+(defprotocol ^{:co-protocol? true}
+  This)
+
+(defprotocol ^{:co-protocol? true}
+  Lifecycle
+  (created [this])
+  (attached [this])
+  (detached [this])
+  (attributeChanged [this])
+  (ready [this]))
+
+(defprotocol ^{:co-protocol? true}
+  Http
+  (request [rqst])
+  (response [rsp])
+  (error [e]))
 
 (def iron  ;; [kw docstring]
   {:a11y-announcer "iron-a11y-announcer is a singleton element that is intended to add a11y to features that require on-demand announcement from screen readers. In order to make use of the announcer, it is best to request its availability in the announcing element."
@@ -162,3 +181,5 @@
    :toggle-button [:paper-toggle-button	"paper-toggle-button/paper-toggle-button.html"]
    :toolbar [:paper-toolbar "paper-toolbar/paper-toolbar.html"]
    :tooltip [:paper-tooltip "paper-tooltip/paper-tooltip"]})
+
+(println "loaded polymer")
