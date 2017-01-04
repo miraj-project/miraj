@@ -1,0 +1,78 @@
+
+= TODO
+
+Use boot-bowdlerize with edn config files rather than clj config files as in lein/hello
+
+== miraj components
+
+miraj - early version? contains lots of code similar to what's in
+miraj/markup, e.g. co-routine, co-compile, etc. plus code for miraj
+protocol.  Also contains lots of core.async protocoling code.  Working
+dir: miraj.  Obsolete? Should be miraj/protocol?
+
+miraj/markup - modified version of clojure.data.xml, extended to
+support HTML 5.x and enhanced to support conversion of Clojure to HTML
+(e.g. require/import, build-component, EDN version of html header, etc.)
+
+miraj/html - convenience layer on miraj/markup, providing one fn per
+HTML 5.1 tag. Working dir: html/html
+
+miraj.html/pragma - convenience layour on miraj/markup, providing functions
+to generate HTML pragma directives, i.e. <meta> elements with an
+"http-equiv" attribute.  Working dir: html/pragma
+
+miraj/polyfills - obsolete? replaced by boot-bowdlerize
+
+miraj/protocol - todo. application-level protocol layered over HTTP,
+implemented using core.async channels
+
+== miraj dependencies
+
+boot-miraj
+
+boot-bowdlerize
+
+
+== polymer support
+
+Working dir: polymer
+
+Strictly speaking miraj should support any web components, not just
+polymer.
+
+Miraj functions for polymer components: specified in miraj.iron, etc.
+The actual functions are generated dynamically when the lib is loaded. (How?)
+
+miraj.iron, miraj.paper, etc. - clojure functions of polymer
+components. Working dir: miraj/polymer
+
+Behaviors, Events, dom:  in polymer/polymer/src/miraj/polymer
+
+
+=== examples
+
+most of the examples are for earlier versions of miraj
+
+examples/hello_world - experiment using core.async to create "web
+channels" (i.e. miraj protocol), layered over HTTP protocol stuff
+
+
+=== other working dirs in ~/miraj/:
+
+lein - sample code?
+
+miraj/dev - contains some sample code from earlier versions of miraj,
+including "miraj protocol", e.g. using >> for GET, >>! for POST, etc.
+
+taiga - sample Caribou app?
+
+[source,clojure]
+----
+(println (miraj.markup/serialize :html (pragma/content-type "utf-8")))
+==> <meta content="utf-8" http-equiv="content-type">
+----
+
+
+=== similar projects
+
+http://caribou.github.io/caribou/[caribou]
