@@ -1,0 +1,71 @@
+(ns {{miraj/ns}}
+  "{{{miraj/base.miraj/doc.miraj/short}}}
+
+  {{miraj/base.miraj/doc.miraj/href}}"
+  {{#miraj/refer-clojure}}(:refer-clojure :exclude {{exclude}}){{/miraj/refer-clojure}}
+  (:require [miraj.co-dom :refer [element parse-elt-args]]))
+
+(alter-meta! *ns* (fn [m] (assoc m :miraj/miraj {:miraj/elements true
+                                                 :miraj/nss '{{miraj/nss}}
+                                                 :miraj/codom "{{miraj/codom}}"
+                                                 :miraj/assets
+                                                 {:miraj/bower
+                                                  [
+{{#miraj/base.miraj/assets.miraj/bower}}"{{cmd}}" {{/miraj/base.miraj/assets.miraj/bower}}
+                                                   ]
+                                                   :miraj/base "{{miraj/base.miraj/assets.miraj/href}}"}})))
+;;; (def pfx "{{miraj/base.miraj/assets.miraj/href}}")
+
+(println "loading {{miraj/ns}}")
+
+
+{{#miraj/exports}}
+;;;;;;;; COMPONENT: {{miraj/ns}}/{{miraj/defn}} ;;;;;;;;;;;;;;;;
+(defn {{miraj/defn}}
+  "{{{miraj/doc.miraj/short}}}
+
+  {{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"
+  [& args]
+  (let [wc-meta {:miraj/miraj {:miraj/co-fn true
+                               :miraj/element true
+                               :miraj/html-tag {{miraj/html-tag}}
+                               :miraj/lib {{miraj/lib}}
+                               :miraj/assets {:miraj/href "{{miraj/base.miraj/assets.miraj/href}}{{miraj/assets.miraj/href}}"
+                                              :miraj/bower "{{miraj/assets.miraj/bower}}"}
+                               :miraj/help "{{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"}}]
+    (if (empty? args)
+      (with-meta (element {{miraj/html-tag}}) wc-meta)
+      (let [first (first args) rest  (rest  args)
+            [attrs content] (parse-elt-args first rest)]
+        (with-meta (apply element {{miraj/html-tag}} attrs content) wc-meta)))))
+(alter-meta! (find-var (symbol (str *ns*) "{{miraj/defn}}"))
+             (fn [old new] (merge old new))
+             {:miraj/miraj {:miraj/co-fn true
+                            :miraj/element true
+                            :miraj/html-tag {{miraj/html-tag}}
+                            :miraj/lib {{miraj/lib}}
+                            :miraj/assets {:miraj/href "{{miraj/base.miraj/assets.miraj/href}}{{miraj/assets.miraj/href}}"
+                                           :miraj/bower "{{miraj/assets.miraj/bower}}"}
+                            :miraj/help "{{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"}})
+
+{{/miraj/exports}}
+
+{{#pragmas}}
+(defn {{miraj/defn}}
+  "{{{miraj/doc.miraj/short}}}"
+  [& fn-args]
+  (let [wc-meta {:miraj/miraj {:co-fn true :html-tag {{html-tag}} ;;  :component '{{lib}}
+                         :help "{{base.help}}{{doc.href}}"}
+                 :doc "{{doc.short}}"}]
+    (if-let [msg (if (empty? "{{non-conforming}}") nil "{{non-conforming}}")]
+      (throw (Exception. (str "{{attrib}}='{{fn}}': " msg)))
+      (do
+        (if (or (empty? fn-args)
+                (and (string? (first fn-args)) (empty? (first fn-args))))
+          (throw (Exception. (str "HTML pragma directives take one argument: {{fn}}"))))
+        (if (> (count fn-args) 1)
+          (throw (Exception. (str "Content not allowed in HTML meta elements: {{fn}}")))
+          (let [attribs {(keyword "{{attrib}}") "{{fn}}" :content (str (first fn-args))}]
+            (apply element "meta" (list attribs))))))))
+
+{{/pragmas}}

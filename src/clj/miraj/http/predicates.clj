@@ -1,5 +1,7 @@
 (ns miraj.http.predicates)
 
+;; from https://github.com/metosin/ring-http-response/blob/master/src/ring/util/http_predicates.clj
+
 (defn informational?
   "Check whether the response type is Informational (status code is between
   100 and 199)."

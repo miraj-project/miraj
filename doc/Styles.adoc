@@ -1,0 +1,46 @@
+= styles
+
+Polymer styles are modularized.  They are html files that look like
+the files of custom elements, but they do not define elements.
+
+We still want them available as Clojure libraries, but we do not want
+them to have any vars, since they are only used to determine the form
+of <link> elements.
+
+So we create a namespace in which nothing is defined.  We decorate the
+namespace with the information needed to create a <link>. For example,
+for the paper-style "colors.html":
+
+[source,clojure]
+----
+:miraj {:styles true :href "paper-styles/color.html"}
+----
+
+Now the compile function can find namespaces with `(-> the-ns :miraj
+:styles)` and pull the href.  Style components are loaded with
+`:require`, just like element components, but since they contain no
+definitions, the namespace is empty.  It becomes effectively a
+dummy or placeholder namespace. (What's the word for that?)
+
+By contrast, custom element namespaces like `miraj.polymer.paper`, are
+annotated with:
+
+[source,clojure]
+----
+:miraj {:elements true}
+----
+
+and they do not include an :href metadatum. That's because such
+namespaces may contain multiple defns, each annotated with its own
+href.
+
+NOTE: We could also annotate element namespaces with href, if there is
+a master html file that pulls in all of the components.
+E.g. paper-elements/paper-elements.html.  But we would have to ensure
+that the elements in the html file match the fns defined in the
+namespace, which may not be the case; for example, paper-elements.html
+does not import all the components listed in miraj.polymer.paper.  To
+address this, we can make the namespace :href a vector of hrefs, and
+ensure it contains everything needed. This way, when somebody
+:requires a lib without :refer, we can use the namespace's href,
+rather than iterate over its vars, as we currently do.

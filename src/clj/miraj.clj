@@ -9,12 +9,12 @@
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
-            [miraj.common :as mcomm]
-            [miraj.sync :as msync]
+            [miraj.protocol-engine.common :as mcomm]
+            [miraj.protocol-engine.sync :as msync]
             ;;FIXME - load async stuff at config time, see below
             ;;[clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
             ;; [miraj.async :as masync]
-            [miraj.markup :as xml]
+            [miraj.co-dom :as codom]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]]
             #_[ring.util.servlet :as servlet])
@@ -235,7 +235,7 @@
                                             {:msapp (first (:msapp opts-map))}
                                             {:mobile (first (:mobile opts-map))}))]
                 (log/trace "META MERGE: " ms)
-                (h/get-metas ms))
+                (codom/get-metas ms))
         _ (log/trace "html metas: " metas)
 
         viewports (:viewport opts-map)
@@ -535,11 +535,11 @@
     (if (= (:miraj (meta coroutine)) :co-routine)
       (do
         ;; (require ns :reload)
-;;FIXME: use xml/serialize
+;;FIXME: use codom/serialize
         ;; (html5
         ;;   (eval header)                   ; get <meta> from Miraj var
         ;;   (apply coroutine nil)))
-        (xml/serialize :html (h/html header coroutine)))
+        (codom/serialize :html (h/html header coroutine)))
       (throw (RuntimeException. (str "arg to resume must be defined with
       'miraj.polymer/co-routine', not 'clojure.core/defn'"))))))
 

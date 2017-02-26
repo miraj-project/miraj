@@ -1,3 +1,14 @@
+;   (Portions) Copyright (c) Rich Hickey. All rights reserved.
+;   The use and distribution terms for this software are covered by the
+;   Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+;   which can be found in the file epl-v10.html at the root of this distribution.
+;   By using this software in any fashion, you are agreeing to be bound by
+;   the terms of this license.
+;   You must not remove this notice, or any other, from this software.
+
+; Includes chunks of code borrowed from clojure.core, hence portions
+; copyright Rich Hickey.
+
 (ns ^{:doc "Miraj core functions"
       :author "Gregg Reynolds"}
   miraj.core
@@ -6,6 +17,7 @@
             [clojure.pprint :as pp]
             [clojure.data.json :as json]
             [clojure.java.shell :refer [sh]]
+            [clojure.set :as set]
             [clj-time.core :as t]
             [clojure.pprint :as pp]
             [clojure.java.io :as io]
@@ -13,16 +25,25 @@
             [boot.pod :as pod]
             [boot.util :as util]
             ;; [mobileink.boot-bowdlerize :as bow]
-            [polymer :refer :all]
-            [miraj.markup :as x])
+            ;; [polymer :refer :all]
+            [miraj.co-dom :as x]
             ;; [clojure.tools.reader :as reader]
             ;; [clojure.tools.reader.reader-types :as readers]
             ;; [cljs.analyzer :as ana]
             ;; [cljs.compiler :as c]
             ;; [cljs.closure :as cc]
             ;; [cljs.env :as env])
-            ;; [clojure.tools.logging :as log :only [trace debug error info]])
+            [clojure.tools.logging :as log :only [trace debug error info]])
   (:import [java.io FileNotFoundException StringWriter]))
+
+(def ^:dynamic *miraj-sym* (gensym "miraj"))
+
+;; (in-ns 'clojure.core)
+;; (defmacro miraj-ns
+;;   [nm & opts]
+;;   (log/debug "expanding co-ns"))
+
+(in-ns 'miraj.core)
 
            ;;  ByteArrayInputStream StringReader
            ;; [javax.xml.stream XMLInputFactory
@@ -37,7 +58,7 @@
            ;; [miraj NSException]))
 ;;           [java.util Date]))
 
-(println "loading miraj/core.clj")
+;; (log/debug "loading miraj/core.clj")
 
 (def bower-repo "bower_components")
 
@@ -57,64 +78,78 @@
    'Vector 'js/Array
    'Map 'js/Object})
 
-(defn ns->uri [n] (str/replace n #"\." "/"))
+(defn ns->uri [n]
+  ;; (log/debug "NS->URI")
+  (str/replace n #"\." "/"))
 
 (defn ns->path [namesp]
-  (println "ns->path: " namesp)
+  ;; (log/debug "ns->path: " namesp)
   (let [ns-name (ns-name namesp)
-        _ (println "ns-name: " ns-name)
+        ;; _ (log/debug "ns-name: " ns-name)
         path (str/replace ns-name #"-|\." {"-" "_" "." "/"})
-        _ (println "path: " path)
+        ;; _ (log/debug "path: " path)
         ;; fn (str/replace nm #"-|\." {"-" "_" "." "/"})
-        ;; _ (println "fn: " fn)
+        ;; _ (log/debug "fn: " fn)
+        ]
+    ;; (str path "/" fn)))
+    path))
+
+(defn ns-sym->path [ns-sym]
+  ;; (log/debug "ns-sym->path: " ns-sym)
+  (let [ns-name (str ns-sym)
+        ;; _ (log/debug "ns-name: " ns-name)
+        path (str/replace ns-name #"-|\." {"-" "_" "." "/"})
+        ;; _ (log/debug "path: " path)
+        ;; fn (str/replace nm #"-|\." {"-" "_" "." "/"})
+        ;; _ (log/debug "fn: " fn)
         ]
     ;; (str path "/" fn)))
     path))
 
 (defn var->path [v]
-  ;; (println "var->path: " v)
+  ;; (log/debug "var->path: " v)
   (let [nm (:name (meta v))
         namesp (:ns (meta v))
-        ;; _ (println "namesp: " namesp)
+        ;; _ (log/debug "namesp: " namesp)
         ns-name (ns-name namesp)
-        ;; _ (println "ns-name: " ns-name)
+        ;; _ (log/debug "ns-name: " ns-name)
         path (str/replace ns-name #"-|\." {"-" "_" "." "/"})
-        ;; _ (println "path: " path)
+        ;; _ (log/debug "path: " path)
         fn (str/replace nm #"-|\." {"-" "_" "." "/"})
-        ;; _ (println "fn: " fn)
+        ;; _ (log/debug "fn: " fn)
         ]
     (str path "/" fn)))
 
 (defn sym->cljs-ns
   [sym]
-  ;; (println "sym->cljs-ns: " sym)
+  ;; (log/debug "sym->cljs-ns: " sym)
   (let [v (resolve sym)
         nm (:name (meta v))
-        ;; _ (println "nm: " nm)
+        ;; _ (log/debug "nm: " nm)
         namesp (:ns (meta v))
-        ;; _ (println "namesp: " namesp)
+        ;; _ (log/debug "namesp: " namesp)
         ns-name (ns-name namesp)
         ]
     (symbol (str ns-name "." nm))))
 
 (defn var->cljs-ns
   [v]
-  ;; (println "var->cljs-ns: " v (type v))
+  ;; (log/debug "var->cljs-ns: " v (-> v meta))
   (let [nm (:name (meta v))
-        ;; _ (println "nm: " nm)
-        namesp (:ns (meta v))
-        ;; _ (println "namesp: " namesp)
-        ns-name (ns-name namesp)
+        ;; _ (log/debug "nm: " nm)
+        ;; namesp (:ns (meta v))
+        ;; _ (log/debug "namesp: " namesp)
+        ns-name (-> v meta :ns ns-name)
         ]
     (symbol (str ns-name "." nm))))
 
 (defn var->sym
   [v]
-  ;; (println "var->sym: " v)
+  ;; (log/debug "var->sym: " v)
   (let [nm (:name (meta v))
-        ;; _ (println "nm: " nm)
+        ;; _ (log/debug "nm: " nm)
         namesp (:ns (meta v))
-        ;; _ (println "namesp: " namesp)
+        ;; _ (log/debug "namesp: " namesp)
         ns-name (ns-name namesp)
         ]
     (symbol (str ns-name "." nm))))
@@ -122,16 +157,16 @@
 (defmacro interface-sym->protocol-sym
   "Protocol names cannot contain '.'"
   [sym]
-  ;; (println "interface-sym->protocol-sym: " sym)
+  ;; (log/debug "interface-sym->protocol-sym: " sym)
   `(if (var? (resolve ~sym))
      (symbol (str (->> (resolve ~sym) meta :ns))
             (str (->> (resolve ~sym) meta :name)))
      (let [nodes# (str/split (str ~sym) #"\.")
            ns# (str/join "." (drop-last nodes#))
-           ;; _# (println "ns: " ns#)
+           ;; _# (log/debug "ns: " ns#)
            nm# (last nodes#)
            newsym# (symbol (str ns#) (str nm#))]
-       ;; (println "interface-sym->protocol-sym: " ~sym " => " newsym#)
+       ;; (log/debug "interface-sym->protocol-sym: " ~sym " => " newsym#)
        newsym#)))
 
 (def polymer-prop-descriptors
@@ -153,9 +188,269 @@
                         "}")))
        "\n\t  }"))
 
+(defn optimize-js
+  [doc]
+  ;; (log/debug "JS optimizer: " doc)
+  (with-meta
+    (x/xsl-xform x/xsl-optimize-js doc)
+    (meta doc)))
+
+  ;; (let [doc-zip (zip/xml-zip doc)]
+  ;;   (seq (-> doc-zip zip/down))
+
+  ;;   ))
+
+(defn optimize-css
+  [doc]
+   (log/debug "CSS optimizer"))
+
+(defn optimize
+  ;;FIXME handle null strategy correctly
+  [strategy & doc]
+  ;; (log/debug "    OPTIMIZE: " strategy);  " :: " doc)
+  (reset! x/mode :html)
+
+  (case strategy
+    :js (apply optimize-js doc)
+    :css (apply optimize-css doc)
+    (if (keyword? strategy)
+      (throw (Exception. (str "Unrecognize optimization strategy: " strategy)))
+      (if (nil? doc)
+        (optimize-js strategy)
+        (optimize-js doc)))))
+;;    (log/debug "Unrecognized optimizer: " strategy)))
+
+(defn get-component-vars
+  "Search namespaces for webcomponents"
+  [nss]
+  ;; (log/debug "get-componenent-vars for nss: " nss)
+  ;;(let [nss (or nss (all-ns))]
+  (for [the-ns (seq nss)]
+    (do
+      (clojure.core/require the-ns)
+      (let [interns-map (ns-interns the-ns)
+            component-vars (filter (fn [entry]
+                                    (-> entry last meta :miraj/miraj :miraj/component))
+                                  interns-map)]
+        (map second component-vars)))))
+
+(defn get-component-vars-for-ns
+  "Find all component vars in namespace."
+  [component-ns]
+  ;; (log/debug "get-component-vars-for-ns: " component-ns)
+  #_(binding [*ns* component-ns]
+    (doseq [n (ns-interns component-ns)]
+      (log/debug "INTERN: " n)
+      (log/debug (-> n second meta :miraj/miraj :miraj/component))))
+  (binding [*ns* component-ns]
+    (let [component-vars (vals (into {}  (filter (fn [r] (-> r second meta :miraj/miraj :miraj/component))
+                                                 (ns-interns component-ns))))
+          ]
+      component-vars)))
+
+(defn get-component-vars-all-nss
+  "Find all miraj vars with :miraj/assets metadata, so we can construct link
+  elts."
+  [page-ns]
+  (binding [*ns* page-ns]
+    (let [all-nss (all-ns)
+          ;; _ (doseq [n all-nss] (log/debug "XXXX NSS: " n))
+          miraj-nss (filter (fn [x] (-> x meta :miraj/miraj)) (all-ns))
+          refs (ns-refers page-ns)] ;;*ns*)]
+      #_(doseq [miraj-ns miraj-nss]
+          (if (empty? (filter #(= miraj-ns (:ns (meta (last %)))) refs))
+            ;; the :require clause did NOT use :refers
+            (doseq [[k v] (filter #(not (empty? (-> (meta (last %)) :miraj/miraj :miraj/assets)))
+                                  (ns-publics miraj-ns))]
+              (log/debug "key: " k ", v: " v))
+            ;; the :require clause DID use :refers
+            (doseq [[k v]
+                    (filter #(= miraj-ns (:ns (meta (last %)))) refs)]
+              (log/debug "Key: " k ", v: " v))))
+      (for [miraj-ns miraj-nss]
+        (do #_(log/debug "  MIRAJ NS: " miraj-ns)
+            (let [miraj-refs (filter #(= miraj-ns (:ns (meta (last %)))) refs)]
+              (if (empty? miraj-refs)
+                (let [miraj-all-refs
+                      (filter #(not (empty? (-> (meta (last %)) :miraj/miraj :miraj/assets)))
+                              (ns-publics miraj-ns))]
+                  ;;(filter #(= miraj-ns (:ns (meta (last %)))) (ns-publics miraj-ns))]
+                  #_(log/debug "    MIRAJ-REFS for " miraj-ns " count: " (count miraj-all-refs))
+                  miraj-all-refs)
+                (do #_(log/debug "    MIRAJ-REFS for " miraj-ns ": " miraj-refs)
+                    miraj-refs))))))))
+
+(defn get-miraj-vars-all-nss
+  "Find all miraj vars with :miraj/assets metadata, so we can construct link
+  elts."
+  [page-ns]
+  (binding [*ns* page-ns]
+    (let [all-nss (all-ns)
+          ;; _ (doseq [n all-nss] (log/debug "XXXX NSS: " n))
+          miraj-nss (filter (fn [x] (-> x meta :miraj/miraj)) (all-ns))
+          refs (ns-refers page-ns)] ;;*ns*)]
+      #_(doseq [miraj-ns miraj-nss]
+          (if (empty? (filter #(= miraj-ns (:ns (meta (last %)))) refs))
+            ;; the :require clause did NOT use :refers
+            (doseq [[k v] (filter #(not (empty? (-> (meta (last %)) :miraj/miraj :miraj/assets)))
+                                  (ns-publics miraj-ns))]
+              (log/debug "key: " k ", v: " v))
+            ;; the :require clause DID use :refers
+            (doseq [[k v]
+                    (filter #(= miraj-ns (:ns (meta (last %)))) refs)]
+              (log/debug "Key: " k ", v: " v))))
+      (for [miraj-ns miraj-nss]
+        (do #_(log/debug "  MIRAJ NS: " miraj-ns)
+            (let [miraj-refs (filter #(= miraj-ns (:ns (meta (last %)))) refs)]
+              (if (empty? miraj-refs)
+                (let [miraj-all-refs
+                      (filter #(not (empty? (-> (meta (last %)) :miraj/miraj :miraj/assets)))
+                              (ns-publics miraj-ns))]
+                  ;;(filter #(= miraj-ns (:ns (meta (last %)))) (ns-publics miraj-ns))]
+                  #_(log/debug "    MIRAJ-REFS for " miraj-ns " count: " (count miraj-all-refs))
+                  miraj-all-refs)
+                (do #_(log/debug "    MIRAJ-REFS for " miraj-ns ": " miraj-refs)
+                    miraj-refs))))))))
+
+(defn get-miraj-vars-for-pagespace
+  "Find all referred miraj vars with :assets metadata, so we can construct link
+  elts."
+  [page-ns]
+  ;; (log/debug "get-miraj-vars-for-pagespace: " page-ns)
+  (binding [*ns* page-ns]
+    (let [refs (vals (into {}  (filter (fn [r] (-> r second meta :miraj/miraj)) (ns-refers page-ns))))
+          ;; _ (log/debug "REF VARS: " refs)
+
+          ref-nss (set (map #(-> % meta :ns) refs))
+          ;; _ (log/debug "ref-nss: " ref-nss)
+          ;; _ (doseq [n ref-nss] (log/debug "REF NS: " n))
+
+          ;; miraj-nss (set (map second (filter #(-> % second meta :miraj/miraj) (ns-aliases page-ns))))
+
+          ;; _ (doseq [x (ns-map page-ns)] (log/debug (format "%s : %s (%s)"
+          ;;                                                  (-> x second meta :ns) (second x)
+          ;;                                                  (type (second x)))))
+
+          aliases  (filter (fn [[k v]] (-> v meta :miraj/miraj)) (ns-aliases page-ns))
+          ;; _ (log/debug "aliases: " aliases)
+
+          ;; _ (doseq [alias aliases]
+          ;;     (log/debug "Checking alias " (second alias))
+          ;;     (let [hit (filter #(do (log/debug %)
+          ;;                            (= (second alias) %)) ref-nss)]
+          ;;       (log/debug hit)
+          ;;       (if (empty? hit) alias hit)))
+
+          noref-aliases (remove empty? (for [alias aliases]
+                                          (let [hit (filter #(= (second alias) %) ref-nss)]
+                                            (if (empty? hit) alias nil))))
+          ;; _ (log/debug "noref-aliases: " noref-aliases)
+
+          noref-alias-vars (vals (first (for [noref-alias noref-aliases]
+                                          (ns-publics (second noref-alias)))))
+          noref-alias-vars (filter #(-> % meta :miraj/miraj :miraj/co-fn) noref-alias-vars)
+          ;; _ (log/debug "noref-alias-vars: " noref-alias-vars)
+
+          all-map ;;(map #(-> % second meta :ns)
+          (filter #(and (var? (second %))
+                        (not= 'clojure.core
+                              (-> % second meta :ns ns-name)))
+                  (ns-map page-ns)) ;;)
+          ;; _ (log/debug "all-map: " all-map)
+
+          miraj-nss (set (filter #(-> % meta :miraj/miraj) all-map))
+          ;; _ (doseq [n miraj-nss] (log/debug "MIRAJ NS: " n))
+
+          noref-nss (set/difference miraj-nss ref-nss)
+          ;; _ (doseq [n noref-nss] (log/debug "NOREF NS: " n))
+
+          noref-nss (if (empty? noref-nss) noref-nss
+                     (filter #(-> % meta :miraj/miraj :miraj/co-fn)
+                             (vals (into {} (map ns-publics noref-nss)))))
+          ;; _ (log/debug "noref-miraj-nss: " noref-nss)
+
+          allrefs (concat refs noref-nss noref-alias-vars)
+          ]
+      ;; (doseq [refvar allrefs] (log/debug " REFVAR: " refvar))
+      allrefs)))
+
+(defn normalize
+  "inspect webpage var, if necessary create <head> etc."
+  [page-var]
+  (log/debug "Normalizing HTML page-var: " page-var)
+  ;; (log/debug "Normalize HTML meta: " (meta page-var))
+  (reset! x/mode :html)
+  (let [page-ns (-> page-var meta :ns)
+        page-ns-sym (ns-name page-ns)
+        page-name (-> page-var meta :name)
+        refs (get-miraj-vars-for-pagespace page-ns)
+
+        ;; _ (log/debug "REFS: " refs)
+        ;; _ (doseq [refvar refs]
+        ;;       (log/debug (-> refvar meta :miraj/miraj :miraj/assets :miraj/href)))
+        miraj-libs (set (filter (fn [e] (and
+                                        (-> e meta :miraj/miraj :miraj/elements)
+                                        ;; FIXME: how to distinguish between 3rd party and miraj?
+                                        (-> e meta :miraj/miraj :miraj/assets :miraj/base)))
+                               (set (map (fn [r] (-> r meta :ns)) refs))))
+        ;; _ (log/debug "LIBS: " miraj-libs)
+
+        refs (filter (fn [r] (let [rns (-> r meta :ns)] (not (contains? miraj-libs rns))))
+                     refs)
+
+        links (for [refvar refs]
+                (x/element :link {:rel "import"
+                                  :href (str (-> refvar meta :miraj/miraj :miraj/assets :miraj/href))}));)
+
+        ;; href must match html-loader path in compiler/link-pages
+        miraj-links (for [lib miraj-libs]
+                      (x/element :link {:rel "import"
+                                        :href (str "/" (ns->path page-ns) "/miraj-imports.html")}))
+                                        ;; :href (str "miraj/" *miraj-sym* "-import.html")}))
+                                  ;; :href (str (-> lib meta :miraj/miraj :miraj/assets :miraj/href))}))
+
+        script-links (if (not (empty? miraj-links)) ;; (for [lib miraj-libs]
+                       (x/element :script {:src (str "/" (ns->path page-ns) "/js/components.js")}))
+                                           ;; #_(str (-> lib meta
+                                           ;;            :miraj/miraj
+                                           ;;            :miraj/assets
+                                           ;;            :miraj/script))}))
+
+        ;; _ (log/debug "PAGE META: " (meta page-var))
+        ;; html-metas (dissoc (meta page-var) :doc :name :ns :miraj/miraj)
+        html-metas (-> page-var meta :miraj/miraj)
+        ;; _ (log/debug "HTML METAS: " html-metas)
+        meta-elts (x/get-metas html-metas)
+        ;; _ (log/debug "    META-ELTS: " meta-elts)
+
+        page-content (deref page-var)
+        ;; _ (log/debug "PAGE CONTENT: " page-content)
+
+        header (first (->> page-content :content (filter #(= (:tag %) :head))))
+        ;; _ (log/debug "    HEADER CONTENT: " header)
+
+        body (binding [*ns* (-> page-var meta :ns)]
+               (first (->> page-content :content (filter #(= (:tag %) :body)))))
+        ;; _ (log/debug "    BODY CONTENT: " body)
+
+        newheader (apply x/element :head {} (vec (flatten
+                                                  (list meta-elts
+                                                        (x/element :script {:type "text/javascript"
+                                                                            :src "/bower_components/webcomponentsjs/webcomponents-lite.min.js"})
+                                                        links
+                                                        miraj-links
+                                                        script-links
+                                                        (:content header)))))
+        ;; _ (log/debug "NEW HEADER: " newheader)
+        normed (x/element :html newheader body)
+        ;;normh (binding [*ns* page-ns] (x/xsl-xform x/xsl-normalize page-content))
+        ;; _ (log/debug (format "NORMALIZED: %s" normed))
+        ]
+    normed))
+
 (defn normalize-methods
   [methods]
-  ;; (println "NORMALIZE-METHODS")
+  ;; (log/debug "NORMALIZE-METHODS")
   (into {} (for [method methods]
              {(if (= 'with-element (first method))
                 (keyword (str (name (-> method next first)) "." (-> method nnext first first)))
@@ -168,7 +463,7 @@
 
 (defn normalize-rawmethods
   [methods]
-  ;; (println "NORMALIZE-RAWMETHODS")
+  ;; (log/debug "NORMALIZE-RAWMETHODS")
   (into {} (for [method methods]
              {(if (= 'with-element (first method))
                 (keyword (str (name (-> method next first)) "." (-> method nnext first first)))
@@ -186,7 +481,7 @@
                                    (:resource-type
                                     (meta (resolve (interface-sym->protocol-sym p)))))))
                    protos)]
-    ;; (println "FILTERED BEHAVIORS: " ls)
+    ;; (log/debug "FILTERED BEHAVIORS: " ls)
     (if (seq ls)
       {:behaviors
        (loop [proto (first protos)
@@ -195,7 +490,7 @@
          (if (nil? proto)
            result
            (let [proto (interface-sym->protocol-sym proto)
-                 ;; _ (println "BEH META: " (meta (resolve proto)))
+                 ;; _ (log/debug "BEH META: " (meta (resolve proto)))
                  resource-type (:resource-type (meta (resolve proto)))
                  resource-name (:resource-name (meta (resolve proto)))
                  methods (take-while seq? tail)
@@ -204,7 +499,7 @@
                     (next next-proto)
                     (if (= :polymer-behaviors resource-type)
                       (merge result {resource-name (let [ms (normalize-methods methods)]
-                                                     ;; (println "NORMED BEHS: " ms)
+                                                     ;; (log/debug "NORMED BEHS: " ms)
                                                      ms)})
                       result)))))})))
 
@@ -215,7 +510,7 @@
                                    (:resource-type
                                     (meta (resolve (interface-sym->protocol-sym p)))))))
                    protos)]
-    ;; (println "FILTERED LISTENERS: " ls)
+    ;; (log/debug "FILTERED LISTENERS: " ls)
     (if (seq ls)
       {:listeners
        (loop [proto (first protos)
@@ -231,7 +526,7 @@
                     (next next-proto)
                     (if (= :polymer-events resource-type)
                       (merge result {proto (let [ms (normalize-methods methods)]
-                                             ;; (println "NORMED LISTENERS: " ms)
+                                             ;; (log/debug "NORMED LISTENERS: " ms)
                                              ms)})
                       result)))))})))
 
@@ -241,7 +536,7 @@
                                 (:co-protocol?
                                  (meta (resolve (interface-sym->protocol-sym p))))))
                    protos)]
-    ;; (println "FILTERED METHODS: " ls)
+    ;; (log/debug "FILTERED METHODS: " ls)
     (if (seq ls)
       (let [ms {:methods
                 (loop [proto (first protos)
@@ -257,21 +552,21 @@
                              (next next-proto)
                              (if (:co-protocol? (meta (resolve proto)))
                                (merge result {proto (let [ms (normalize-rawmethods methods)]
-                                                      ;; (println "NORMED METHS: " ms)
+                                                      ;; (log/debug "NORMED METHS: " ms)
                                                       ms)})
                                result)))))}]
-        ;; (println "METHODS X: " ms)
+        ;; (log/debug "METHODS X: " ms)
         ms))))
 
 (defn protos->behaviorvec
   [protos]
-  ;; (println "PROTOS->BEHAVIORVEC: " protos)
+  ;; (log/debug "PROTOS->BEHAVIORVEC: " protos)
   (let [ls (filter (fn [p] (and (symbol? p)
                                 (= :polymer-behaviors
                                    (:resource-type
                                     (meta (resolve (interface-sym->protocol-sym p)))))))
                    protos)]
-    ;; (println "FILTERED BEHAVIORS: " ls)
+    ;; (log/debug "FILTERED BEHAVIORS: " ls)
     (if (seq ls)
       {:listeners
        (into []
@@ -283,30 +578,30 @@
                          result
                          (let [proto (interface-sym->protocol-sym proto)
                                resource-type (:resource-type (meta (resolve proto)))]
-                           ;; (println "LISTENER PROTO: " proto)
-                           ;; (println "LISTENER TYPE: " resource-type)
-                           ;; (println "LISTENER TAIL: " tail)
-                           ;; (println "LISTENER RESULT: " result)
+                           ;; (log/debug "LISTENER PROTO: " proto)
+                           ;; (log/debug "LISTENER TYPE: " resource-type)
+                           ;; (log/debug "LISTENER TAIL: " tail)
+                           ;; (log/debug "LISTENER RESULT: " result)
                            (let [methods (take-while seq? tail)
                                  next-proto (drop-while seq? tail)]
-                             (println "LISTENER METHODS: " methods (type methods))
-                             (println "NEXT PROTO: " next-proto)
+                             (log/debug "LISTENER METHODS: " methods (type methods))
+                             (log/debug "NEXT PROTO: " next-proto)
                              (let [meths (for [method methods]
-                                           (let [_ (println "LISTENER METHOD: " method)
+                                           (let [_ (log/debug "LISTENER METHOD: " method)
                                                  evt (if (= 'with-element (first method))
                                                        (str (name (first (next method))) "."
                                                             (first (first (nnext method))))
                                                        (first method))
-                                                 _ (println "LISTENER EVT: " evt)
+                                                 _ (log/debug "LISTENER EVT: " evt)
                                                  handler (str "_"
                                                               (if (= 'with-element (first method))
                                                                 (str (name (first (next method))) "_"
                                                                      (first (first (nnext method))))
                                                                 (first method)))
-                                                 _ (println "LISTENER HANDLER: " handler)
+                                                 _ (log/debug "LISTENER HANDLER: " handler)
                                                  ]
                                              (str "'" evt "' : '" handler "'")))]
-                               (println "LISTENER METHS: " (doall meths))
+                               (log/debug "LISTENER METHS: " (doall meths))
                                (recur (first next-proto)
                                       (next next-proto)
                                       (if (= :polymer-behaviors resource-type)
@@ -316,7 +611,7 @@
 
 (defn construct-behaviors-js
   [protocols]
-  ;; (println "CONSTRUCT-BEHAVIORS-JS: " protocols)
+  ;; (log/debug "CONSTRUCT-BEHAVIORS-JS: " protocols)
   (let [protos (filter (fn [p] (if (not (seq? p))
                                  (and
                                   (not (seq? p))
@@ -336,7 +631,7 @@
                                                   (meta (resolve (interface-sym->protocol-sym p))))))))
                                          protos)]
                        (do
-                         (println "P META: " proto
+                         (log/debug "P META: " proto
                                   (meta (resolve (interface-sym->protocol-sym proto))))
 
                          (str (:resource-name (meta (resolve
@@ -345,13 +640,13 @@
 
 (defn construct-listeners-js
   [protos]
-  (println "CONSTRUCT-LISTENERS-JS: " protos)
+  (log/debug "CONSTRUCT-LISTENERS-JS: " protos)
   (let [ls (filter (fn [p] (and (symbol? p)
                                 (= :polymer-events
                                    (:resource-type
                                     (meta (resolve (interface-sym->protocol-sym p)))))))
                    protos)]
-    (println "FILTERED LISTENERS: " ls)
+    (log/debug "FILTERED LISTENERS: " ls)
     (if (seq ls)
       (str "listeners: {\n\t    "
            (str/join ",\n\t    "
@@ -363,30 +658,30 @@
                          result
                          (let [proto (interface-sym->protocol-sym proto)
                                resource-type (:resource-type (meta (resolve proto)))]
-                           (println "LISTENER PROTO: " proto)
-                           (println "LISTENER TYPE: " resource-type)
-                           (println "LISTENER TAIL: " tail)
-                           (println "LISTENER RESULT: " result)
+                           (log/debug "LISTENER PROTO: " proto)
+                           (log/debug "LISTENER TYPE: " resource-type)
+                           (log/debug "LISTENER TAIL: " tail)
+                           (log/debug "LISTENER RESULT: " result)
                            (let [methods (take-while seq? tail)
                                  next-proto (drop-while seq? tail)]
-                             (println "LISTENER METHODS: " methods (type methods))
-                             (println "NEXT PROTO: " next-proto)
+                             (log/debug "LISTENER METHODS: " methods (type methods))
+                             (log/debug "NEXT PROTO: " next-proto)
                              (let [meths (for [method methods]
-                                           (let [_ (println "LISTENER METHOD: " method)
+                                           (let [_ (log/debug "LISTENER METHOD: " method)
                                                  evt (if (= 'with-element (first method))
                                                        (str (name (first (next method))) "."
                                                             (first (first (nnext method))))
                                                        (first method))
-                                                 _ (println "LISTENER EVT: " evt)
+                                                 _ (log/debug "LISTENER EVT: " evt)
                                                  handler (str "_"
                                                               (if (= 'with-element (first method))
                                                                 (str (name (first (next method))) "_"
                                                                      (first (first (nnext method))))
                                                                 (first method)))
-                                                 _ (println "LISTENER HANDLER: " handler)
+                                                 _ (log/debug "LISTENER HANDLER: " handler)
                                                  ]
                                              (str "'" evt "' : '" handler "'")))]
-                               (println "LISTENER METHS: " (doall meths))
+                               (log/debug "LISTENER METHS: " (doall meths))
                                (recur (first next-proto)
                                       (next next-proto)
                                       (if (= :polymer-events resource-type)
@@ -396,25 +691,25 @@
 
 (defn- props->propmap
   [args]
-  ;; (println "PROPS->PROPMAP: " args)
+  ;; (log/debug "PROPS->PROPMAP: " args)
   (let [props (filter (fn [x] (and (symbol? x)
                                        (:properties (meta (resolve x))))) args)]
-    ;; (println "PROPS: " props)
+    ;; (log/debug "PROPS: " props)
     (if props
       (let [properties (into {} (for [prop props]
-                                  (do ;; (println "PROP: " prop)
+                                  (do ;; (log/debug "PROP: " prop)
                                       (let [pvar (resolve prop)
-                                            ;; _ (println "PVAR: " pvar)
+                                            ;; _ (log/debug "PVAR: " pvar)
                                             ps (:props (deref pvar))
-                                            ;; _ (println "PS: " ps)
+                                            ;; _ (log/debug "PS: " ps)
                                             ]
                                         ps))))
             html-attrs (into {} (for [prop props]
-                                  (do ;; (println "HTMLATTRS PROP: " prop)
+                                  (do ;; (log/debug "HTMLATTRS PROP: " prop)
                                       (let [pvar (resolve prop)
-                                            ;; _ (println "PVAR: " pvar)
+                                            ;; _ (log/debug "PVAR: " pvar)
                                             html-attrs (:html-attrs (deref pvar))
-                                            ;; _ (println "HTMLATTRS: " html-attrs)
+                                            ;; _ (log/debug "HTMLATTRS: " html-attrs)
                                             ]
                                         html-attrs))))]
         {:properties properties :html-attrs html-attrs}))))
@@ -430,22 +725,22 @@
   ;; 2. validate method impl sigs
   ;; 3. generate <link> markups
   [opts+specs]
-  (println "GET-PROTO-CODEFS: " opts+specs)
+  (log/debug "GET-PROTO-CODEFS: " opts+specs)
   (let [links (behaviors->elements opts+specs)]
     ;;[interfaces methods opts] (behaviors->elements opts+specs)]
-    ;; (println "INTERFACES: " interfaces)
-    ;; (println "METHODS: " methods)
-    ;; (println "OPTS: " opts)
+    ;; (log/debug "INTERFACES: " interfaces)
+    ;; (log/debug "METHODS: " methods)
+    ;; (log/debug "OPTS: " opts)
     links))
 
 (defn- parse-cotype-args
   [args]
-  ;; (println "PARSE COTYPE ARGS: " (pr-str args))
+  ;; (log/debug "PARSE COTYPE ARGS: " (pr-str args))
   (let [[docstr args] (if (string? (first args))
                         [(first args) (rest args)]
                         ["" args])
         codom (let [cd (filter (fn [x] (if (symbol? x)
-                                         (:codom (meta (resolve x))))) args)]
+                                         (:miraj/codom (meta (resolve x))))) args)]
                 (if cd
                   cd ;; else get the (codom ...) form
                   ))
@@ -455,11 +750,11 @@
                 (if props
                   props
                   ))
-        ;; _ (println "PROPERTIES: " props)
+        ;; _ (log/debug "PROPERTIES: " props)
         ;; exclude docstring and codom
         protos (filter (fn [x] (if (or (list? x)
                                        (and (symbol? x)
-                                            (not (:codom (meta (resolve x))))))
+                                            (not (:miraj/codom (meta (resolve x))))))
                                  x)) args)
         ;; behaviors
         ]
@@ -467,14 +762,14 @@
 
 ;; from clojure/core_deftype.clj
 (defn- parse-opts [s]
-  ;; (println "parse-opts: " s)
+  ;; (log/debug "parse-opts: " s)
   (loop [opts {} [k v & rs :as s] s]
     (if (keyword? k)
       (recur (assoc opts k v) rs)
       [opts s])))
 
 (defn- parse-impls [specs]
-  ;; (println "PARSE-IMPLS: " specs)
+  ;; (log/debug "PARSE-IMPLS: " specs)
   (loop [ret {} s specs]
     (if (seq s)
       (recur (assoc ret (first s) (take-while seq? (next s)))
@@ -491,14 +786,14 @@
 
 (defn- ->protomap [opts+specs]
   "emit elements for protos"
-  (println "->protomap: " opts+specs)
+  (log/debug "->protomap: " opts+specs)
   (let [[opts specs] (parse-opts opts+specs)
-        _ (println "OPTS: " opts)
-        _ (println "SPECS: " specs)
+        _ (log/debug "OPTS: " opts)
+        _ (log/debug "SPECS: " specs)
         impls (parse-impls (first specs))
-        _ (println "IMPLS: " impls (count impls))
+        _ (log/debug "IMPLS: " impls (count impls))
         sigs (into {} (map (fn [arg]
-                             (let [_ (println "PSYM: " (first arg))
+                             (let [_ (log/debug "PSYM: " (first arg))
                                    psym (interface-sym->protocol-sym (first arg))
                                    psym-var (resolve psym)]
                                (if (nil? psym-var)
@@ -508,29 +803,29 @@
                                        '()
                                        (:sigs (deref psym-var)))]))
                            impls))
-        _ (println "SIGS: " sigs)
+        _ (log/debug "SIGS: " sigs)
         ;; we need URIs for behaviors
         uris (into {} (map (fn [arg]
                              (let [psym (first arg)]
-                               (println "PROTO: " psym)
-                               (println "PROTO var: " (resolve psym))
-                               (println "meta PROTO var: " (meta (resolve psym)))
-                               (println "PROTO resource-type: " (:resource-type (meta (resolve psym))))
+                               (log/debug "PROTO: " psym)
+                               (log/debug "PROTO var: " (resolve psym))
+                               (log/debug "meta PROTO var: " (meta (resolve psym)))
+                               (log/debug "PROTO resource-type: " (:resource-type (meta (resolve psym))))
                                (if (= :polymer-behaviors
                                       (:resource-type (meta (resolve psym))))
                                  [psym (:uri (meta (resolve psym)))])))
                            sigs))
-        _ (println "URIs: " uris)
+        _ (log/debug "URIs: " uris)
         interfaces (-> (map #(interface-sym->protocol-sym %) (keys impls))
                        set
                        (disj 'Object 'java.lang.Object)
                        vec)
-        _ (println "INTERFACES: " interfaces)
-        _ (doseq [intf interfaces] (println "coprotocol? " intf (coprotocol? intf)))
+        _ (log/debug "INTERFACES: " interfaces)
+        _ (doseq [intf interfaces] (log/debug "coprotocol? " intf (coprotocol? intf)))
         ;; methods (map (fn [[name params & body]]
         ;;                (cons name (maybe-destructured params body)))
         ;;              (apply concat (vals impls)))
-        ;; _ (println "METHODS: " methods)
+        ;; _ (log/debug "METHODS: " methods)
         ]
     (when-let [bad-opts (seq (remove #{:no-print :load-ns} (keys opts)))]
       (throw (IllegalArgumentException. (apply print-str "Unsupported option(s) -" bad-opts))))
@@ -538,20 +833,20 @@
     (doseq [[k v] impls]
       (let [proto (interface-sym->protocol-sym k)
             sig (get sigs proto)]
-        (println "PARSING PROTOCOL: " sig)
+        (log/debug "PARSING PROTOCOL: " sig)
         (doseq [method-impl v]
-          (println "interface sym: " k)
-          (println "method-impl: " method-impl)
+          (log/debug "interface sym: " k)
+          (log/debug "method-impl: " method-impl)
           (let [method-kw (if (= 'with-element (first method-impl))
                             (keyword (first (first (nnext method-impl))))
                             (keyword (first method-impl)))
-                _ (println "method-kw: " method-kw)
+                _ (log/debug "method-kw: " method-kw)
                 method-sig (get sig method-kw)
                 method-impl (if (= 'with-element (first method-impl))
                               (next (first (nnext method-impl)))
                               method-impl)]
-            (println "method-impl: " method-impl)
-            (println "method-sig: " method-sig)
+            (log/debug "method-impl: " method-impl)
+            (log/debug "method-sig: " method-sig)
             (if (nil? method-sig)
               (if (not= 'This k)
                 (throw (Exception. (str "Method '" (first method-impl) "' "
@@ -562,7 +857,7 @@
               (let [impl-arity 1
                     proto-arities (set (->> (:arglists method-sig)
                                            (map count)))]
-                (println "PROT-ARITIES: " proto-arities)
+                (log/debug "PROT-ARITIES: " proto-arities)
                 #_(if (not-any? proto-arities [impl-arity])
                     (throw (Exception. (str "Bad arity: " method-impl " v. " method-sig))))))))))
     (for [[proto uri] uris]
@@ -572,15 +867,15 @@
 
 (defn- behaviors->elements [opts+specs]
   "emit elements for protos"
-  ;; (println "behaviors->elements: " opts+specs)
+  ;; (log/debug "behaviors->elements: " opts+specs)
   (let [[opts specs] (parse-opts opts+specs)
-        ;; _ (println "OPTS: " opts)
-        ;; _ (println "SPECS: " specs)
+        ;; _ (log/debug "OPTS: " opts)
+        ;; _ (log/debug "SPECS: " specs)
         impls (parse-impls (first specs))
-        ;; _ (println "IMPLS: " impls (count impls))
+        ;; _ (log/debug "IMPLS: " impls (count impls))
         ;; obtain sig defns by resolving the protocol symbol
         sigs (into {} (map (fn [arg]
-                             (let [;;_ (println "PSYM: " (first arg))
+                             (let [;;_ (log/debug "PSYM: " (first arg))
                                    psym (interface-sym->protocol-sym (first arg))
                                    psym-var (resolve psym)]
                                (if (nil? psym-var)
@@ -590,29 +885,29 @@
                                        '()
                                        (:sigs (deref psym-var)))]))
                            impls))
-        ;; _ (println "SIGS: " sigs)
+        ;; _ (log/debug "SIGS: " sigs)
         ;; we need URIs for behaviors
         uris (into {} (map (fn [arg]
                              (let [psym (first arg)]
-                               ;; (println "PROTO: " psym)
-                               ;; (println "PROTO var: " (resolve psym))
-                               ;; (println "meta PROTO var: " (meta (resolve psym)))
-                               ;; (println "PROTO resource-type: " (:resource-type (meta (resolve psym))))
+                               ;; (log/debug "PROTO: " psym)
+                               ;; (log/debug "PROTO var: " (resolve psym))
+                               ;; (log/debug "meta PROTO var: " (meta (resolve psym)))
+                               ;; (log/debug "PROTO resource-type: " (:resource-type (meta (resolve psym))))
                                (if (= :polymer-behaviors
                                       (:resource-type (meta (resolve psym))))
                                  [psym (:uri (meta (resolve psym)))])))
                            sigs))
-        ;; _ (println "URIs: " uris)
+        ;; _ (log/debug "URIs: " uris)
         ;; interfaces (-> (map #(interface-sym->protocol-sym %) (keys impls))
         ;;                set
         ;;                (disj 'Object 'java.lang.Object)
         ;;                vec)
-        ;; _ (println "INTERFACES: " interfaces)
-        ;; _ (doseq [intf interfaces] (println "coprotocol? " intf (coprotocol? intf)))
+        ;; _ (log/debug "INTERFACES: " interfaces)
+        ;; _ (doseq [intf interfaces] (log/debug "coprotocol? " intf (coprotocol? intf)))
         ;; methods (map (fn [[name params & body]]
         ;;                (cons name (maybe-destructured params body)))
         ;;              (apply concat (vals impls)))
-        ;; _ (println "METHODS: " methods)
+        ;; _ (log/debug "METHODS: " methods)
         ]
     (when-let [bad-opts (seq (remove #{:no-print :load-ns} (keys opts)))]
       (throw (IllegalArgumentException. (apply print-str "Unsupported option(s) -" bad-opts))))
@@ -620,20 +915,20 @@
     ;; (doseq [[k v] impls]
     ;;   (let [proto (interface-sym->protocol-sym k)
     ;;         sig (get sigs proto)]
-    ;;     (println "PARSING PROTOCOL: " sig)
+    ;;     (log/debug "PARSING PROTOCOL: " sig)
     ;;     (doseq [method-impl v]
-    ;;       (println "interface sym: " k)
-    ;;       (println "method-impl: " method-impl)
+    ;;       (log/debug "interface sym: " k)
+    ;;       (log/debug "method-impl: " method-impl)
     ;;       (let [method-kw (if (= 'with-element (first method-impl))
     ;;                         (keyword (first (first (nnext method-impl))))
     ;;                         (keyword (first method-impl)))
-    ;;             _ (println "method-kw: " method-kw)
+    ;;             _ (log/debug "method-kw: " method-kw)
     ;;             method-sig (get sig method-kw)
     ;;             method-impl (if (= 'with-element (first method-impl))
     ;;                           (next (first (nnext method-impl)))
     ;;                           method-impl)]
-    ;;         (println "method-impl: " method-impl)
-    ;;         (println "method-sig: " method-sig)
+    ;;         (log/debug "method-impl: " method-impl)
+    ;;         (log/debug "method-sig: " method-sig)
     ;;         (if (nil? method-sig)
     ;;           (if (not= 'This k)
     ;;             (throw (Exception. (str "Method '" (first method-impl) "' "
@@ -644,7 +939,7 @@
     ;;           (let [impl-arity 1
     ;;                 proto-arities (set (->> (:arglists method-sig)
     ;;                                        (map count)))]
-    ;;             (println "PROT-ARITIES: " proto-arities)
+    ;;             (log/debug "PROT-ARITIES: " proto-arities)
     ;;             #_(if (not-any? proto-arities [impl-arity])
     ;;                 (throw (Exception. (str "Bad arity: " method-impl " v. " method-sig))))))))))
     (for [[proto uri] uris]
@@ -657,7 +952,7 @@
    'Map ^{:doc " (i.e. satisfy map?)"} (fn [x] (map? x))
    'Boolean ^{:doc "  Allowed values are 'true' and 'false'."} (fn [x] (or (= 'true x) (= 'false x)))
    'Date ^{:doc "[year month? day? hour? minute? second? millisecond?] (see clj-time) "} (fn [x]
-           (println "DATE ARG: " x (type x))
+           (log/debug "DATE ARG: " x (type x))
            (and (vector? x)
                 (<= (count x) 7)
                 (not (empty? x))
@@ -690,7 +985,7 @@
           p (:protocol (meta v))]
       (when (and v (bound? v) (not= protocol-var p))
         (binding [*out* *err*]
-          (println "Warning: protocol" protocol-var "is overwriting"
+          (log/debug "Warning: protocol" protocol-var "is overwriting"
                    (if p
                      (str "method " (.sym v) " of protocol " (.sym p))
                      (str "function " (.sym v)))))))))
@@ -703,38 +998,38 @@
             string? (recur (assoc opts :doc (first sigs)) (next sigs))
             keyword? (recur (assoc opts (first sigs) (second sigs)) (nnext sigs))
             [opts sigs]))
-        ;; _ (println "PRESIGS: " sigs)
+        ;; _ (log/debug "PRESIGS: " sigs)
         html-attrs (first (filter map? sigs))
-        ;; _ (println "HTMLATTRS: " html-attrs)
+        ;; _ (log/debug "HTMLATTRS: " html-attrs)
         sigs (filter list? sigs)
-        ;; _ (println "LIST PRESIGS: " sigs)
+        ;; _ (log/debug "LIST PRESIGS: " sigs)
         all-props (->> (map first (filter #(:tag (meta (first %))) sigs)))
-        ;; _ (println "all-props: " all-props)
+        ;; _ (log/debug "all-props: " all-props)
         sigs (when sigs
                (reduce1 (fn [m s]
-                          ;; (println "REDUCE1 M: " m)
-                          ;; (println "REDUCE1 S: " s)
+                          ;; (log/debug "REDUCE1 M: " m)
+                          ;; (log/debug "REDUCE1 S: " s)
                           (let [name-meta (meta (first s))
-                                ;; _ (println "name-meta: " name-meta)
+                                ;; _ (log/debug "name-meta: " name-meta)
                                 name-meta (dissoc (assoc name-meta :type (:tag name-meta))
                                                               :tag)
-                                ;; _ (println "name-meta: " name-meta)
+                                ;; _ (log/debug "name-meta: " name-meta)
                                 doc (:doc name-meta)
                                 prop-type (if (some (set [(:type name-meta)])
                                                     (set (keys property-types)))
                                               (:type name-meta)
                                               'Observer)
-                                ;; _ (println "prop-type: " prop-type)
+                                ;; _ (log/debug "prop-type: " prop-type)
 
                                 name-meta (if (= prop-type 'Observer)
                                             (assoc name-meta :type 'Observer)
                                             name-meta)
-                                ;; _ (println "name-meta: " name-meta)
+                                ;; _ (log/debug "name-meta: " name-meta)
                                 mname (with-meta (first s) nil)
-                                ;; _ (println "mname: " mname)
+                                ;; _ (log/debug "mname: " mname)
 
                                 _ (let [strs (filter string? s)]
-                                    ;; (println "STRINGS: " strs)
+                                    ;; (log/debug "STRINGS: " strs)
                                     (if (= prop-type 'String)
                                       (if (> (count strs) 1)
                                               (throw (IllegalArgumentException.
@@ -746,7 +1041,7 @@
 
                                 default-val (let [v (if (= :computed (first (rest s)))
                                                       (if (fn? (eval (first (nnext s))))
-                                                        (do ;;(println "COMPUTED " (first (nnext s)))
+                                                        (do ;;(log/debug "COMPUTED " (first (nnext s)))
                                                             (first (nnext s)))
                                                         (throw (IllegalArgumentException.
                                                                 (str "Computed value for "
@@ -755,7 +1050,7 @@
                                                       (if (= prop-type 'Observer)
                                                         nil
                                                         (first (rest s))))]
-                                              #_(println "V: " v (fn? (eval v)))
+                                              #_(log/debug "V: " v (fn? (eval v)))
                                               (if (list? v) ;; a fn?
                                                 (if (= (first v) 'fn)
                                                   (first (nnext v))
@@ -765,11 +1060,11 @@
                                                 v
                                                 #_(.toString (apply t/date-time v))
                                                 v))
-                                ;; _ (println "default-val: " default-val (type default-val))
+                                ;; _ (log/debug "default-val: " default-val (type default-val))
                                 _ (if (not= prop-type 'Observer)
                                     (if (not (nil? default-val))
                                       (let [pred (get property-types prop-type)]
-                                        ;; (println "pred: " pred)
+                                        ;; (log/debug "pred: " pred)
                                         (if (fn? (eval default-val))
                                           (if (not (= :computed (first (rest s))))
                                             (throw (IllegalArgumentException. (str "Default value "
@@ -790,13 +1085,13 @@
                                                                                    ". "
                                                                                    (:doc (meta pred))))))))))
                                 flags (filter keyword? s)
-                                ;; _ (println "flags: " flags)
+                                ;; _ (log/debug "flags: " flags)
                                 _  (if (some #{:computed} flags)
                                      (if (not (= :computed (nth s 1)))
                                        (throw (Exception. (str "Flag :computed must be first arg: "
                                                                mname)))))
                                 observer (let [obs (if (some #{:computed} flags)
-                                                     (do ;;(println "COMPUTED HIT")
+                                                     (do ;;(log/debug "COMPUTED HIT")
                                                          (filter list? (next (nnext s))))
                                                      (if (= prop-type 'Observer)
                                                        (list (conj (rest s) 'fn))
@@ -806,8 +1101,8 @@
                                 ;;       (if (= 2 (count ss))
                                 ;;         (last ss)
                                 ;;         (if (= (first (next s)) (first ss)) nil (first ss))))
-                                ;; _ (println "observer: " observer) ; (-> (first observer) next first))
-                                ;; _ (println "doc: " doc)
+                                ;; _ (log/debug "observer: " observer) ; (-> (first observer) next first))
+                                ;; _ (log/debug "doc: " doc)
                                 ]
                             (when (> (count observer) 1)
                               (throw (IllegalArgumentException. (str "Only one observer allowed for property " mname))))
@@ -827,7 +1122,7 @@
                                                                        (pr-str flags)
                                                                        " not allowed on multi-prop observer: " mname)))
                                 (let [args (fnext (first observer))]
-                                  ;; (println "OBSERVER ARGS: " args)
+                                  ;; (log/debug "OBSERVER ARGS: " args)
                                   (if (empty? args)
                                     (throw (IllegalArgumentException. (str "Argument vector for multi-prop observer " mname " must not be empty."))))
                                   (if (not (every? (set all-props) args))
@@ -850,24 +1145,24 @@
                                            {:doc doc})))))
                         {} sigs)) ;; end reduce1
 
-        ;; _ (println "SIGS: " sigs)
+        ;; _ (log/debug "SIGS: " sigs)
         ;; meths (mapcat (fn [sig]
         ;;                 (let [m (munge (:name sig))]
         ;;                   (map #(vector m (vec (repeat (dec (count %))'Object)) 'Object)
         ;;                        (:observer sig))))
         ;;               (vals sigs))
-        ;; _ (println "METHS: " meths)
+        ;; _ (log/debug "METHS: " meths)
         ]
-    ;; (println "DEFPROPS A")
+    ;; (log/debug "DEFPROPS A")
   `(do
      (defonce ~name {})
      ;; (gen-interface :name ~iname :methods ~meths)
      (alter-meta! (var ~name) assoc :doc ~(:doc opts) :properties true)
      ~(when sigs
         `(#'assert-same-protocol (var ~name) '~(map :name (vals sigs))))
-     ;; (println "DEFPROPS VAR: " (var ~name))
-     ;; (println "DEFPROPS OPTS: " '~opts)
-     ;; (println "DEFPROPS SIGS: " (str '~sigs))
+     ;; (log/debug "DEFPROPS VAR: " (var ~name))
+     ;; (log/debug "DEFPROPS OPTS: " '~opts)
+     ;; (log/debug "DEFPROPS SIGS: " (str '~sigs))
      (alter-var-root (var ~name)
                      merge
                      (assoc ~opts
@@ -889,14 +1184,14 @@
                        ;;              #_(emit-method-builder (:on-interface opts) (:name s) (:on s) (:observer s))])
                        ;;           (vals sigs)))
                         ))
-    ;; (println "DEFPROPS X")
+    ;; (log/debug "DEFPROPS X")
     ;;  (-reset-methods ~name)
-    ;; (println "DEFPROPS " '~name)
+    ;; (log/debug "DEFPROPS " '~name)
      '~name)))
 
 (defmacro defweb-properties
   [name & opts+sigs]
-  ;; (println "DEFPROPERTIES: " name opts+sigs)
+  ;; (log/debug "DEFPROPERTIES: " name opts+sigs)
   (try (emit-properties name opts+sigs)
        (catch Exception e
          (throw (IllegalArgumentException. (str "defproperties " name ": " (.getMessage e)))))))
@@ -907,18 +1202,18 @@
 ;;   so to support jit loading we need to require first w/o :refer, then define the :refers,
 ;;   then alias as needed"
 ;;   [& args]
-;;   (println "REQUIREing " args)
+;;   (log/debug "REQUIREing " args)
 ;;   ;; step 1: clojure.core/require the namespaces, without options
 ;;   (doseq [arg args]
 ;;     (let [ns-basic (first arg)
 ;;           segs (str/split (str ns-basic) #"\.")]
-;;          (println "CLOJURE.CORE/REQUIRE: " ns-basic)
+;;          (log/debug "CLOJURE.CORE/REQUIRE: " ns-basic)
 ;;          (try (clojure.core/require ns-basic :reload)
 ;;               (catch java.io.FileNotFoundException e
 ;;                 (throw (Exception.
-;;                         (str "miraj.markup/require ns undefined: " (.getMessage e))))))
-;;          (doseq [[isym ivar] (ns-interns ns-basic)] (println "INTERNED: " isym ivar))
-;;          (doseq [[isym ivar] (ns-aliases ns-basic)] (println "ALIAS: " isym ivar))
+;;                         (str "miraj.co-dom/require ns undefined: " (.getMessage e))))))
+;;          (doseq [[isym ivar] (ns-interns ns-basic)] (log/debug "INTERNED: " isym ivar))
+;;          (doseq [[isym ivar] (ns-aliases ns-basic)] (log/debug "ALIAS: " isym ivar))
 ;;          ;; make sure file actually has ns decl
 ;;          (if (find-ns ns-basic) nil (throw (Exception. (str "ns not declared: " ns-basic))))
 
@@ -930,21 +1225,21 @@
 
 ;;   ;; step 3: for each :refer, generate a <link> element
 ;;   ;; require-resource does both
-;;   ;; (println "EXPANDING REQUIRE")
+;;   ;; (log/debug "EXPANDING REQUIRE")
 ;;   (do
-;;      ;; (println "REQUIRing: " [~@args])
+;;      ;; (log/debug "REQUIRing: " [~@args])
 ;;      (let [link-elts (for [arg args]
-;;                         (do ;;(println "GET-REQ: " arg)
+;;                         (do ;;(log/debug "GET-REQ: " arg)
 ;;                           (let [r (x/require-resource arg)]
 ;;                             (doall r)
 ;;                             r)))]
 ;;        (doall link-elts)
-;;        ;; (println "REQUIREd: " link-elts#)
+;;        ;; (log/debug "REQUIREd: " link-elts#)
 ;;                           link-elts)))
 
 (defn require-polymer
   [req] ;; e.g.  [polymer.paper :as paper :refer [button card]]
-  (println "require-polymer: " req)
+  (log/debug "require-polymer: " req)
   (let [sn (first req)]
     ))
 
@@ -974,7 +1269,7 @@
 
   {:added "1.0"}
   [ns-sym & filters]
-  ;; (println "refer: " ns-sym filters)
+  ;; (log/debug "refer: " ns-sym filters)
   (let [ns (or (find-ns ns-sym) (throw (new Exception (str "No namespace: " ns-sym))))
         fs (apply hash-map filters)
         nspublics (ns-publics ns)
@@ -994,7 +1289,7 @@
                           (str sym " is not public")
                           (str sym " does not exist")))))
           (do
-            ;; (println "REFER " sym v (meta v))
+            ;; (log/debug "REFER " sym v (meta v))
             (. *ns* (refer (or (rename sym) sym) v))
             (:uri (meta v))
             #_(str bower-repo "/" (:uri (meta v)))))))))
@@ -1027,7 +1322,7 @@
 
 (defn declare-webcomponent
   [ns-sym nm-sym type & docstring]
-  ;; (println "DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
+  (log/debug "    DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
   (let [ds (if (empty? docstring) ""
                (if (string? (first docstring))
                  (first docstring)
@@ -1036,27 +1331,27 @@
         segs (str/split (str ns-sym) #"\.")]
     (if (= (first segs) "polymer")
       (let [polymer-cat (last segs)
-            ;; _ (println "polymer category: " polymer-cat)
+            ;; _ (log/debug "polymer category: " polymer-cat)
             html-tag (str polymer-cat "-" nm-sym)
-            ;; _ (println "html-tag: " html-tag)
+            ;; _ (log/debug "html-tag: " html-tag)
             html-kw (keyword html-tag)
             uri (str bower-repo "/" (if (vector? (first docstring))
                                       (ffirst docstring)
                                       (str html-tag "/" html-tag ".html")))
-            ;; _ (println "uri:      " uri)
+            ;; _ (log/debug "uri:      " uri)
             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
                            (fn [& args]
                              (let [elt (if (empty? args)
-                                         (do ;; (println "COMPONENT FN NO ARGS: " html-kw)
+                                         (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
                                              (x/element html-kw))
                                          (let [first (first args)
                                                rest (rest args)
                                                [attrs content] (x/parse-elt-args first rest)]
                                            (apply x/element html-kw attrs content)))]
                                elt)))]
-        ;; (println "NS-SYM: " ns-sym)
-        ;; (println "NM-SYM: " nm-sym)
-        ;; (println "NEWVAR: " newvar)
+        ;; (log/debug "NS-SYM: " ns-sym)
+        ;; (log/debug "NM-SYM: " nm-sym)
+        ;; (log/debug "NEWVAR: " newvar)
         newvar)
       ;; else custom component
       (let [html-tag nm-sym
@@ -1066,46 +1361,50 @@
             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
                            (fn [& args]
                              (let [elt (if (empty? args)
-                                         (do ;; (println "COMPONENT FN NO ARGS: " html-kw)
+                                         (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
                                              (x/element html-kw))
                                          (let [first (first args)
                                                rest (rest args)
                                                [attrs content] (x/parse-elt-args first rest)]
                                            (apply x/element html-kw attrs content)))]
                                elt)))]
-        ;; (println "NS-SYM: " ns-sym)
-        ;; (println "NM-SYM: " nm-sym)
-        ;; (println "NEWVAR: " newvar)
+        ;; (log/debug "NS-SYM: " ns-sym)
+        ;; (log/debug "NM-SYM: " nm-sym)
+        ;; (log/debug "NEWVAR: " newvar)
         newvar))))
 
+;; OBSOLETE: in earlier versions, we dynamically created and populated
+;; the lib namespace, rather than loading a lib from a jar.  now we
+;; now use statically generated libs in jars
 (defn- load-polymer-lib
-  "Load a polymer lib. Create the namespace (e.g. polymer.x); for each
+  "Dynamically load a polymer lib. Create the namespace (e.g. polymer.x); for each
   var y, get config data from the polymer/x map, then intern
   polymer.x/y"
-  [lib need-ns require]
-  (println "load-polymer-lib: " lib need-ns require)
+  [lib as-alias require]
+  (log/debug "    LOAD-POLYMER-LIB: " lib as-alias require)
   (let [lns (create-ns lib)
+        _ (log/debug "    created ns:  " lns)
         segs (str/split (str lib) #"\.")
-        pns (find-ns 'polymer)
-        ;; _ (println "PNS: " pns)
-        v (find-var (symbol "polymer" (str need-ns)))
+        pns (find-ns lib) ; 'miraj.polymer)
+        _ (log/debug "    polymer ns:  " pns)
+        psym (symbol (str lib) (str as-alias))
+        _ (log/debug "    psym: " psym)
+        v (find-var psym)
+        _ (log/debug "    polymer var: " v)
         kw-docstring-map (deref v)]
-    ;; (println "created ns:  " lns)
-    ;; (println "polymer ns:  " pns)
-    ;; (println "polymer var: " v)
-    ;; (println "var val: " kw-docstring-map)
-    (if need-ns
-      (do ;; (println "making alias " need-ns lns)
-        ;; (println "current ns: " *ns*)
-        (alias (symbol need-ns) (symbol lib))
-        #_(println "ALIASES: " (ns-aliases *ns*))))
+    (log/debug "var val: " kw-docstring-map)
+    (if as-alias
+      (do ;; (log/debug "making alias " as-alias lns)
+        ;; (log/debug "current ns: " *ns*)
+        (alias (symbol as-alias) (symbol lib))
+        #_(log/debug "ALIASES: " (ns-aliases *ns*))))
     (doseq [[kw docstring] kw-docstring-map]
       (do
         (let [sym (symbol (name kw))
               elt (declare-webcomponent lns sym :polymer docstring)]
-          ;; (println "ELT: " elt)
+          ;; (log/debug "ELT: " elt)
           #_(load (root-resource lib))
-          (throw-if (and need-ns (not (find-ns lib)))
+          (throw-if (and as-alias (not (find-ns lib)))
                     "namespace '%s' not found after loading '%s'"
                     lib lib #_(root-resource lib))
           (when require
@@ -1117,16 +1416,16 @@
   [ns-sym nm-sym]
   (let [uri (str "/" (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
         uri (str/replace uri #"-" "_")
-        _ (println "CHECKING: " uri)
+        _ (log/debug "CHECKING: " uri)
         resource (io/resource uri)]
-    (println "RESOURCE: " resource)
+    (log/debug "RESOURCE: " resource)
     (if (nil? resource) (throw (java.io.FileNotFoundException. (format "web resource %s not found" uri))))
     #_(declare-webcomponent lns sym :_cowebcomponent "")))
 
 (defn- load-miraj-lib
   "load miraj web component lib"
-  [lib need-ns require opts]
-  (println "load-miraj-lib: " lib need-ns require opts)
+  [lib as-alias require opts]
+  (log/debug "    LOAD-MIRAJ-LIB: " lib as-alias require opts)
 
   ;; in dynamic mode, component is loadable from the defweb-component ns
   ;; in static mode, the component is static html/cljs, not loadable
@@ -1137,27 +1436,27 @@
                 (do (clojure.core/require lib)
                     (clojure.core/find-ns lib))
                 (catch java.io.FileNotFoundException e
-                  (do ;; (println "LOAD_MIRAJ_LIB EXCEPTION" (.getMessage e))
+                  (do ;; (log/debug "LOAD_MIRAJ_LIB EXCEPTION" (.getMessage e))
                       nil)))
         lns (if (nil? reqns)
               (clojure.core/create-ns lib)
               reqns)]
-    (println "required ns: " reqns)
-    (if need-ns
-      (alias (symbol need-ns) (symbol lib)))
+    (log/debug "    REQUIRED NS: " reqns)
+    (if as-alias
+      (alias (symbol as-alias) (symbol lib)))
     ;; TODO: find and load jarfile?
     (doseq [sym (:refer (apply hash-map opts))]
       (let [elt (if (nil? reqns)
                   (load-miraj-lib-static-resource lns sym)
                   (find-var (symbol (str lib) (str sym))))]
         ;; (if (nil? resource) (throw (Exception. (format ":require resource %s not found on classpath" uri))))
-        ;; (println "ELT: " elt)
-        ;; (println "DEREF ELT: " (deref elt))
-        ;; (println "META ELT: " (meta elt))
-        ;; (println "ELT URI: " uri)
-        ;; (println "ELT RESOURCE: " resource)
+        ;; (log/debug "ELT: " elt)
+        ;; (log/debug "DEREF ELT: " (deref elt))
+        ;; (log/debug "META ELT: " (meta elt))
+        ;; (log/debug "ELT URI: " uri)
+        ;; (log/debug "ELT RESOURCE: " resource)
         #_(load (root-resource lib))
-        (throw-if (and need-ns (not (find-ns lib)))
+        (throw-if (and as-alias (not (find-ns lib)))
                   "namespace '%s' not found after loading '%s'"
                   lib lib #_(root-resource lib))
         (when require
@@ -1166,38 +1465,49 @@
         elt))))
 
 (defn- load-one
-  "Loads a lib given its name. If need-ns, ensures that the associated
+  "Loads a lib given its name. If as-alias, ensures that the associated
   namespace exists after loading. If require, records the load so any
   duplicate loads can be skipped."
-  [lib need-ns require opts]
-  ;; (println "load-one " lib need-ns require)
+  [lib as-alias require opts]
+  (log/debug "    LOAD-ONE: " lib as-alias require opts)
+  (log/debug "    ALIAS: " as-alias)
+  (log/debug "    OPTS: " opts)
   (let [segs (str/split (str lib) #"\.")
         seg1 (first segs)]
-    ;; (println "segs: " segs)
-    ;; (println "seg1: " seg1)
-    (if (= seg1 "polymer")
-      (let [pl (load-polymer-lib lib need-ns require)]
-        ;; (println "PL: " pl)
-        pl)
-      (let [cl (load-miraj-lib lib need-ns require opts)]
-        ;; (println "custom lib: " cl)
+    (log/debug "segs: " segs)
+    (if (and (= seg1 "miraj") (= (second segs) "polymer"))
+      (do (log/debug "    MIRAJ.POLYMER - requiring")
+          #_(let [pl (load-polymer-lib lib as-alias require)]
+              pl)
+          (let [v [lib :as as-alias]
+                args (into v opts)
+                args (concat [args] [:verbose])]
+            ;;(log/debug "    ARGS: " args)
+            (apply clojure.core/require args)
+            #_(let [lns (find-ns lib)
+                  _ (log/debug "    FOUND ns:  " lns)
+                  interns (ns-interns lns)
+                  _ (log/debug "    INTERNS:" interns)]))
+          )
+      (let [cl (load-miraj-lib lib as-alias require opts)]
+        ;; (log/debug "custom lib: " cl)
         cl)
       )))
 
 ;; (let [lns (create-ns lib)]
-;;     (println "created ns: " lns)
+;;     (log/debug "created ns: " lns)
 ;;     (if need-ns
-;;       (do ;; (println "making alias " need-ns lns)
-;;           ;; (println "current ns: " *ns*)
+;;       (do ;; (log/debug "making alias " need-ns lns)
+;;           ;; (log/debug "current ns: " *ns*)
 ;;           (alias (symbol need-ns) (symbol lib))
-;;           #_(println "ALIASES: " (ns-aliases *ns*)))))
-;;   ;; (println "polymer/paper: " polymer/paper)
-;;   (println "POLYMER/PAPER: " (find-var (symbol (str/replace (str lib) #"\." "/"))))
+;;           #_(log/debug "ALIASES: " (ns-aliases *ns*)))))
+;;   ;; (log/debug "polymer/paper: " polymer/paper)
+;;   (log/debug "POLYMER/PAPER: " (find-var (symbol (str/replace (str lib) #"\." "/"))))
 ;;   (let [tbl (symbol (str/replace (str lib) #"\." "/"))]
-;;     (println "tbl: " tbl)
+;;     (log/debug "tbl: " tbl)
 ;;     (let [table tbl] ;; (find-var tbl)]
 ;;       (doseq [sym (eval table)]
-;;         (println (str "SYM: " sym)))))
+;;         (log/debug (str "SYM: " sym)))))
 ;;   #_(load (root-resource lib))
 ;;   (throw-if (and need-ns (not (find-ns lib)))
 ;;             "namespace '%s' not found after loading '%s'"
@@ -1212,7 +1522,7 @@
   exists after loading. If require, records the load so any duplicate loads
   can be skipped."
   [lib need-ns require]
-  ;; (println "load-all " lib need-ns require)
+  ;; (log/debug "load-all " lib need-ns require)
   (dosync
    (commute *loaded-libs* #(reduce1 conj %1 %2)
             (binding [*loaded-libs* (ref (sorted-set))]
@@ -1222,7 +1532,7 @@
 (defn- load-lib
   "Loads a lib with options"
   [prefix lib & options]
-  ;; (println "load-lib: " prefix lib options)
+  (log/debug "    LOAD-LIB: " prefix lib options)
   (throw-if (and prefix (pos? (.indexOf (name lib) (int \.))))
             "Found lib name '%s' containing period with prefix '%s'.  lib names inside prefix lists must not contain periods"
             (name lib) prefix)
@@ -1230,46 +1540,46 @@
         opts (apply hash-map options)
         {:keys [as reload reload-all require use verbose]} opts
         loaded (contains? @*loaded-libs* lib)
-        ;; _ (println "lib already loaded? " lib loaded)
+        ;; _ (log/debug "lib already loaded? " lib loaded)
         load (cond reload-all
                    load-all
                    (or reload (not require) (not loaded))
                    load-one)
-        need-ns (or as use)
+        as-alias (or as use)
         filter-opts (select-keys opts '(:exclude :only :rename :refer))
         undefined-on-entry (not (find-ns lib))]
-    ;; (println "LOAD: " load)
+    (log/debug "    LOAD: " load " as:" as-alias)
     (binding [*loading-verbosely* (or *loading-verbosely* verbose)]
       (if load
         (try
-          (load lib need-ns require (mapcat seq filter-opts))
+          (load lib as-alias require (mapcat seq filter-opts))
           (catch Exception e
             (when undefined-on-entry
               (remove-ns lib))
             (throw e)))
-        #_(throw-if (and need-ns (not (find-ns lib)))
+        #_(throw-if (and as-alias (not (find-ns lib)))
                   "namespace '%s' not found" lib))
-      (when (and need-ns *loading-verbosely*)
-        (printf "(clojure.core/in-ns '%s)\n" (ns-name *ns*)))
-      (when as
+      #_(when (and as-alias *loading-verbosely*)
+        (printf "    (clojure.core/in-ns '%s)\n" (ns-name *ns*)))
+      #_(when as
         (when *loading-verbosely*
-          (printf "(clojure.core/alias '%s '%s)\n" as lib))
+          (printf "    (clojure.core/alias '%s '%s)\n" as-alias lib))
         (alias as lib))
       (when (or use (:refer filter-opts))
-        (when *loading-verbosely*
-          (printf "(miraj.core/refer '%s" lib)
+        #_(when *loading-verbosely*
+          (printf "    (miraj.core/refer '%s" lib)
           (doseq [opt filter-opts]
-            (printf " %s '%s" (key opt) (print-str (val opt))))
+            (printf "    KEYOPT: %s '%s" (key opt) (print-str (val opt))))
           (printf ")\n"))
         (let [result (apply refer lib (mapcat seq filter-opts))]
-          ;; (println "REFER RESULT: " result)
+          #_(log/debug "    REFER RESULT: " result)
           result)))))
 
 (defn- load-libs
   "Loads libs, interpreting libspecs, prefix lists, and flags for
   forwarding to load-lib"
   [& args]
-  ;; (println "load-libs " args)
+  (log/debug "    LOAD-LIBS " args)
   ;; step 1: clojure.core/require the namespaces, without options
   ;;(doseq [arg args]
     (let [;; ns-basic (first arg)
@@ -1277,10 +1587,10 @@
           flags (filter keyword? args)
           opts (interleave flags (repeat true))
           args (filter (complement keyword?) args)]
-      ;; (println "MIRAJ.CORE/REQUIRE: " #_ns-basic)
-      ;; (println "flags: " flags)
-      ;; (println "opts:  " opts)
-      ;; (println "args:  " args)
+      ;; (log/debug "MIRAJ.CORE/REQUIRE: " #_ns-basic)
+      ;; (log/debug "flags: " flags)
+      ;; (log/debug "opts:  " opts)
+      ;; (log/debug "args:  " args)
       (let [supported #{:as :reload :reload-all :verbose :refer :require}
             unsupported (seq (remove supported flags))]
         (throw-if unsupported
@@ -1299,25 +1609,32 @@
       ;; #_(if (= (first segs) "polymer")
       ;;   (require-polymer arg))))
 
+;; CHANGED: we used to insert polymer link elts at defpage time; now
+;; we do it in the normalize routine.
 (defn require
-  ""
+  "Called by defpage to have clojure.core/require load polymer libs."
   [page-var & args]
-  (println ":require " page-var args)
+  ;; (log/debug "    :REQUIRE " page-var args)
   (let [reqres (remove nil? (flatten (apply load-libs :require args)))
-        reqelts (for [req reqres]
-                  (x/element :link {:rel "import" :href req}))]
-    ;; (println "REQUIRE RESULT: " reqelts)
-    (alter-meta! page-var (fn [old] (assoc old :_webcomponents args)))
-    [:require reqelts]))
+        ;; _ (log/debug "    REQRESULT: " reqres)
+        ;; reqelts (for [arg args] ;; [req reqres]
+        ;;           (do ;; (log/debug "arg: " arg)
+        ;;           (x/element :link {:rel "import"
+        ;;                             :href (str (first arg))
+        ;;                             #_req})))
+        ]
+    ;; (log/debug "    :REQUIRE RESULT: " reqelts)
+    ;;(alter-meta! page-var (fn [old] (assoc old :_webcomponents args)))
+    [:require nil #_reqelts]))
 
 ;;obsolete
 #_(defn import-resources
   [resources imports-map]
-  ;; (println "import-resource: " resources imports-map)
+  ;; (log/debug "import-resource: " resources imports-map)
   (let [ns (first resources)
-        ;; _ (println "ns: " ns)
+        ;; _ (log/debug "ns: " ns)
         resources (next resources)
-        ;; _ (println "resources: " resources)
+        ;; _ (log/debug "resources: " resources)
         ]
     ))
 
@@ -1325,24 +1642,158 @@
 (defn get-imports-config-map
   []
   (let [home-imports-path (str (System/getProperty "user.home") "/.miraj/imports.edn")
-        ;; _ (println "home-imports-path: " home-imports-path)
+        ;; _ (log/debug "home-imports-path: " home-imports-path)
         home-imports (try (slurp home-imports-path)
                           (catch java.io.FileNotFoundException e nil))
         home-imports (if home-imports (read-string home-imports) nil)
-        ;; _ (println "HOME IMPORTS.EDN: " home-imports)
+        ;; _ (log/debug "HOME IMPORTS.EDN: " home-imports)
         proj-imports (try (slurp ".miraj/imports.edn")
                           (catch java.io.FileNotFoundException e nil))
         proj-imports (if proj-imports (read-string proj-imports) nil)
-        _ (println "PROJ IMPORTS.EDN: " proj-imports)
+        ;; _ (log/debug "PROJ IMPORTS.EDN: " proj-imports)
         ]
     (merge-with merge home-imports proj-imports)))
 
+(defn css-spec->link
+  [spec]
+  ;; (log/debug "css-spec->link: " spec)
+  (let [css-ns   (first spec)
+        css-vars (rest  spec)]
+    (for [css-var css-vars]
+      (let [path (ns-sym->path css-ns)
+            href (str "/" path "/" css-var ".css")]
+        ;;(log/debug "IMPORT HREF: " href)
+        (x/element :link {:rel "stylesheet" :href href})))))
+
+(defn css-map->link
+  [css-map]
+  ;; (log/debug "css-map->link: " css-map)
+  (let [supported (set (conj (keys x/html5-link-attrs))) ;; html5-link-types
+        unsupported (seq (remove supported (keys css-map)))]
+    (throw-if unsupported
+              (apply str "Unsupported :css option(s) supplied: "
+                     (interpose \, unsupported))))
+  (x/element :link (conj {:rel "stylesheet" :type "text/css"}
+                         css-map)))
+
+(defn css
+  "Fn that handles :css directive of miraj.core/defpage"
+  [page-var & css-specs]
+  (log/debug "CSS: " page-var) ;;  css-specs)
+  (let [flags (filter keyword? css-specs)
+        opts (apply hash-map (interleave flags (repeat true)))
+        args (filter (complement keyword?) css-specs)]
+    ;; check for unsupported options
+    (let [supported (set (conj (keys x/html5-link-attrs) :custom)) ;; html5-link-types
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported :css option(s) supplied: "
+                       (interpose \, unsupported))))
+    (let [arg1 (first args)
+          elts (cond
+                  (:custom opts)
+                  (let [css (second args)]
+                    ;; FIXME: this assumes css is a string
+                    (x/element :style {:is "custom-style" :type "text/css"} args))
+
+                  (string? arg1) (x/element :style {:type "text/css"} arg1)
+
+                  (vector? arg1) ;; maps and import vectors
+                  (for [css-spec arg1]
+                    (vector (if (vector? css-spec)
+                              (css-spec->link css-spec)
+                              (if (map? css-spec)
+                                (css-map->link css-spec)
+                                (throw (Exception. (format "Invalid :css vector: %s" css-spec)))))))
+
+                  :else
+                  (for [css-spec args]
+                    (css-spec->link css-spec))
+                  )]
+      ;;(log/debug "css elts: " elts)
+      [:css elts])))
+
+(defn js
+  "Fn that handles :js directive of miraj.core/defpage"
+  [page-var & css-specs]
+  (log/debug "JS: " page-var css-specs)
+  (let [flags (filter keyword? css-specs)
+        opts (apply hash-map (interleave flags (repeat true)))
+        args (filter (complement keyword?) css-specs)]
+    ;; (log/debug "ARGS: " args)
+    ;; check for unsupported options
+    (let [supported x/html5-script-attrs
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported :css option(s) supplied: "
+                       (interpose \, unsupported))))
+    (let [arg1 (first args)
+          elts (cond
+
+                  ;; (:custom opts)
+                  ;; (let [css (second args)]
+                  ;;   ;; FIXME: this assumes css is a string
+                  ;;   (x/element :style {:is "custom-style" :type "text/css"} args))
+
+                  (string? arg1) (x/element :script {:type "text/javascript"} arg1)
+
+                  (vector? arg1) ;; maps and import vectors
+                  (for [css-spec arg1]
+                    (vector (if (vector? css-spec)
+                              (css-spec->link css-spec)
+                              (if (map? css-spec)
+                                (css-map->link css-spec)
+                                (throw (Exception. (format "Invalid :css vector: %s" css-spec)))))))
+
+                  :else
+                  (for [css-spec args]
+                    (css-spec->link css-spec))
+                  )]
+      ;;(log/debug "css elts: " elts)
+      [:css elts])))
+
 (defn import
   ""
+  [page-var & import-specs]
+  (log/debug "IMPORT: " page-var import-specs)
+  (let [flags (filter keyword? import-specs)
+        opts (apply hash-map (interleave flags (repeat true)))
+        args (first (filter (complement keyword?) import-specs))]
+    ;; (log/debug "Args: " args)
+    ;; (log/debug "OPTS: " opts)
+    ;; check for unsupported options
+    (let [supported #{:modules :custom :uri}
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported :import option(s) supplied: "
+                       (interpose \, unsupported))))
+    (let [imports (for [import-spec args]
+                    (let [import-ns   (first import-spec)
+                          import-vars (rest import-spec)
+                          path (if (:uri opts) (ns->uri import-ns) (ns-sym->path import-ns))]
+                      ;; (log/debug "PATH: " path)
+                      (if (:modules opts)
+                        (vector (x/element :link {:rel "import"
+                                                  :href (str "/" path ".html")})
+                                (for [import-var import-vars]
+                                    (x/element :style
+                                               (merge {:include (str import-var)}
+                                                      (if (:custom opts)
+                                                        {:is "custom-style"}
+                                                        {})))))
+
+                        (for [import-var import-vars]
+                          (let [href (str "/" path "/" import-var ".html")]
+                            (x/element :link {:rel "import" :href href}))))))]
+      ;; (log/debug "imports: " imports)
+      [:import imports])))
+
+#_(defn import-x
+  ""
   [page-var & args]
-  (println ":import " page-var args)
+  (log/debug "IMPORT-X: " page-var args)
   (let [imports-config-map (get-imports-config-map)
-        ;; _ (println "IMPORTS CONFIG MAP: " imports-config-map)
+        ;; _ (log/debug "IMPORTS CONFIG MAP: " imports-config-map)
         imports (for [arg args]
                     (let [ns-basic (first arg)
                           resources (next arg)]
@@ -1361,7 +1812,7 @@
                               (x/element :script {:src (:file r) :type "text/javascript"})
                               (x/element :link {:href (:file r) :rel "stylesheet"})))))))]
                         ;; #_(import-resources resources (get imports-config-map ns-basic)))))]
-    ;; (println "IMPORTS: " imports)
+    ;; (log/debug "IMPORTS: " imports)
     (alter-meta! page-var (fn [old] (assoc old :_webimports args)))
     [:import imports]))
 
@@ -1371,9 +1822,9 @@
   ;;     (try (clojure.core/require ns-basic :reload)
   ;;             (catch java.io.FileNotFoundException e
   ;;               (throw (Exception.
-  ;;                       (str "miraj.markup/require ns undefined: " (.getMessage e))))))
-  ;;        (doseq [[isym ivar] (ns-interns ns-basic)] (println "INTERNED: " isym ivar))
-  ;;        (doseq [[isym ivar] (ns-aliases ns-basic)] (println "ALIAS: " isym ivar))
+  ;;                       (str "miraj.co-dom/require ns undefined: " (.getMessage e))))))
+  ;;        (doseq [[isym ivar] (ns-interns ns-basic)] (log/debug "INTERNED: " isym ivar))
+  ;;        (doseq [[isym ivar] (ns-aliases ns-basic)] (log/debug "ALIAS: " isym ivar))
   ;;        ;; make sure file actually has ns decl
   ;;        (if (find-ns ns-basic) nil (throw (Exception. (str "ns not declared: " ns-basic))))
 
@@ -1385,96 +1836,38 @@
 
   ;; ;; step 3: for each :refer, generate a <link> element
   ;; ;; require-resource does both
-  ;; ;; (println "EXPANDING REQUIRE")
+  ;; ;; (log/debug "EXPANDING REQUIRE")
   ;; (do
-  ;;    ;; (println "REQUIRing: " [~@args])
+  ;;    ;; (log/debug "REQUIRing: " [~@args])
   ;;    (let [link-elts (for [arg args]
-  ;;                       (do ;;(println "GET-REQ: " arg)
+  ;;                       (do ;;(log/debug "GET-REQ: " arg)
   ;;                         (let [r (x/require-resource arg)]
   ;;                           (doall r)
   ;;                           r)))]
   ;;      (doall link-elts)
-  ;;      ;; (println "REQUIREd: " link-elts#)
+  ;;      ;; (log/debug "REQUIREd: " link-elts#)
   ;;                         link-elts)))
 
 (defn body
   ""
   [page-var & args]
-  (let [content (map #(eval %) args)]
-        ;;bod (x/element :body content)]
-    ;; (println ":BODY " content)
+  ;; (log/debug "BODY: " page-var)
+  ;; (log/debug "BODY ARGS: " args)
+  (let [page-ns (-> page-var meta :ns)
+        page-ns-sym (ns-name page-ns)
+        ;;_ (clojure.core/require page-ns-sym :reload) ; :verbose)
+        content (map #(eval %) args)]
+    ;; force eval of content, so namespace aliases are resolvable!
+    (doall content)
     [:body content]))
-
-(defmacro defweb-page
-  ""
-  {:arglists '([name docstring? attr-map? references*])
-   :added "1.0"}
-  [name & references]
-  (println "DEFWEB-PAGE " name " in ns " *ns*)
-  (let [page-var (intern *ns* name)
-        ;; _ (println "PAGE VAR: " page-var)
-        process-reference
-        (fn [[kname & args]]
-          `(do
-             ;; (println "PROCESSING: " '~(symbol "miraj.core" (clojure.core/name kname)))
-             ;; (println "ARGS: " '~args)
-             (~(symbol "miraj.core" (clojure.core/name kname))
-              ~page-var
-              ~@(map #(list 'quote %) args))))
-        docstring  (when (string? (first references)) (first references))
-        references (if docstring (next references) references)
-        name (if docstring
-               (vary-meta name assoc :doc docstring)
-               name)
-        metadata (eval `(let [maybe-meta#  ~(first references)]
-                   (cond (map? maybe-meta#) maybe-meta#
-                         (symbol? maybe-meta#) (if (map? maybe-meta#) maybe-meta#))))
-        ;; _ (println "metadata: " metadata)
-        references (if metadata (next references) references)
-        name (if metadata
-               (vary-meta name merge metadata)
-               name)
-        ;; _ (println "defweb-page NAME: " name)
-        ;; gen-class-clause (first (filter #(= :gen-class (first %)) references))
-        ;; gen-class-call
-        ;;   (when gen-class-clause
-        ;;     (list* `gen-class :name (.replace (str name) \- \_) :impl-ns name :main true (next gen-class-clause)))
-        ;; references (remove #(= :gen-class (first %)) references)
-        ;ns-effect (clojure.core/in-ns name)
-        name-metadata (meta name)]
-    `(do
-       (with-loading-context
-         ;; (let [[reqs# imports# body#] [~@(map process-reference references)]
-         ;;       head# (x/element :head reqs# imports#)
-         ;;       html# (x/element :html head# body#)]
-         (let [reqs# (into {} [~@(map process-reference references)])
-               head# (apply x/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
-               ;; _# (println "HEAD# " head#)
-               body# (apply x/element :body {} (:body reqs#))
-               html# (apply x/element :html {} (vec (flatten (list head# body#))))
-               ]
-           ;; (println "ALL: " reqs#)
-
-           ;; (println "BODY# " body#)
-           ;; (println "HTML# " html#)
-           ;; (clojure.core/intern *ns* '~name html#)
-           ;; (intern *ns*
-           ;;         (with-meta
-           ;;           (symbol ~(str name))
-           ;;           (merge {:doc ~docstring :_webpage true} ~metadata)))
-           (clojure.core/alter-var-root ~page-var
-                                        (fn [old# & args#] html#))
-           (clojure.core/alter-meta! ~page-var
-                                     (fn [old# & args#] (merge old# ~metadata {:doc ~docstring :_webpage true})))
-           ~page-var)))))
 
 ;;OBSOLETE
 ;; #_(defmacro co-fn
 ;;   [fn-tag docstring elt-kw elt-uri typ]
-;;   (do #_(println "co-fn:" typ fn-tag elt-kw elt-uri docstring)
+;;   (do #_(log/debug "co-fn:" typ fn-tag elt-kw elt-uri docstring)
 ;;               (eval `(defn ~fn-tag ~docstring
 ;;                        [& args#]
-;; ;;                       (println "invoking " ~fn-tag)
+;; ;;                       (log/debug "invoking " ~fn-tag)
 ;;                        (let [elt# (if (empty? args#)
 ;;                                     (with-meta (element ~elt-kw)
 ;;                                       {:miraj
@@ -1487,7 +1880,7 @@
 ;;                                           rest# (rest args#)
 ;;                                           [attrs# content#] (parse-elt-args first# rest#)]
 ;;                                       (with-meta (apply element ~elt-kw attrs# content#)
-;;                                         {:miraj {:co-fn true
+;;                                         {:miraj/miraj {:co-fn true
 ;;                                                  :component ~typ
 ;;                                                  :doc ~docstring
 ;;                                                  :elt-kw ~elt-kw
@@ -1496,7 +1889,7 @@
 ;;               (alter-meta! (find-var (symbol (str *ns*) (str fn-tag)))
 ;;                             (fn [old new]
 ;;                               (merge old new))
-;;                             {:miraj {:co-fn true
+;;                             {:miraj/miraj {:co-fn true
 ;;                                      :component typ
 ;;                                      :doc docstring
 ;;                                      :elt-kw elt-kw
@@ -1507,42 +1900,42 @@
   [page-var & args]
   (let [content (map #(eval %) args)]
         ;;bod (x/element :body content)]
-    ;; (println ":BODY " content)
-    [:codom content]))
+    ;; (log/debug ":BODY " content)
+    [:miraj/codom content]))
 
 (defmacro defweb-codom
   ""
   {:arglists '([name docstring? attr-map? references*])
    :added "1.0"}
   [name & references]
-  (println "DEFWEB-CODOM " name " in ns " *ns*)
+  ;; (log/debug "DEFWEB-CODOM " name " in ns " *ns*)
   (let [codom-var (intern *ns* name)
-        ;; _ (println "PAGE VAR: " codom-var)
+        ;; _ (log/debug "PAGE VAR: " codom-var)
         process-reference
         (fn [[kname & args]]
           `(do
-             ;; (println "PROCESSING: " '~(symbol "miraj.core" (clojure.core/name kname)))
-             ;; (println "ARGS: " '~args)
+             ;; (log/debug "PROCESSING: " '~(symbol "miraj.core" (clojure.core/name kname)))
+             ;; (log/debug "ARGS: " '~args)
              (~(symbol "miraj.core" (clojure.core/name kname))
               ~codom-var
               ~@(map #(list 'quote %) args))))
         docstring  (when (string? (first references)) (first references))
-        ;; _ (println "DOCSTRING: " docstring)
+        ;; _ (log/debug "DOCSTRING: " docstring)
         [args references] (if docstring
                             [(fnext references) (nnext references)]
                             [(first references) (next references)])
-        ;; _ (println "ARGS: " args)
+        ;; _ (log/debug "ARGS: " args)
         ;; references (if docstring (next references) references)
-        ;; _ (println "REFS: " references)
+        ;; _ (log/debug "REFS: " references)
         name (if docstring
                (vary-meta name assoc :doc docstring)
                name)
-        ;; _ (println "NAME: " name (meta name))
+        ;; _ (log/debug "NAME: " name (meta name))
         metadata {}
         ;; metadata (eval `(let [maybe-meta#  ~(first references)]
         ;;            (cond (map? maybe-meta#) maybe-meta#
         ;;                  (symbol? maybe-meta#) (if (map? maybe-meta#) maybe-meta#))))
-        ;; ;; _ (println "metadata: " metadata)
+        ;; ;; _ (log/debug "metadata: " metadata)
         ;; references (if metadata (next references) references)
         ;; name (if metadata
         ;;        (vary-meta name merge metadata)
@@ -1556,18 +1949,18 @@
          (let [reqs# (into {} [~@(map process-reference references)])
                ;; head# (apply x/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
                head# (flatten (list (:require reqs#) (:import reqs#)))
-               ;; _# (println "HEAD# " head#)
+               ;; _# (log/debug "HEAD# " head#)
                ;; body# (apply x/element :codom {} (:codom reqs#))
-               body# (:codom reqs#)
+               body# (:miraj/codom reqs#)
                ;; html# (apply x/element :html {} (vec (flatten (list head# body#))))
                codom# (concat head# body#)
 
-               ;; _# (println "ALL: " reqs#)
-               ;; _# (println "HEAD# " head#)
-               ;; _# (println "BODY# " body#)
-               ;; _# (println "CODOM# " codom#)
+               ;; _# (log/debug "ALL: " reqs#)
+               ;; _# (log/debug "HEAD# " head#)
+               ;; _# (log/debug "BODY# " body#)
+               ;; _# (log/debug "CODOM# " codom#)
 
-           ;; (println "HTML# " html#)
+           ;; (log/debug "HTML# " html#)
            ;; (clojure.core/intern *ns* '~name html#)
            ;; (intern *ns*
            ;;         (with-meta
@@ -1582,7 +1975,7 @@
                                         (fn [old# & args#] codom-norm#))
            (clojure.core/alter-meta! ~codom-var
                                      (fn [old# & args#]
-                                       (merge old# ~metadata {:doc ~docstring :codom true})))
+                                       (merge old# ~metadata {:doc ~docstring :miraj/codom true})))
            ~codom-var)))))
 
          ;; (intern *ns* (with-meta (symbol ~(str nm-sym)) {:doc ~docstr :codom true})
@@ -1592,18 +1985,18 @@
 
 (defn props->cljs
   [propmap]
-  ;; (println "PROPS->CLJS: " propmap)
+  ;; (log/debug "PROPS->CLJS: " propmap)
   ;; (if (not (:props propmap))
   ;;   (throw (IllegalArgumentException. (str "props->cljs arg must be a Properties map"))))
   (let [props (:properties propmap)
         prop-keys (keys props)
         html-attrs (:html-attrs propmap)]
-    ;; (println (str (:on propmap) ": " prop-keys))
+    ;; (log/debug (str (:on propmap) ": " prop-keys))
     {:hostAttributes html-attrs
      :properties (into {}
                        (for [prop-key prop-keys]
                          (let [prop (get props prop-key)
-                               ;; _ (println "PROP: " prop)
+                               ;; _ (log/debug "PROP: " prop)
                                descriptors (keys prop)
                                type+val (merge {:type (cljtype->jstype (:type prop))}
                                                (if (= 'String (:type prop))
@@ -1617,43 +2010,43 @@
                                                    {})))
                                flags (into {} (for [flag (:flags prop)]
                                                 [(cljkey->jskey flag) true]))
-                               ;; _ (println "FLAGS: " flags)
+                               ;; _ (log/debug "FLAGS: " flags)
                                ]
-                           ;; (println "procesing property: " (pr-str prop))
-                           ;; (println "descriptors: " descriptors)
+                           ;; (log/debug "procesing property: " (pr-str prop))
+                           ;; (log/debug "descriptors: " descriptors)
                            {(keyword (:name prop)) (merge type+val flags
                                                           (if (:observer prop)
                                                             {:observer (first (:observer prop))}))})))}))
 
 (defn listeners->cljs
   [ls]
-  ;; (println "LISTENERS->CLJS: " (:listeners ls))
+  ;; (log/debug "LISTENERS->CLJS: " (:listeners ls))
   {:listeners
    (into {}
          (merge
           (concat
            (flatten (for [[evsuite listeners] (:listeners ls)]
-                      (do ;;(println "EVENT SUITE: " evsuite)
+                      (do ;;(log/debug "EVENT SUITE: " evsuite)
                         (for [[ev listener] listeners]
-                          (do ;;(println "EV/LISTENER: " ev "/" listener)
+                          (do ;;(log/debug "EV/LISTENER: " ev "/" listener)
                             {ev (keyword (first listener))}
                             ))))))))
          })
 
 (defn methods->cljs
   [ms]
-  ;; (println "METHODS->CLJS: " ms)
+  ;; (log/debug "METHODS->CLJS: " ms)
   (let [observers (map #(:observer %)
                        (filter #(:observer %) (vals (:properties ms))))
-        ;; _ (println "OBSERVERS: " observers)
+        ;; _ (log/debug "OBSERVERS: " observers)
         ls (vals (reduce merge (vals (:listeners ms))))
-        ;; _ (println "LISTENER METHODS: " ls)
+        ;; _ (log/debug "LISTENER METHODS: " ls)
         behs (vals (reduce merge (vals (:behaviors ms))))
-        ;; _ (println "BEH METHODS: " behs)
+        ;; _ (log/debug "BEH METHODS: " behs)
         this-methods (vals (reduce merge (vals (:methods ms))))
-        ;; _ (println "THIS METHODS: " this-methods)
+        ;; _ (log/debug "THIS METHODS: " this-methods)
         methods (concat observers ls behs this-methods)
-        ;; _ (println "METHODS: " methods)
+        ;; _ (log/debug "METHODS: " methods)
         ]
     (into {} methods)))
 
@@ -1662,40 +2055,41 @@
   ;;        (merge
   ;;         (concat
   ;;          (flatten (for [[evsuite listeners] (:listeners ms)]
-  ;;                     (do ;;(println "EVENT SUITE: " evsuite)
+  ;;                     (do ;;(log/debug "EVENT SUITE: " evsuite)
   ;;                       (for [[ev listener] listeners]
-  ;;                         (do ;;(println "EV/LISTENER: " ev "/" listener)
+  ;;                         (do ;;(log/debug "EV/LISTENER: " ev "/" listener)
   ;;                           {ev (keyword (first listener))}
   ;;                           ))))))))
   ;;        })
 
 (defn behaviors->cljs
   [behs]
-  ;; (println "BEHAVIORS->CLJS: " (:behaviors behs))
+  ;; (log/debug "BEHAVIORS->CLJS: " (:behaviors behs))
   (let [behaviors (keys  (:behaviors behs))]
     {:behaviors (into [] (map keyword behaviors))}))
 
 (defn component->prototype
-  [cvar rawprops rawlisteners rawbehaviors rawmethods]
-  ;; (println "COMPONENT->PROTOTYPE: " cvar (type cvar))
-  ;; (println "RAWLISTENERS: " rawlisteners)
-  ;; (println "RAWMETHODS: " rawmethods)
-  ;; (println "RAWBEHAVIORS: " rawbehaviors)
+  [cvar html-tag rawprops rawlisteners rawbehaviors rawmethods]
+  ;; (log/debug "COMPONENT->PROTOTYPE: " cvar (type cvar))
+  ;; (log/debug "RAWLISTENERS: " rawlisteners)
+  ;; (log/debug "RAWMETHODS: " rawmethods)
+  ;; (log/debug "RAWBEHAVIORS: " rawbehaviors)
   (let [;; v (resolve nm)
-        ;; _ (println "component var: " cvar)
-        ;; _ (println "props: " props)
+        ;; _ (log/debug "component var: " cvar)
+        ;; _ (log/debug "props: " props)
         ;; namesp (:ns (meta cvar))
         ;; ns-name (ns-name namesp)
         uri (str "tmp/" (var->path cvar) ".cljs")
-        cljs-ns (symbol (str (var->cljs-ns cvar) ".core"))
+        cljs-ns (symbol (str (-> cvar meta :ns ns-name) "." html-tag)) ;; ".core"))
+        ;; cljs-ns (symbol (str (var->cljs-ns cvar) ".core"))
         propmap (props->cljs rawprops)
         listeners (listeners->cljs rawlisteners)
         methmap (methods->cljs (merge rawprops rawlisteners rawbehaviors rawmethods))
-        ;; _ (println "METHODS MAP: " methmap)
+        ;; _ (log/debug "METHODS MAP: " methmap)
         behaviors (behaviors->cljs rawbehaviors)
         ;; cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns))
         ;;                      (pprint-str '(enable-console-print!))
-        ;;                      (pprint-str '(println "hello"))])
+        ;;                      (pprint-str '(log/debug "hello"))])
         ;;                      ;; (pprint-str (list 'js/Polymer
         ;;                      ;;                   (list 'clj->js
         ;;                      ;;                         (merge {:is (keyword (:name (meta cvar)))}
@@ -1703,37 +2097,47 @@
         ;;                      ;;                                listeners
         ;;                      ;;                                methmap
         ;;                      ;;                                behaviors))))])
-        cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns))
-                             ;; (pprint-str '(enable-console-print!))
+
+        ;; FIXME: parameterize repl and console print
+
+        cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns
+                                               #_'(:require #_[clojure.browser.repl :as repl]
+                                                          #_[weasel.repl :as repl])))
+                             ;; FIXME: parameterize host and port
+                             #_(pprint-str '(when-not (repl/alive?)
+                                            (repl/connect "ws://localhost:9001/repl")))
+                             #_(pprint-str '(defonce conn
+                                            (repl/connect "http://localhost:9000/repl")))
+                             (pprint-str (list 'enable-console-print!))
                              (pprint-str (list 'js/Polymer
                                                (list 'clj->js
-                                                     (merge {:is (keyword (:name (meta cvar)))}
+                                                     (merge {:is (keyword html-tag)}; (keyword (:name (meta cvar)))}
                                                             propmap
                                                             listeners
                                                             methmap
                                                             behaviors))))])
         ]
-    ;; (println "CLJS:\n" cljs)
-    ;; (println "URI: " uri)
+    ;; (log/debug "CLJS:\n" cljs)
+    ;; (log/debug "URI: " uri)
     ;; (io/make-parents uri)
     ;; (spit uri cljs)
     (alter-meta! cvar
                (fn [old new]
                  (merge old new))
-               {:miraj {:prototype cljs}})))
+               {:miraj/miraj {:miraj/prototype cljs}})))
 
-(defmacro defweb-component
+(defmacro defcomponent
   "Define a web component (Polymer flavor)"
-  [nm & args]
-  (println "DEFWEB-COMPONENT: " (str nm)) ;; " ARGS: " args)
-  (if (not (str/includes? nm "-")) (throw (IllegalArgumentException.
+  [[nm html-tag] & args]
+  ;; (log/debug "DEFCOMPONENT: " (str html-tag)) ;; " ARGS: " args)
+  (if (not (str/includes? html-tag "-")) (throw (IllegalArgumentException.
                                            (str "Component name must contain at least one dash '-'."))))
-  ;; (println "COMPONENT ARGS: " (pr-str args))
+  ;; (log/debug "COMPONENT ARGS: " (pr-str args))
   (let [[docstr arglist codom & protos] (parse-cotype-args args)
-        ;; _ (println "DOCSTR: " (pr-str docstr))
-        ;; _ (println "ARGLIST: " (pr-str arglist))
-        ;; _ (println "COTYPE PROTOS: " protos (seq protos))
-        ;; _ (println "CODOM: " codom)
+        ;; _ (log/debug "DOCSTR: " (pr-str docstr))
+        ;; _ (log/debug "ARGLIST: " (pr-str arglist))
+        ;; _ (log/debug "COTYPE PROTOS: " protos (seq protos))
+        ;; _ (log/debug "CODOM: " codom)
         rawprops (props->propmap args)
 
         rawmethods (apply protos->rawmethods protos)
@@ -1744,108 +2148,293 @@
 
         ;; codom (drop 1 cod)
         behavior-elts (behaviors->elements protos)
-        ;; _ (println (str "BEHAVIOR-ELTS: " (pr-str behavior-elts)))
+        ;; _ (log/debug (str "BEHAVIOR-ELTS: " (pr-str behavior-elts)))
         ;; protomap (->protomap protos)
-        ;; _ (println "PROTOMAP: " protomap)
+        ;; _ (log/debug "PROTOMAP: " protomap)
 
-        ;; js-ctor (js-constructor nm arglist protos)
-;;        js-ctor (element :script (str *ns* "." nm "()"))
+        ;; js-ctor (js-constructor html-tag arglist protos)
+        ;; js-ctor (element :script (str *ns* "." html-tag "()"))
+
+        base-path (str (ns->path *ns*) "/" html-tag)
+        ;; _ (log/debug "DEFC BASE-PATH: " base-path)
         ]
     `(let [tree# ~@codom
        ;; html-constructor interns the name, binding it to ->html fn
-           cvar# (x/html-constructor ~*ns* '~nm (keyword '~nm) (str (ns->uri ~*ns*) "/" '~nm))
-           _# (apply component->prototype cvar# '~rawprops '~rawlisteners '~rawbehaviors '~rawmethods)
-           ;; _# (println "PROTOTYPE: " (:prototype (:miraj (meta cvar#))))
-             ;; (if (instance? miraj.markup.Element ~(first codom))
+           cvar# (x/html-constructor ~*ns* '~nm (keyword '~html-tag) (str (ns->uri ~*ns*) "/" '~html-tag)
+                                     ~docstr)
+           _# (apply component->prototype cvar# '~html-tag '~rawprops '~rawlisteners '~rawbehaviors '~rawmethods)
+           ;; _# (log/debug "PROTOTYPE: " (:prototype (:miraj/miraj (meta cvar#))))
+             ;; (if (instance? miraj.co-dom.Element ~(first codom))
              ;;         ~@codom
-             ;;         (codom ~nm ~@codom))
+             ;;         (codom ~html-tag ~@codom))
              content# (:content tree#)
              result# (update tree#
                             :content (fn [c#]
                                        (let [dom# (last c#)
-                                             ;; _# (println "DOM#: " dom#)
+                                             ;; _# (log/debug "DOM#: " dom#)
                                              newdom# (update dom#
                                                              :attrs
                                                              (fn [old-attrs#]
-                                                               (assoc old-attrs# :id (str '~nm))))
+                                                               (assoc old-attrs# :id (str '~html-tag))))
                                              ;; newdom# (update newdom#
                                              ;;                 :content (fn [domc#]
                                              ;;                            (concat domc# [~js-ctor])))
                                              ]
-                                         ;; (println "NEWDOM#: " newdom#)
+                                         ;; (log/debug "NEWDOM#: " newdom#)
                                          (concat (butlast c#)
                                                  [~@behavior-elts]
                                                  #_[dom#]
                                                  [newdom#]
+                                                 #_[(x/element :link {:rel "import"
+                                                                    :base-path (str '~html-tag ".js")})]
                                                  ))))
-             ;; var# (find-var (symbol (str ~*ns*) (str '~nm)))
+             ;; var# (find-var (symbol (str ~*ns*) (str '~html-tag)))
            ]
          ;; (println "ALTERING META FOR " cvar#)
          (alter-meta! cvar#
                       (fn [old# new#]
-                        (do ;;(println "old#: " old#)
-                           ;;(println "new#: " new#)
+                        (do ;;(println (format "old#: %s" old#))
+                            ;;(println "new#: " new#)
+                            ;; (merge
+                             #_(update-in old# [:doc] (:doc new#))
+                             ;; (update-in old# [:miraj/miraj]
+                             ;;            (merge (:miraj-miraj old#)
+                             ;;                   (:miraj-miraj new#))))))
                             (merge old#
-                                   {:miraj (merge (:miraj old#)
-                                                  new#)})))
-                      {:_webcomponent true
-                       :codom result#})
-         ;; (println "ALTERED META FOR " cvar# (meta cvar#))
+                                   {:miraj/miraj (merge (:miraj/miraj old#)
+                                                        new#)})))  ;;)
+                        {:miraj/component true
+                         :miraj/html-tag '~html-tag
+                         :miraj/ns (str *ns* "." '~html-tag)
+                         :miraj/assets {:miraj/base ~base-path}
+                         :miraj/codom result#}  ;; compile serializes codom to an html file
+                       ;;:doc ~(str docstr)
+                       )
+         ;(println "ALTERED Meta for " cvar# (meta cvar#))
          cvar#)))
 
-(defn- get-webcomponents
-  "Search namespaces for webcomponents"
-  [& nss]
-  (println "get-webcomponenents for nss: " nss)
-  (let [nss (or nss (all-ns))]
-    (for [the-ns nss]
-      ;; (println "NS: " the-ns)
-      (let [interns-map (ns-interns the-ns)]
-        (filter (fn [entry] (:_webcomponent (meta (last entry)))) interns-map)))))
+(defmacro deflibrary
+  "Define a webcomponent library"
+  {:arglists '([name docstring? attr-map? args*])
+   :added "1.0"}
+  [name & args]
+  ;; (log/debug "DEFLIBRARY: " name " in " *ns*)
+  (let [lib-sym (symbol (str (-> *ns* ns-name)) (str name))
+        docstring  (when (string? (first args)) (first args))
+        ;; _ (println "DOCSTR: " docstring)
+        args (if docstring (fnext args) (first args))
+        ;; _  (println "ARGS: " args)
+        ;; miraj-meta {:miraj/miraj (merge {:miraj/deflibrary true}
+        ;;                                 (if (:miraj/defelements args)
+        ;;                                   {:miraj/defelements true}
+        ;;                                   (if (:miraj/defstyles args)
+        ;;                                     {:miraj/defstyles true}
+        ;;                                     {})))}
 
+        _ (if (not (or (:miraj/defelements args)
+                       (:miraj/defstyles args)))
+            (throw (Exception. "deflibrary map must have entry :defelements true or :defstyles true")))
+
+        miraj-meta {:miraj/miraj {:miraj/deflibrary
+                                  (if (:miraj/defelements args)
+                                    :miraj/elements
+                                    (if (:miraj/defstyles args)
+                                      :miraj/styles))}}
+        ;; _ (println "miraj-meta " miraj-meta)
+        ]
+  `(do (if ~docstring
+         (def ~lib-sym ~(str docstring) ~args)
+         (def ~lib-sym ~args))
+       ;; set metadata for var
+       (clojure.core/alter-meta! (-> ~lib-sym var)
+                                 (fn [old# & args#] (merge old# ~miraj-meta))
+                              )
+       ;; set metadata for enclosing ns (not the var of the ns)
+       (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/deflibrary true}}))))))
+
+;; defpage, based on clojure.core/defn?
+(defmacro defpage
+  "define a web page"
+  {:arglists '([name docstring? attr-map? references*])
+   :added "1.0"}
+  [name & references]
+  (log/debug "DEFPAGE: " name " in " *ns*)
+  ;; (log/debug "    REFS: " references)
+  (let [page-var (intern *ns* name)
+        ;; _ (log/debug "PAGE VAR: " page-var)
+        ;; process-reference will call fn require for :require, fn import for :import, etc.
+        process-reference
+        (fn [[kname & args]]
+          `(do
+             ;; (log/debug "    PROCESSING: " '~(symbol "miraj.core" (clojure.core/name kname)))
+             ;; (log/debug "    ARGS: " '~args)
+             (~(symbol "miraj.core" (clojure.core/name kname))
+              ~page-var
+              ~@(map #(list 'quote %) args))))
+        docstring  (when (string? (first references)) (first references))
+        references (if docstring (next references) references)
+        name (if docstring
+               (vary-meta name assoc :doc docstring)
+               name)
+        metadata (eval `(let [maybe-meta#  ~(first references)]
+                   (cond (map? maybe-meta#) maybe-meta#
+                         (symbol? maybe-meta#) (if (map? maybe-meta#) maybe-meta#))))
+        ;; _ (log/debug "    METADATA: " metadata)
+        references (if metadata (next references) references)
+        ;; _ (log/debug "    REFERENCES: " references)
+        name (if metadata
+               (vary-meta name merge metadata)
+               name)
+        ;; _ (log/debug "defweb-page NAME: " name)
+        ;; gen-class-clause (first (filter #(= :gen-class (first %)) references))
+        ;; gen-class-call
+        ;;   (when gen-class-clause
+        ;;     (list* `gen-class :name (.replace (str name) \- \_) :impl-ns name :main true (next gen-class-clause)))
+        ;; references (remove #(= :gen-class (first %)) references)
+        ;ns-effect (clojure.core/in-ns name)
+        name-metadata (meta name)]
+    `(do
+       (with-loading-context
+         ;; (let [[reqs# imports# body#] [~@(map process-reference references)]
+         ;;       head# (x/element :head reqs# imports#)
+         ;;       html# (x/element :html head# body#)]
+         (let [reqsvec# [~@(map process-reference references)]
+               ;; _# (log/info "reqsvec#: " reqsvec#)
+               foo# (for [v# reqsvec#] {(first v#) [(second v#)]})
+               ;; _# (log/info "foo#: " foo#)
+               reqs# (apply merge-with concat foo#)
+               ;; reqs# (into {} reqsvec#)
+               ;; _# (log/info "reqs#: " reqs#)
+               head# (apply x/element :head {} (vec (flatten (list
+                                                              (:require reqs#)
+                                                              (:import reqs#)
+                                                              (:css reqs#)))))
+               ;; _# (log/debug "HEAD# " head#)
+               body# (apply x/element :body {} (doall (:body reqs#)))
+               html# (binding [*ns* ~*ns*]
+                       (apply x/element :html {} (vec (flatten (list head# body#)))))
+               ]
+           ;; (log/debug "ALL: " reqs#)
+
+           ;; (log/debug "BODY# " body#)
+           ;; (log/debug "HTML# " html#)
+           ;; (clojure.core/intern *ns* '~name html#)
+           ;; (intern *ns*
+           ;;         (with-meta
+           ;;           (symbol ~(str name))
+           ;;           (merge {:doc ~docstring :_webpage true} ~metadata)))
+           (clojure.core/alter-var-root ~page-var
+                                        (fn [old# & args#] html#))
+           (clojure.core/alter-meta! ~page-var
+                                     (fn [old# new#]
+                                       #_(merge old#
+                                              new#
+                                              ~metadata
+                                              {:doc ~docstring :_webpage true})
+                                       (merge old#
+                                              {:doc ~docstring}
+                                              {:miraj/miraj (merge (:miraj/miraj old#)
+                                                                   ~metadata
+                                                                   new#)}))
+                                     {:miraj/defpage true}
+                                     )
+           (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defpage true}})))
+           ~page-var)))))
 
 ;; #_(defn- get-components
 ;;   []
-;;   (println "TASK: boot-miraj/extract")
+;;   (log/debug "TASK: boot-miraj/extract")
 ;;   (let [root-dir (or root-output-dir "miraj")
 ;;         tmp-dir (io/file (core/tmp-dir!) root-dir)
 ;;         tmp-output-path  (.getPath tmp-dir)
-;;         ;; _ (println "tmp-dir: " tmp-dir)
+;;         ;; _ (log/debug "tmp-dir: " tmp-dir)
 ;;         html-output-dir (if html-output-dir (io/file tmp-dir html-output-dir) tmp-dir)
 ;;         html-output-path  (.getPath html-output-dir)
 ;;         cljs-output-dir   (if cljs-output-dir (io/file tmp-dir cljs-output-dir) tmp-dir)
 ;;         cljs-output-path  (.getPath cljs-output-dir)
 ;;         last-fileset (atom nil)
 ;;         ;; pod          (-> (core/get-env)
-;;         ;;                  (update-in [:dependencies] into '[[miraj/markup "0.1.0-SNAPSHOT"]])
+;;         ;;                  (update-in [:dependencies] into '[[miraj/co-dom "0.1.0-SNAPSHOT"]])
 ;;         ;;                  pod/make-pod  ;; use pod-pool?
 ;;         ;;                  future)
 ;;         ]
 ;;     (core/with-pre-wrap fileset
 ;;       (pod/with-eval-in @pod
-;;         (require '[miraj.markup :as miraj])
+;;         (require '[miraj.co-dom :as miraj])
 ;;         (do
 ;;           (if ~ns-str
 ;;             (let [ns-sym (symbol ~ns-str)]
 ;;               (require ns-sym)
 ;;               (let [interns (ns-interns ns-sym)
-;;                     bld (resolve 'miraj.markup/build-component)]
+;;                     bld (resolve 'miraj.co-dom/build-component)]
 ;;                 (doseq [[isym ivar] interns]
 ;;                   (if (:webcomponent (meta ivar))
-;;                     (miraj.markup/build-component [~html-output-path ~cljs-output-path]
+;;                     (miraj.co-dom/build-component [~html-output-path ~cljs-output-path]
 ;;                                                   [isym ivar]))))))
 ;;           (if ~component
 ;;             (do
 ;;               (boot.util/info "processing var: " ~component "\n")
 ;;               (let [widget (symbol ~component)
 ;;                     ns-sym (symbol (namespace widget))
-;;                     nm (symbol (name widget))]
+;;                     html-tag (symbol (name widget))]
 ;;                 (require ns-sym)
 ;;                 (let [ivar (resolve widget)]
 ;;                   (if (:webcomponent (meta ivar))
 ;;                     (miraj/build-component [~html-output-path ~cljs-output-path]
-;;                                            [nm ivar]))))))))
+;;                                            [html-tag ivar]))))))))
 ;;       (core/sync! root-dir tmp-dir)
 ;;       fileset)))
 
-(println "loaded miraj/core.clj")
+(defn make-resource-fns
+  [typ tags]
+  (do ;;(println "make-resource-fns: " typ tags)
+        (doseq [[fn-tag elt-kw elt-uri docstring] tags]
+          (do #_(println "make resource:" fn-tag elt-kw elt-uri docstring)
+              (eval `(defn ~fn-tag ~docstring
+                       [& args#]
+;;                       (println "invoking " ~fn-tag)
+                       (let [elt# (if (empty? args#)
+                                    (with-meta (x/element ~elt-kw)
+                                      {:miraj/miraj
+                                       {:co-fn true
+                                        :component ~typ
+                                        :doc ~docstring
+                                        :elt-kw ~elt-kw
+                                        :elt-uri ~elt-uri}})
+
+                                    ;; (let [attrib-args# (first args#)
+                                    ;;       attrs# (if (map? attrib-args#)
+                                    ;;                (do ;(log/trace "map? first")
+                                    ;;                  (if (instance? miraj.co-dom.Element attrib-args#)
+                                    ;;                    (do ;(log/trace "Element instance")
+                                    ;;                      {})
+                                    ;;                    (do ;(log/trace "NOT Element instance")
+                                    ;;                      attrib-args#)))
+                                    ;;                (do ;(log/trace "NOT map? attrib-args#")
+                                    ;;                  {}))
+                                    ;;       content# (if (map? attrib-args#)
+                                    ;;                  (if (instance? miraj.co-dom.Element attrib-args#)
+                                    ;;                    args#
+                                    ;;                    (rest args#))
+                                    ;;                  args#)]
+                                    (let [first# (first args#)
+                                          rest# (rest args#)
+                                          [attrs# content#] (x/parse-elt-args first# rest#)]
+                                      (with-meta (apply x/element ~elt-kw attrs# content#)
+                                        {:miraj/miraj {:co-fn true
+                                                 :component ~typ
+                                                 :doc ~docstring
+                                                 :elt-kw ~elt-kw
+                                                 :elt-uri ~elt-uri}})))]
+                         elt#)))
+              (alter-meta! (find-var (symbol (str *ns*) (str fn-tag)))
+                            (fn [old new]
+                              (merge old new))
+                            {:miraj/miraj {:co-fn true
+                                     :component typ
+                                     :doc docstring
+                                     :elt-kw elt-kw
+                                     :elt-uri elt-uri}})
+              #_(println "var: " (find-var (symbol (str *ns*) (str fn-tag))))))))
+
+;;(log/debug "loaded miraj/core.clj")

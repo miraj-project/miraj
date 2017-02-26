@@ -1,0 +1,80 @@
+= workflow
+
+there are two basic operations:
+
+* miraj/compile
+
+** generates html files from defcomponent and defpage vars
+** generates cljs files for defcomponent
+
+* miraj/link
+
+** for components: generates clj component libraries (:miraj/elements) from deflibrary vars
+** for pages/apps: explodes :miraj/elements deps to assets fileset
+
+
+* miraj/assemble: link libs, assemble apps? nice mnemonic, anyway.
+
+
+
+NOTE: what about :miraj/style components?  miraj/link should handle
+them too, generating :miraj/styles libs from deflibrary vars?
+
+miraj/link finds deflibrary vars, which contain config maps, and
+generates libraries.  there are two kinds of libraries,
+:miraj/elements and :miraj/styles.  which kind is generated is
+controlled by deflibrary? No, miraj/link must inspect the deflibrary
+map and ensure that element and style components are not mixed in
+one lib.
+
+TODO: this can be enforce using spec, if deflibrary maps for elements and styles differ.
+
+Currently styles can only be compiled by a boot task, miraj/compile
+-style, which will read webstyles.edn and then use a template to
+generate the lib.  This is to be replaced by support for deflibrary
+for style libs; then miraj/link will find the deflibrary vars, inspect
+them and generate either an element lib or a style lib, depending on
+the deflibrary map form.
+
+
+=== third-party libs
+
+old way:  miraj/compile --library reads webcomponents.edn and generates libs
+
+new way:  miraj/link --library finds deflibrary vars and generates libs
+
+=== homegrown libs
+
+When you miraj/compile a component, its assets (an html and a cljs
+file) are written to disk. The source for those assets is in metadata
+(:codom and :protocol, respectively) on the component var.
+
+When you assemble a component library, the components in the
+namespaces are analyzed and used to define element functions in the
+component lib namespace.  The :codom and :protocol metadata are not
+included in the element functions, since those functions will only be
+used in webpages to generate import links and HTML tags.
+
+Assembly turns a :miraj/component into a :miraj/co-fn.  The
+:miraj/component tag is removed and :miraj/co-fn is added.
+
+This makes sense because components contain their definition (codom
+and js prototype, whereas co-functions do not.
+
+
+Note that this means the component library will not contain the vars
+defined using defcomponent.  This allows us to create component
+libraries mixing components from multiple implementations.
+
+Originally, the component vars were used in webpages
+directly. Requests for the associated assets (e.g. the HTML) were
+intercepted and the files were dynamically generated from the
+component vars.  We could still do this, but it is much cleaner and
+simpler to create static assets.
+
+
+=== webpages
+
+old way: miraj/compile --webpage #{'foo.bar/baz} or --all or --namespace #{foo.bar}
+
+new way:  miraj/compile generates assets;  miraj/link --app assembles the app by exploding miraj dependencies into the assets fileset

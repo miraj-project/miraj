@@ -1,5 +1,5 @@
-(ns miraj.common
-  (:require [miraj.markup :as xml]
+(ns miraj.protocol-engine.common
+  (:require [miraj.co-dom :as xml]
             [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
@@ -8,7 +8,7 @@
             ;; [cljs.closure :as cc]
             ;; [cljs.env :as env]
             ;; [slingshot.slingshot :refer [try+ throw+]]
-            [ring.util.response :as ring :refer [response]]
+            ;; [ring.util.response :as ring :refer [response]]
             [ring.middleware.keyword-params :refer [keyword-params-request]]
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]

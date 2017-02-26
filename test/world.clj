@@ -1,3 +1,6 @@
+
+;; OBSOLETE: we use defpage, not co-ns, etc.
+
 (println "starting load of hello/world.clj")
 (miraj/co-ns hello.world
        "docstring here"

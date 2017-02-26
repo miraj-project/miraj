@@ -1,54 +1,377 @@
-# miraj
-
+= miraj.core
 Webcomponents, the Clojure way
 
-Currently only link:https://www.polymer-project.org/1.0/[Polymer].
+The goal of the Miraj project is to extend the Clojure language to
+encompass web programming. That means, among other things, excising
+the warts of HTML, Javascript, and CSS. The meta-programming
+facilities of Clojure make it possible to present the programmer with
+an idiomatic, 100% Clojure web programming experience, where the
+conceptual and syntactic infelicities of HTML, Javascript, and CSS are
+tucked away as implementation details. In much the same way that
+Clojure itself hides the unpleasantness of Java, and treats dealing
+with Java classes and objects as implementation details.
 
-Motivation:
+There are two parts to this. One is to provide seamless functional
+support for HTML5. But it is not enough to provide a Clojure function
+for each HTML element. That would allow us to compose the functions,
+but the result would be higher-order _Clojure_ functions, not HTML
+functions. To get first-class HTML functions, we also must to support
+the emerging https://www.webcomponents.org/[webcomponents]
+standards. Webcomponents make it possible to treat HTML as a
+functional language in which HTML elements (functions) can be defined
+and composed, passed as arguments and returned as values, etc. _in the
+browser_.
 
-Polymer is heavily invested in the Javascript ecosystem; to intall it,
-you have to install `node`, `npm`, `bower`, etc.  That's a lot of
-installation and configuration of stuff a Clojure programmer usually
-does not want or need to deal with.  Miraj is intended to make
-life slightly less horrible for Clojure/Clojurescript developers, who
-can use it instead of going through the
-link:https://www.polymer-project.org/1.0/docs/start/getting-the-code.html[Polymer
-intallation rituals].
+IMPORTANT: The HTML "functions" in the Miraj libraries are better
+thought of as co-functions. HTML functions run on the browser; what
+Miraj provides is a collection of Clojure functions that are dual to
+the HTML functions. Functions return values; co-functions have side-effects.
 
-## Usage
+Miraj code -> Co-DOM (Clj data structure) ->(compile)-> HTML -> (send to browser) -> HTML ->(co-compile)-> DOM (Browser data structure)
 
-Leiningen dependency:
 
-----
-[miraj "0.1.0-SNAPSHOT"]
-----
 
-In a web app, the miraj jar file is included in the classpath, so
-you can use standard techniques for loading resources.
+NOTE: Currently only link:https://www.polymer-project.org/1.0/[Polymer] webcomponents are supported.
 
-One easy way to do this is to "require" `[ring.middleware.resource
-:refer [wrap-resource]]` and use it like so:
+
+== namespaces and pagespaces
+
+Miraj exploits the similarity between the `ns` macro of Clojure and
+the `<head>` element of HTML. Just as the `:require` directive of `ns`
+tells Clojure to find and load a Clojure resource, elements like
+`<link>` and `<script>` contained in `<head>` tell the browser to find and load
+resources.
+
+By convention, a Clojure source file begins with an `ns` statement
+that establishes a _namespace_ for the file. It also usually contains
+a `:require` directive (for native Clojure resources) and sometimes an
+`:import` directive (for foreign resources).
+
+The markup libraries of the Miraj project - `miraj.html`,
+`miraj.polymer.paper`, etc. - are designed to be listed in
+`:require`. This tells Clojure to find and load them, which works
+since they are ordinary Clojure libraries, But they will also be used
+by the Miraj compiler to construct the HTML `<head>` element that will
+do the same in the browser.
+
+The Clojure namespace of a file that contains Miraj page definitions -
+using `miraj.core/defpage` - does double-duty: it also serves as a
+_pagespace_. At page compile time, the Miraj page compiler will treat
+the namespace containing `defpage` definitions as a pagespace
+containing resources needed for the page definitions. This includes,
+in particular, the miraj libraries specified in the `:require`
+directive of the `ns` declaration. The Miraj compiler will discover
+the miraj libraries required, and use them to generate the `<link>`
+elements needed for the `<head>` section of each page.
+
+The key function for building webpages with Miraj is `defpage`.
+
+
+== defpage
+
+Note that miraj component libs are required just like any libs.
+
+WARNING: Alwasy use an alias. Use :refer for efficiency - without it,
+all resources for the lib will be downloaded at runtime.
 
 [source,clojure]
 ----
-(ns myapp.core
-  (:require [ring.middleware.resource :refer [wrap-resource]]
+(ns simple.pages.goodbye
+  (:require [miraj.core :as miraj]
+            [miraj.co-dom :as codom]
+            [miraj.html :as h]
+	    ;; these two are component libraries; they will be used to construct <link> elements
+            [miraj.polymer.paper :as paper :refer [button card]]
+            [miraj.polymer.iron :as iron :refer [icon icons]]
   ...)
-  ...
-
-(def app
-  (-> app-routes
-    (wrap-resource "/")))
+...
+(miraj/defpage sayonara
+  {:title "miraj demo"
+   :description "This demonstrates usage of defpage."}
+  (:body
+   (h/h1 "GOODBYE MIRAJ!")
+   (h/div (iron/icon {:icon "menu"}))
+   (h/div ::cards     ;; <=  id="cards"
+          (paper/card {:heading "Goodbye, you ol' Card!"}
+                      (h/div {:class "card-content"} "Some content")
+                      (h/div {:class "card-actions"}
+                             (paper/button {:raised nil} "Some action"))))))
 ----
 
-This makes the polymer library available at the app root `/`.  Then
-edit your HTML `<script src="...">` and `<link href="...">` to refer
-correctly; for example, using hiccup:
+This compiles to:
+
+[source,html]
+----
+<!doctype html>
+<html>
+    <head>
+        <script type="text/javascript" src="/bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+        <meta name="description" content="this page demonstrates usage of miraj.html and polymer">
+        <meta name="title" content="miraj goodbye demo">
+        <link rel="import" href="/bower_components/paper-button/paper-button.html">
+        <link rel="import" href="/bower_components/iron-icon/iron-icon.html">
+        <link rel="import" href="/bower_components/iron-icons/iron-icons.html">
+        <link rel="import" href="/bower_components/paper-card/paper-card.html">
+    </head>
+    <body>
+        <h1>GOODBYE MIRAJ!</h1>
+        <div>
+            <iron-icon icon="menu"></iron-icon>
+        </div>
+        <div id="cards">
+            <paper-card heading="Goodbye, you ol' Card!">
+                <div class="card-content">Some content</div>
+                <div class="card-actions">
+                    <paper-button raised>Some action</paper-button>
+                </div>
+            </paper-card>
+        </div>
+    </body>
+</html>
+----
+
+The syntax of `defpage` is: pagename, clojure docstring, metadata map
+(optional), directives. `defpage` understands the following
+directives:
+
+* :import
+* :css
+* :js
+* :preload  (i.e. <link rel='preload'...>)
+* :body
+
+
+== stylespaces
+
+CSS Styling options:
+
+* inlined using `<style>` elements
+
+* imported directly using `<link rel="stylesheet"...>` to retrieve a CSS
+  file - one containing only CSS and no HTML - no `<style>` element
+
+* imported indirectly using `<link rel="import"...>`, where the
+  imported file is an HTML file containing a `<style>` element
+
+* * imported indirectly using `<link rel="import"...>`, where the
+  imported file is an HTML file containing style modules,
+  i.e. `<dom-module>` elements containing `<style>` elements.
+
+To use style modules in the main doc, you must link to it with
+rel="import" and then refer to the styles in <style> elements using include="mystyle". you must also use is="custom-style"; e.g. `<style is="custom-style" include="foo">`
+
+Miraj:
+
+* `:css` directive on `defpage` supports inline CSS in the header; the
+  ordinary `h/style` tag can be used in the :body.
+
+* :css also supports direct importing, using a vector of import specs
+
+* `:import` directive supports indirect HTML importing.
+
+* :import with the :modules flag supports indirect importing of style modules
+
+
+
+== assets
+
+=== imported
+
+==== html5 imports
+
+The new https://w3c.github.io/webcomponents/spec/imports/[HTML
+Imports] standard provides a uniform mechanism for importing any kind
+of asset into an HTML page. Instead of stuffing a bunch of `<link>`
+and `<stylesheet>` elements the `<head>` element of our webpage, we
+can put them into an HTML file and then import that file.
+
+
+Miraj supports this in the form of the an `:import` directive on the
+`defpage` macro. There are two ways to use it. For remote assets you
+may use a map as show further below.  But if the assets you wish to import
+are local, you can use the same syntax as used by the `:import`
+directive of `clojure.core/ns`:
 
 [source,clojure]
 ----
-    [:script {:src "polymer/webcomponentsjs/webcomponents-lite.js"}]
+(miraj/defpage hello
+  "Styled version of hello webpage."
+  {:title "Miraj demo: importing assets"
+   :description "this page demonstrates usage of :import in a defpage"}
+  (:import [[styles.hello button card]
+            [styles.simple fonts]])
+ ...)
 ----
+
+At compile time, this will result in the insertion if the following in
+the `<head>` element of the page:
+
+[source,clojure]
+----
+<link rel="import" href="/styles/hello/button">
+<link rel="import" href="/styles/hello/card">
+<link rel="import" href="/styles/simple/fonts">
+----
+
+The compile operation will also check to make sure these resources are
+accessible; it is the programmer's responsibility to provide them.
+
+You can also import third-party assets. Instead of using the vector
+ format above, you can use a map. Miraj supports all the attributes of
+ link. You can write (for example):
+
+[source,clojure]
+----
+  (:import [{:href ""https://unpkg.com/purecss@0.6.2/build/pure-min.css"
+	        :integrity "sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
+	        :crossorigin "anonymous"}])
+----
+
+==== traditional (direct) imports.
+
+Miraj also supports the traditional method of directly importing
+external stylesheets and scripts using the `<link
+rel="stylesheet"...>` and `<script>` tags.  The miraj way is to use
+`:css` and `:js` directives.   As with `:import`, there
+are two ways to do it.
+
+[source,clojure]
+----
+(miraj/defpage hello
+  "Styled version of hello webpage."
+  {:title "Miraj demo: inlining assets"
+   :description "this page demonstrates usage of :import in a defpage"}
+  (:css [[css.stylesheets foo bar]])
+  (:js  [[js.scripts baz buz]])
+  ")
+...)
+----
+
+At compile time the following will be inserted into `<head>`:
+
+[source,html]
+----
+<link rel="stylesheet" type="text/css" href="/css/stylesheets/foo">
+<link rel="stylesheet" type="text/css" href="/css/stylesheets/bar">
+<script type="text/javascript" src="/js/scripts/baz"></script>
+<script type="text/javascript" src="/js/scripts/buz"></script>
+----
+
+NOTE: The `type` attributes may be removed by using `miraj.core/optimize`.
+
+You can also use maps, and you can combine vector and map specs:
+
+[source,clojure]
+----
+  (:css [{:href "https://unpkg.com/purecss@0.6.2/build/pure-min.css"
+          :integrity "sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
+          :crossorigin "anonymous"}
+         [styles.css button card.css]
+         {:href "https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"}])
+
+----
+
+=== inline
+
+Miraj also supports inline CSS (`<style>` tag) and Javascript
+(`<script>` tag). To inline CSS or Javascript code in the `<head>`
+element, use the `:css`, resp. `:js` directive, just as you would for
+a traditional direct import. The only difference is that you pass a
+string rather than a vector of specs.
+
+Of course you can always inline javascript in attributes too.
+
+[source,clojure]
+----
+(miraj/defpage hello
+  "Styled version of hello webpage."
+  {:title "Miraj demo: inlining assets"
+   :description "this page demonstrates inlined css and js."}
+  (:css "body{font-size:16px}")
+  (:js "
+    function functionOne() { alert('You clicked me'); }
+  ")
+   ...
+   (h/a {:href "#" :onClick "functionOne();"} "Click Me")
+ ...)
+----
+
+NOTE: You can put Javascript in the header; `miraj.core/optimize` will
+automatically move it to the end of the document.
+
+
+== special ops (miraj.co-dom)
+
+* binding annotations
+
+[source,clojure]
+----
+(h/div :foo)                ; =>  <div>{{foo}}</div>
+(h/div 'foo)                ; =>  <div>[[foo]]</div>
+
+(h/div {:foo :bar} "hi") ; => <div foo="{{bar}}">hi</div>
+(h/div {:foo 'bar} "hi") ; => <div foo="[[bar]]">hi</div>
+----
+
+* id, class attribs
+
+[source,clojure]
+----
+(h/div ::foo)               ; =>  <div id="foo"></div>
+(h/div ::.foo)              ; =>  <div class="foo"></div>
+(h/div ::foo.bar)           ; =>  <div id="foo" class="bar"></div>
+----
+
+* boolean attributes
+
+[source,clojure]
+----
+(h/div {:foo nil})          ; =>  <div foo></div>
+(h/div {:foo ""})           ; =>  <div foo></div>
+(h/div {:foo "foo"})        ; =>  <div foo></div>
+;; todo:
+(h/div :foo! "hi")          ; =>  <div foo>hi</div>
+(h/div "hi" :foo! " there") ; =>  <div foo>hi there</div>
+(h/div "hi" :foo!)          ; =>  <div foo>hi</div>
+----
+
+= workflow
+
+* if you're working a page (e.g. `defpage hello` in  `work/pages/styled/externals.clj`) in
+  the repl, try something like this in a separate test file:
+
+[source,clojure]
+----
+(ns work-test
+  (:require [miraj.core :as miraj]
+            [miraj.compiler :as wc]
+            [miraj.co-dom :as x]))
+(do
+  (require '[work.pages.styled.externals :as pagespace] :reload)
+
+  (->> #'pagespace/hello
+       miraj/normalize
+       miraj/optimize
+       (x/pprint :html)))
+----
+
+Then evaluate the `do` clause whenever the code in
+`work/pages/styled/externals.clj` changes.
+
+* If you want to hot-reload your pages in a browser, run a server and
+then run a monitor task in your webpage project.  If your app contains
+multiple pages, you can work on one at a time by using the
+--webpage-var parameter (or the --namespace param) of the
+`boot-miraj/compile` task in your `boot monitor` pipeline. Then when
+you make a change only that page will be recompiled.
+
+
+= troubleshooting
+
+* You get ClassNotFoundException when you run boot-miraj/compile with
+-w or -n. This may mean that in your boot.build you are passing a
+namespace or fully qualified var without quoting it.
+
 
 = Webservers
 

@@ -1,6 +1,8 @@
 (ns miraj.polymer.dom
   (:refer-clojure :exclude [for])
-  (:require [miraj.markup :refer [make-resource-fns]]))
+  (:require [miraj.core :refer [make-resource-fns]]))
+
+;;(println "loading miraj.polymer.dom")
 
 (alter-meta! *ns* (fn [m] (assoc m :co-ns true)))
 

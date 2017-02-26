@@ -1,5 +1,5 @@
 ;; (println "START loading miraj.sync")
-(ns miraj.sync
+(ns miraj.protocol-engine.sync
   (:require [clojure.pprint :as pp]
             [clojure.string :as str]
             [clojure.tools.logging :as log :only [trace debug error info]]
@@ -13,8 +13,8 @@
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
-            [miraj.common :as mcomm]
-            [miraj.markup :as xml]
+            [miraj.protocol-engine.common :as mcomm]
+            [miraj.co-dom :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]])
   (:import [java.io StringReader StringWriter]))

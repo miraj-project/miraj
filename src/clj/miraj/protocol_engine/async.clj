@@ -1,4 +1,5 @@
-(ns miraj.async
+(ns miraj.protocol-engine.async
+  (:refer-clojure :exclude [partition-by])
   (:require [clojure.core.async :as async :refer :all :exclude [into map merge partition reduce take]]
             [clojure.pprint :as pp]
             [clojure.string :as str]
@@ -13,8 +14,8 @@
             [ring.middleware.params :refer [params-request]]
             [ring.middleware.resource :refer [resource-request]]
             [potemkin.namespaces :refer [import-vars]]
-            [miraj.common :as mcomm]
-            [miraj.markup :as xml]
+            [miraj.protocol-engine.common :as mcomm]
+            [miraj.co-dom :as xml]
             [miraj.html :as h]
             [miraj.http.response :refer [bad-request bad-request! not-found]]
             [miraj.http.status :as http])

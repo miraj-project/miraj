@@ -1,8 +1,8 @@
 (ns miraj.polymer.Protocols
   (:refer-clojure :exclude [list meta]))
-  ;; (:require [miraj.markup :refer [make-resource-fns]]))
+  ;; (:require [miraj.co-dom :refer [make-resource-fns]]))
 
-(println "loading miraj.polymer")
+;; (println "loading miraj.polymer.Protocols")
 
 (defprotocol ^{:co-protocol? true}
   This)
@@ -21,4 +21,4 @@
   (response [rsp])
   (error [e]))
 
-(println "loaded miraj.polymer")
+;; (println "loaded miraj.polymer.Protocols")
