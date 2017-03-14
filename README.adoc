@@ -366,6 +366,11 @@ multiple pages, you can work on one at a time by using the
 you make a change only that page will be recompiled.
 
 
+== polyfills
+
+For HTML imports on FF etc. use https://github.com/webcomponents/custom-elements
+
+
 = troubleshooting
 
 * You get ClassNotFoundException when you run boot-miraj/compile with

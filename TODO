@@ -17,3 +17,18 @@
       (css [preds ...] {:foo :bar})
 
       that's pretty much how garden does it
+
+* webstyles.edn
+
+* webbehaviors.edn
+
+* doc searching
+
+** e.g. (miraj/find-fn 'paper-button) - given an html tag, find the function
+
+** (miraj/list ns) - list all fns in ns
+
+** (miraj/show :category) - list all fns for html category, e.g. :flow, :interactive, etc.
+
+* change :_webpage etc. to :miraj/miraj {:miraj/page ...}
+  see core.clj/get-component-vars-for-ns

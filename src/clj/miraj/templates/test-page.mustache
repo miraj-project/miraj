@@ -1,0 +1,30 @@
+(ns {{ns}}
+  (:require [miraj.core :as miraj]
+            [miraj.html :as h]
+            [{{component-lib}} :as test]
+
+            ;; for testing only:
+            [miraj.compiler :as wc]
+            [miraj.co-dom :as x]
+            :reload))
+
+(miraj/defpage index
+  "Test Page."
+
+  ;; html metadata first
+  {:html/title "Test Page"
+   :html/description "This page is for testing components."}
+
+  (:css "hello-world, goodbye-world {
+    margin-left: auto;
+    margin-right: auto;
+   }
+   h1 {text-align:center;}")
+
+  (:body
+   (h/h1 "Component Test Page")
+{{#components}}
+   (h/h2 "Component: {{component-var}}")
+   ({{component-var}})
+{{/components}}
+   ))

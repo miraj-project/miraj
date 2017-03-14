@@ -25,7 +25,7 @@
                    [clj-time "0.11.0"]
 
                    [miraj/co-dom "0.1.0-SNAPSHOT"]
-                   [miraj/html "5.1.0-SNAPSHOT"]
+;;                   [miraj/html "5.1.0-SNAPSHOT"]
                    [miraj.polymer/paper "1.2.3-SNAPSHOT" :scope "test"]
                    [miraj.polymer/iron "1.2.3-SNAPSHOT" :scope "test"]
 
@@ -35,7 +35,7 @@
                    [mobileink/boot-bowdlerize "0.1.0-SNAPSHOT" :scope "test"]
                    #_[boot/util "RELEASE" :scope "provided"]
 
-                   [cheshire "5.5.0"]
+                   [cheshire "5.7.0"]
                    [potemkin "0.4.1"]
                    [slingshot "0.12.2"]
 

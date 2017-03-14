@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+    <head>
+        <script type="text/javascript" src="/bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+        <script type="text/javascript" src="/custom-elements.min.js"></script>
+        <title>Test Page</title>
+        <meta name="description" content="This page was generated for testing components.">
+	<link href="test.css" type="text/css" rel="stylesheet">
+        <link rel="import" href="{{html-import}}">
+
+        <!-- <link rel="import" href="/bower_components/polymer/polymer.html"> -->
+   <!--      <style type="text/css">hello-world, goodbye-world { -->
+   <!--  margin-left: auto; -->
+   <!--  margin-right: auto; -->
+   <!-- } -->
+   <!-- h1 {text-align:center;}</style> -->
+    </head>
+    <body>
+        <h1>Component Test Page </h1>
+{{#components}}
+	<div>
+          <h2>Component: {{component}}</h2>
+          <{{miraj/html-tag}}></{{miraj/html-tag}}>
+	</div>
+
+{{/components}}
+        <script src="{{js}}"></script>
+    </body>
+</html>
+

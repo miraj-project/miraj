@@ -1,0 +1,30 @@
+(ns core
+  (:require [miraj.core :as miraj]
+            [miraj.html :as h]))
+
+(miraj/defpage ^{:base "/"} index
+  {{docstring}}
+
+  ;; html metadata first
+  {:html/title "Miraj Polymer Paper Library Demo"
+   :html/description "This page demonstrates the Miraj Polymer Paper Library."}
+
+  ;; (:require [miraj.polymer.iron :as iron :refer [demo-snippet]]
+  ;;           [miraj.polymer.paper :as paper :refer [badge icon-button]])
+
+  ;; (:styles [[miraj.polymer.iron.icons communication iron social]
+  ;;           [miraj.polymer.iron.styles demo-helpers]
+  ;;           [miraj.polymer.paper.styles color]
+  ;;           ])
+
+  ;; for boot-reload
+  ;; (:js [{:src "main.js"}])
+
+  (:body
+   (h/h1 "Components Demos")
+
+   (h/ul
+    {{#demos}}
+    (h/li (h/a {:href {{href}}} "{{name}}") (h/span "{{docstring}}"))
+    {{/demos}}
+    )))

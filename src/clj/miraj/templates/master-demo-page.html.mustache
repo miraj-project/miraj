@@ -1,0 +1,21 @@
+<!doctype html>
+
+<html>
+    <head>
+        <script type="text/javascript" src="/bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+        <title>Miraj Components Library Demo</title>
+        <meta name="description" content="This page demonstrates the Miraj Polymer Paper Library.">
+    </head>
+    <body>
+        <h1>Miraj Components Library Demo</h1>
+        <ul>
+{{#demos}}
+            <li>
+                <a href="{{href}}">{{demonstrates}}.</a>   {{desc}}
+            </li>
+{{/demos}}
+        </ul>
+        <script type="text/javascript" src="/custom-elements.min.js"></script>
+    </body>
+</html>
+

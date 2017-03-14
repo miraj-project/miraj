@@ -26,7 +26,23 @@
 
   {{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"
   [& args]
-      (apply element {{miraj/html-tag}}))
+  (let [wc-meta {:miraj/miraj {:miraj/co-fn true
+                               :miraj/element true
+                               :miraj/html-tag {{miraj/html-tag}}
+                               :miraj/lib {{miraj/lib}}
+                               :miraj/assets {:miraj/href "{{miraj/base.miraj/assets.miraj/href}}{{miraj/assets.miraj/href}}"
+                                              :miraj/bower "{{miraj/assets.miraj/bower}}"}
+                               :miraj/help "{{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"}}]
+    (if (empty? args)
+      (element {{miraj/html-tag}})
+      (let [attrs (first args) content  (rest  args)
+            ;;[attrs content] (parse-elt-args attrs content)
+	    ]
+        (apply element {{miraj/html-tag}} first #_attrs rest #_content)))))
+      ;; (with-meta (element {{miraj/html-tag}}) wc-meta)
+      ;;   (with-meta (apply element {{miraj/html-tag}} attrs content) wc-meta)))))
+
+
 (alter-meta! (find-var (symbol (str *ns*) "{{miraj/defn}}"))
              (fn [old new] (merge old new))
              {:miraj/miraj {:miraj/co-fn true
@@ -55,6 +71,6 @@
         (if (> (count fn-args) 1)
           (throw (Exception. (str "Content not allowed in HTML meta elements: {{fn}}")))
           (let [attribs {(keyword "{{attrib}}") "{{fn}}" :content (str (first fn-args))}]
-            (apply element :meta (list attribs))))))))
+            (apply element "meta" (list attribs))))))))
 
 {{/miraj/pragmas}}
