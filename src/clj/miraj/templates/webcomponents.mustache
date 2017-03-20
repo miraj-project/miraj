@@ -3,18 +3,17 @@
 
   {{miraj/base.miraj/doc.miraj/href}}"
   {{#miraj/refer-clojure}}(:refer-clojure :exclude {{exclude}}){{/miraj/refer-clojure}}
-  (:require [miraj.co-dom :refer [element #_parse-elt-args]]))
+  (:require [miraj.co-dom :as codom])) ;; :refer [element #_parse-elt-args]]))
 
-(alter-meta! *ns* (fn [m] (assoc m :miraj/miraj {:miraj/elements true
-                                                 :miraj/nss '{{miraj/nss}}
-                                                 :miraj/codom "{{miraj/codom}}"
-                                                 :miraj/assets
-                                                 {:miraj/bower
-                                                  [
-{{#miraj/base.miraj/assets.miraj/bower}}"{{cmd}}" {{/miraj/base.miraj/assets.miraj/bower}}
-                                                   ]
-                                                   :miraj/base "{{miraj/base.miraj/assets.miraj/href}}"}})))
-;;; (def pfx "{{miraj/base.miraj/assets.miraj/href}}")
+;; (alter-meta! *ns* (fn [m] (assoc m :miraj/miraj {:miraj/elements true
+;;                                                  :miraj/nss '{{miraj/nss}}
+;;                                                  :miraj/codom "{{miraj/codom}}"
+;;                                                  :miraj/assets
+;;                                                  {:miraj/bower
+;;                                                   [
+;; {{#miraj/base.miraj/assets.miraj/bower}}"{{cmd}}" {{/miraj/base.miraj/assets.miraj/bower}}
+;;                                                    ]
+;;                                                    :miraj/base "{{miraj/base.miraj/assets.miraj/href}}"}})))
 
 (println "loading {{miraj/ns}}")
 
@@ -26,7 +25,7 @@
 
   {{miraj/base.miraj/doc.miraj/href}}{{miraj/doc.miraj/href}}"
   [& args]
-      (apply element {{miraj/html-tag}}))
+      (apply codom/element {{miraj/html-tag}} args))
 (alter-meta! (find-var (symbol (str *ns*) "{{miraj/defn}}"))
              (fn [old new] (merge old new))
              {:miraj/miraj {:miraj/co-fn true
@@ -55,6 +54,6 @@
         (if (> (count fn-args) 1)
           (throw (Exception. (str "Content not allowed in HTML meta elements: {{fn}}")))
           (let [attribs {(keyword "{{attrib}}") "{{fn}}" :content (str (first fn-args))}]
-            (apply element :meta (list attribs))))))))
+            (apply codom/element :meta (list attribs))))))))
 
 {{/miraj/pragmas}}

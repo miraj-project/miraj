@@ -230,12 +230,12 @@
 
         metas (:meta opts-map)
         _ (log/trace "raw metas: " metas)
-        metas (let [ms (apply merge (concat (:meta opts-map)
-                                            {:apple (first (:apple opts-map))}
-                                            {:msapp (first (:msapp opts-map))}
-                                            {:mobile (first (:mobile opts-map))}))]
-                (log/trace "META MERGE: " ms)
-                (codom/get-metas ms))
+        ;; metas (let [ms (apply merge (concat (:meta opts-map)
+        ;;                                     {:apple (first (:apple opts-map))}
+        ;;                                     {:msapp (first (:msapp opts-map))}
+        ;;                                     {:mobile (first (:mobile opts-map))}))]
+        ;;         (log/trace "META MERGE: " ms)
+        ;;         (codom/get-metas ms))
         _ (log/trace "html metas: " metas)
 
         viewports (:viewport opts-map)

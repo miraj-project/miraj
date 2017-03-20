@@ -22,6 +22,8 @@
             ;; [cljs.env :as env])
             [clojure.tools.logging :as log :only [trace debug error info]]))
 
+(defn namespace? [n]
+  (instance? clojure.lang.Namespace *ns*))
 
 (defn ns->uri [n]
   ;; (log/debug "NS->URI")
@@ -38,6 +40,11 @@
         ]
     ;; (str path "/" fn)))
     path))
+
+(defn path->ns-sym [path]
+  (let [ns-sym (str/replace path #"_|/" {"_" "-" "/" "."})
+        ]
+    (symbol ns-sym)))
 
 (defn sym->path [sym]
   (let [path (str/replace sym #"-|\." {"-" "_" "." "/"})
@@ -56,19 +63,33 @@
     ;; (str path "/" fn)))
     path))
 
+(defn var->ns
+  [v]
+  (let [ns (-> v meta :ns ns-name)
+        nm (-> v meta :name)]
+    (symbol (str ns "." nm))))
+
 (defn var->path [v]
-  ;; (log/debug "var->path: " v)
-  (let [nm (:name (meta v))
-        namesp (:ns (meta v))
-        ;; _ (log/debug "namesp: " namesp)
-        ns-name (ns-name namesp)
-        ;; _ (log/debug "ns-name: " ns-name)
-        path (str/replace ns-name #"-|\." {"-" "_" "." "/"})
-        ;; _ (log/debug "path: " path)
-        fn (str/replace nm #"-|\." {"-" "_" "." "/"})
-        ;; _ (log/debug "fn: " fn)
+  (let [ns-str (str (-> v meta :ns ns-name))
+        ns-path (str/replace ns-str #"-|\." {"-" "_" "." "/"})
+        name (-> v meta :name)
+        name (str/replace name #"-|\." {"-" "_" "." "/"})
         ]
-    (str path "/" fn)))
+    (str ns-path "/" name)))
+
+;; (defn var->path [v]
+;;   ;; (log/debug "var->path: " v)
+;;   (let [nm (:name (meta v))
+;;         namesp (:ns (meta v))
+;;         ;; _ (log/debug "namesp: " namesp)
+;;         ns-name (ns-name namesp)
+;;         ;; _ (log/debug "ns-name: " ns-name)
+;;         path (str/replace ns-name #"-|\." {"-" "_" "." "/"})
+;;         ;; _ (log/debug "path: " path)
+;;         fn (str/replace nm #"-|\." {"-" "_" "." "/"})
+;;         ;; _ (log/debug "fn: " fn)
+;;         ]
+;;     (str path "/" fn)))
 
 (defn sym->cljs-ns
   [sym]
