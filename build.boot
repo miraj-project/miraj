@@ -18,8 +18,10 @@
  :dependencies   '[[org.clojure/clojure RELEASE :scope "provided"]
                    ;; [org.clojure/clojurescript "1.9.89"]
                    [org.clojure/data.json "0.2.6"]
-                   ;; [org.clojure/core.async "0.2.385"]
                    [org.clojure/tools.namespace "0.2.11" :scope "test"]
+
+                   ;; for protocol_engine
+                   ;; [org.clojure/core.async "0.2.385"]
 
                    ;; [clj-http "2.0.0"]
                    [clj-time "0.11.0"]
