@@ -36,7 +36,7 @@
             ;; [cljs.compiler :as c]
             ;; [cljs.closure :as cc]
             ;; [cljs.env :as env])
-            [clojure.tools.logging :as log :only [trace debug error info]])
+            [clojure.tools.logging :as log :only [trace debug error warn info]])
   (:import [java.io FileNotFoundException StringWriter]))
 
 (log/debug "loading miraj/core.clj")
@@ -331,8 +331,8 @@
                       (-> page-ref meta :miraj/miraj :miraj/polyfill))
         _ (log/debug (format "Polyfill %s" polyfill))
 
-        linkage (-> page-ref meta :miraj/miraj :miraj/imports)
-        _ (log/debug (format "LINKAGE %s" linkage))
+        imports (-> page-ref meta :miraj/miraj :miraj/imports)
+        _ (log/debug (format "IMPORTS %s" imports))
 
         ;; we need to gen a in import link for each miraj element fn
         ;; used on the page. so first get all miraj vars :require'd,
@@ -420,39 +420,43 @@
         ;; _ (log/debug "PAGE CONTENT: " page-content)
 
         header (first (->> page-content :content (filter #(= (:tag %) :head))))
-        _ (log/debug "    HEADER CONTENT: " header)
+        _ (log/debug "HEADER: " header)
+        _ (log/debug "HEADER CONTENT: " (:content header))
 
         body (binding [*ns* (if page-on-ns? page-ref (-> page-ref meta :ns))]
                (->> page-content :content (filter #(= (:tag %) :body))))
-        ;; _ (log/debug "    BODY CONTENT: " body)
+        ;; _ (log/debug "BODY: " body)
 
         ;; FIXME: only for webcompennts, not plain HTML!
-        newheader (apply codom/element :head (flatten
-                                              (list ;;FIXME meta-elts
-                                               ;; FIXME: polyfill goes in user-defined imports.html
-                                               (if polyfill
-                                                 (codom/element :script
-                                                                {:type "text/javascript"
-                                                                 :src polyfill}))
+        header-elts (remove nil?
+                            (flatten
+                             (apply list ;;FIXME meta-elts
+                                    ;; FIXME: polyfill goes in user-defined imports.html
+                                    (if polyfill
+                                      (codom/element :script
+                                                     {:type "text/javascript"
+                                                      :src polyfill}))
 
-                                               ;;(codom/element :link {:href "bower_components/iron-demo-helpers/demo-pages-shared-styles.html" :rel "import"})
+                                    ;;(codom/element :link {:href "bower_components/iron-demo-helpers/demo-pages-shared-styles.html" :rel "import"})
 
 
-                                               ;; FIXME: parametrize
-                                               ;; (codom/element :script
-                                               ;;                {:type "text/javascript"
-                                               ;;                 :src "/custom-elements.min.js"})
+                                    ;; FIXME: parametrize
+                                    ;; (codom/element :script
+                                    ;;                {:type "text/javascript"
+                                    ;;                 :src "/custom-elements.min.js"})
 
-                                               (if linkage
-                                                 (for [link linkage]
-                                                   (codom/element :link {:rel "import"
-                                                                         :href link})))
+                                    (if imports
+                                      (for [import imports]
+                                        (codom/element :link {:rel "import"
+                                                              :href import})))
 
-                                               vendor-links
-                                               miraj-links
-                                               script-links
-                                               (:content header))))
-        ;; _ (log/debug "NEW HEADER: " newheader)
+                                    vendor-links
+                                    miraj-links
+                                    script-links
+                                    (:content header))))
+        _ (log/debug (format "HEADER-ELTS %s" (seq header-elts)))
+        newheader (apply codom/element :head header-elts)
+        _ (log/debug "NEW HEADER: " newheader)
         normed (codom/element :html newheader body)
         ;;normh (binding [*ns* page-ns] (codom/xsl-xform codom/xsl-normalize page-content))
         ;; _ (log/debug (format "NORMALIZED: %s" normed))

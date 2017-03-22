@@ -29,11 +29,11 @@
                       ;; [cljs.compiler                     :as c]
                       ;; [cljs.closure                      :as cc]
                       ;; [cljs.env                          :as env])
-                      '[clojure.tools.logging                :as log :only [trace debug error info]])
+                      '[clojure.tools.logging :as log :only [trace debug error warn info]])
 
 ;;   (:import [java.io FileNotFoundException StringWriter]))
 
-(log/debug "loading miraj/compiler.clj")
+(log/trace "loading miraj/compiler.clj")
 
 (stencil.loader/set-cache (clojure.core.cache/ttl-cache-factory {} :ttl 0))
 
@@ -1068,6 +1068,7 @@
   ;; ([page-ref]
   ;;  (compile-page-ref page-ref false))
   ;; ([page-ref pprint verbose]
+  (log/debug (format "compile-page-ref *verbose* %s" *verbose*))
   (if *verbose* (log/debug "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
   (if *verbose* (log/debug "COMPILE-PAGE-REF meta: " (-> page-ref meta)))
 
@@ -1086,7 +1087,6 @@
      (io/make-parents hfile)
      (binding [*ns* page-ref-ns]
        (if *verbose* (log/info (format "Compiling %s to %s" page-ref hfile)))
-       (clojure.core/require (ns-name page-ref-ns)) ; :reload)
        (let [out-str (if *pprint*
                        (with-out-str (-> page-ref normalize optimize x/pprint))
                        (with-out-str (-> page-ref
@@ -1094,6 +1094,7 @@
                                          optimize
                                          x/serialize
                                          print)))]
+         (if *verbose* (log/info (format "Emitting %s" hfile)))
          (spit hfile out-str)))))
 
 (defn add-polyfill
@@ -1113,29 +1114,46 @@
 (defn mcc   ;;  compile
   [& {:keys [page pages namespaces
              optimizations compile-only
-             imports polyfill]}]
-  (log/debug (format "Compile: page %s, nss %s, pages %s" page namespaces pages))
-  (log/debug (format "polyfill %s" polyfill))
-  (log/debug (format "imports %s" imports))
+             imports polyfill
+             debug]
+      :as opts}]
+  (log/info (format "mcc %s" opts))
   (let [namespaces (or namespaces (if (and page (nil? pages)) nil :all))
         pages (or pages (if (and page (nil? namespaces)) nil :all))]
-    (log/debug (format "Compile (fixed): page %s, nss %s, pages %s" page namespaces pages))
+    ;; (log/debug (format "Compile (fixed): page %s, nss %s, pages %s" page namespaces pages))
 
     ;; if page var and both nss and pages are :all, do just page
     (if page
-      (let [page-ref (if (var? page)
-                       page
-                       (if (symbol? page)
-                         (if (namespace page)
-                           (clojure.core/resolve page)
-                           (find-ns page))
-                         ;; must be an ns
-                         page))]
+      (let [[page-ref page-ns page-var page-sym]
+            (if (var? page)
+              [page (-> page meta :ns) page nil]
+              (if (symbol? page)
+                (if (namespace page)
+                  ;; a var sym
+                  (let [pvar (clojure.core/resolve page)
+                        pns (-> pvar meta :ns)]
+                    [pvar pns pvar page])
+                  ;; must be an ns sym
+                  (do
+                    ;; for interactive dev we need to reload the ns
+                    ;; should this be the responsibility of the dev?
+                    ;; no, the boot task should do this
+                    ;;(clojure.core/require page :reload)
+                    (let [pns (find-ns page)]
+                      [pns pns nil page])))
+                ;; must be an ns
+                (do [page page nil (page ns-name)])))]
+        (log/info "Page ref: " page-ref)
+        (log/info "Page ns: " page-ns)
+        (log/info "Page var: " page-var)
+        (log/info "Page sym: " page-sym)
+        ;; reloading page is client responsibility - boot task or repl
+        ;; (clojure.core/require (-> page-ns ns-name) :reload)
         (if polyfill (add-polyfill page-ref polyfill))
         (if imports (alter-meta! page-ref (fn [old new]
                                             (assoc-in old [:miraj/miraj :miraj/imports] new))
                                  imports))
-        (log/debug (format "Compiling page %s" page-ref))
+        (log/info (format "Compiling page %s" page-ref))
         (compile-page-ref page-ref)))
     (if namespaces
       (do (log/debug (format "Compiling nss %s" namespaces))
@@ -1184,4 +1202,4 @@
     #_(get-imports-config-map)
     #_(compile-web-resources assets-out)))
 
-(println "loaded miraj/compiler.clj")
+(log/trace "loaded miraj/compiler.clj")
