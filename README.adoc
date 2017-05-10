@@ -1,4 +1,4 @@
-= miraj.core
+= miraj
 Webcomponents, the Clojure way
 
 The goal of the Miraj project is to extend the Clojure language to
