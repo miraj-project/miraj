@@ -125,3 +125,8 @@
         ]
     (symbol (str ns-name "." nm))))
 
+(defn last-seg [sym]
+  (if-let [nspace (namespace sym)]
+    (name sym)
+    (let [segs (str/split (str sym) #"\.")]
+      (last segs))))

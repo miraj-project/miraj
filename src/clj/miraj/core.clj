@@ -28,7 +28,7 @@
             ;; [mobileink.boot-bowdlerize :as bow]
             ;; [polymer :refer :all]
             [miraj.co-dom :as codom]
-            ;; [miraj.html]
+            [miraj.html]
             [miraj.utils :as utils]
             ;; [clojure.tools.reader :as reader]
             ;; [clojure.tools.reader.reader-types :as readers]
@@ -39,7 +39,7 @@
             [clojure.tools.logging :as log :only [trace debug error warn info]])
   (:import [java.io FileNotFoundException StringWriter]))
 
-(log/debug "loading miraj/core.clj")
+;; (log/debug "loading miraj/core.clj")
 
 (def ^:dynamic *miraj-sym* (gensym "miraj"))
 
@@ -63,7 +63,7 @@
            ;; [miraj NSException]))
 ;;           [java.util Date]))
 
-(def bower-repo "bower_components")
+(def bower-repo "/miraj/polymer/assets") ;; "bower_components")
 
 (defn pprint-str [m]
   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
@@ -99,6 +99,7 @@
        ;; (log/debug "interface-sym->protocol-sym: " ~sym " => " newsym#)
        newsym#)))
 
+
 (def polymer-prop-descriptors
   {:type "type", :value "value", :notify "notify", :read-only "readOnly",
    :reflect-to-attribute "reflectToAttribute", :observer "observer", :computed "computed"})
@@ -122,7 +123,7 @@
   [doc]
   ;; (log/debug "JS optimizer: " doc)
   (with-meta
-    (codom/xsl-xform codom/xsl-optimize-js doc)
+    (codom/xsl-xform codom/js-optimizer doc)
     (meta doc)))
 
   ;; (let [doc-zip (zip/xml-zip doc)]
@@ -183,9 +184,9 @@
   [page-ns]
   (binding [*ns* page-ns]
     (let [page-vars (vals (into {}
-                                     (filter (fn [r]
-                                               (-> r second meta :miraj/miraj :miraj/defpage))
-                                             (ns-interns page-ns))))
+                                (filter (fn [r]
+                                          (-> r second meta :miraj/miraj :miraj/defpage))
+                                        (ns-interns page-ns))))
           ]
       page-vars)))
 
@@ -267,27 +268,27 @@
                                                 (-> ref second meta :miraj/miraj))))
                                        (sort-by #(-> % second meta :ns ns-name)
                                                 (ns-refers page-ns)))))
-          _ (log/debug "REF VARS: " ref-vars)
+          ;; _ (log/debug "REF VARS: " ref-vars)
 
           ref-nss (set (map #(-> % meta :ns) ref-vars))
-          _ (log/debug "ref-nss: " ref-nss)
+          ;; _ (log/debug "ref-nss: " ref-nss)
 
           ;; _ (doseq [n ref-nss] (log/debug "REF NS: " n))
 
           aliased-nss (set (vals (into {} (filter (fn [[k v]] (-> v meta :miraj/miraj))
                                                   (ns-aliases page-ns)))))
-          _ (log/debug "aliased-nss: " aliased-nss)
+          ;; _ (log/debug "aliased-nss: " aliased-nss)
 
           ;; get aliased nss that are NOT in the list of refered nss
           noref-aliases (filter #(and (not (contains? ref-nss %))
                                       (not= 'miraj.html (-> % ns-name)))
                                 aliased-nss)
-          _ (log/debug "noref-aliases: " noref-aliases) ;; (type noref-aliases))
+          ;; _ (log/debug "noref-aliases: " noref-aliases) ;; (type noref-aliases))
 
           noref-alias-vars (vals (first (for [noref-alias noref-aliases]
                                           (ns-publics noref-alias))))
           noref-alias-vars (filter #(-> % meta :miraj/miraj :miraj/co-fn) noref-alias-vars)
-          _ (log/debug "noref-alias-vars: " noref-alias-vars)
+          ;; _ (log/debug "noref-alias-vars: " noref-alias-vars)
 
           ;; finally get everything else
           all-map ;;(map #(-> % second meta :ns)
@@ -306,39 +307,44 @@
           noref-nss (if (empty? noref-nss) noref-nss
                      (filter #(-> % meta :miraj/miraj :miraj/co-fn)
                              (vals (into {} (map ns-publics noref-nss)))))
-          _ (log/debug "noref-nss: " noref-nss)
+          ;; _ (log/debug "noref-nss: " noref-nss)
 
           allrefs (concat ref-vars noref-nss noref-alias-vars)
           ]
       ;; (doseq [refvar allrefs] (log/debug " REFVAR: " refvar))
       allrefs)))
 
-;; FIXME: call this polymerize?  put it in miraj.polymer?
+(def polyfills
+  {:lite  (str bower-repo "/webcomponentsjs/webcomponents-lite.js")
+   :heavy (str bower-repo "/webcomponentsjs/webcomponents.js")})
+
+;; FIXME: call this compiler.clj? it's called by compiler.clj/compile-page-ref
 (defn normalize
   "inspect webpage var, if necessary create <head> etc."
   [page-ref]
-  (log/debug "\n\n\t\tNORMALIZING HTML PAGE-REF: " page-ref (type page-ref))
+  ;; (log/debug "\n\n\t\tNORMALIZING HTML PAGE-REF: " page-ref (type page-ref))
   ;; (log/debug (format "NS %s" *ns*))
-  (log/debug "NORMALIZE HTML meta: " (-> page-ref meta))
+  ;; (log/debug "NORMALIZE meta: " (-> page-ref meta))
+  ;; (log/debug "NORMALIZE HTML deref: " (-> page-ref deref))
   (reset! codom/mode :html)
   (let [[page-ns page-ns-sym page-on-ns?] ;; page-name]
         (if (var? page-ref)
           [(-> page-ref meta :ns) (-> page-ref meta :ns ns-name) false]
           [page-ref (-> page-ref ns-name) true])
+        _ (log/debug (format "page-on-ns? %s" page-on-ns?))
 
-        polyfill (get {:lite "/bower_components/webcomponentsjs/webcomponents-lite.min.js"
-                       :heavy "/bower_components/webcomponentsjs/webcomponents.min.js"}
-                      (-> page-ref meta :miraj/miraj :miraj/polyfill))
+        polyfill (get polyfills (-> page-ref meta :miraj/miraj :miraj/polyfill))
         _ (log/debug (format "Polyfill %s" polyfill))
 
-        imports (-> page-ref meta :miraj/miraj :miraj/imports)
+        imports (-> page-ref meta :miraj/miraj :miraj/deps)
         _ (log/debug (format "IMPORTS %s" imports))
 
         ;; we need to gen a in import link for each miraj element fn
         ;; used on the page. so first get all miraj vars :require'd,
         ;; with or without :refer, :alias
+        ;; FIXME: optimization: deal with multiple defpages in one ns
         miraj-vars (get-miraj-vars-for-pagespace page-ns)
-        ;; _ (log/debug "MIRAJ-VARS: " miraj-vars)
+        _ (log/debug "MIRAJ-VARS: " miraj-vars)
 
         ;; _ (doseq [refvar miraj-vars]
         ;;       (log/debug (-> refvar meta :miraj/miraj :miraj/assets :miraj/href)))
@@ -389,7 +395,7 @@
                                      {:rel "import"
                                       :href (str "/" (utils/ns->path page-ns) "/miraj-imports.html")}))
 
-        _ (log/debug (format "Miraj Links %s" (seq miraj-links)))
+        ;; _ (log/debug (format "Miraj Links %s" (seq miraj-links)))
 
                                         ;; :href (str "miraj/" *miraj-sym* "-import.html")}))
                                   ;; :href (str (-> lib meta :miraj/miraj :miraj/assets :miraj/href))}))
@@ -397,7 +403,7 @@
         script-links (if (not (empty? miraj-links)) ;; (for [lib miraj-libs]
                        (apply codom/element :script
                               {:src (str "/" (utils/ns->path page-ns) "/js/components.js")}))
-        _ (log/debug (format "Script Links %s" (seq script-links)))
+        ;; _ (log/debug (format "Script Links %s" (seq script-links)))
 
                                            ;; #_(str (-> lib meta
                                            ;;            :miraj/miraj
@@ -407,12 +413,10 @@
         ;; _ (log/debug "PAGE META: " (meta page-ref))
         ;; html-metas (dissoc (meta page-ref) :doc :name :ns :miraj/miraj)
         html-metas (-> page-ref meta :miraj/miraj :miraj.html/meta)
-        _ (log/debug "HTML METAS: " html-metas)
+        ;; _ (log/debug "NORM HTML METAS: " html-metas)
 
-;        _ (miraj.html/map->metas html-metas)
-
-;;FIXME        ;; meta-elts (codom/get-metas html-metas)
-        ;; _ (log/debug "    META-ELTS: " meta-elts)
+        html-meta-elts (miraj.html/meta-map->elts {:miraj.html/meta html-metas})
+        ;; _ (log/debug "HTML-ELTS: " html-meta-elts)
 
         page-content (if page-on-ns?
                        (-> page-ref meta :miraj/miraj :miraj/codom)
@@ -420,8 +424,8 @@
         ;; _ (log/debug "PAGE CONTENT: " page-content)
 
         header (first (->> page-content :content (filter #(= (:tag %) :head))))
-        _ (log/debug "HEADER: " header)
-        _ (log/debug "HEADER CONTENT: " (:content header))
+        ;; _ (log/debug "HEADER: " header)
+        ;; _ (log/debug "HEADER CONTENT: " (:content header))
 
         body (binding [*ns* (if page-on-ns? page-ref (-> page-ref meta :ns))]
                (->> page-content :content (filter #(= (:tag %) :body))))
@@ -449,14 +453,14 @@
                                       (for [import imports]
                                         (codom/element :link {:rel "import"
                                                               :href import})))
-
-                                    vendor-links
-                                    miraj-links
+                                    html-meta-elts
+                                    ;; vendor-links
+                                    ;; miraj-links
                                     script-links
                                     (:content header))))
-        _ (log/debug (format "HEADER-ELTS %s" (seq header-elts)))
+        ;; _ (log/debug (format "HEADER-ELTS %s" (seq header-elts)))
         newheader (apply codom/element :head header-elts)
-        _ (log/debug "NEW HEADER: " newheader)
+        ;; _ (log/debug "NEW HEADER: " newheader)
         normed (codom/element :html newheader body)
         ;;normh (binding [*ns* page-ns] (codom/xsl-xform codom/xsl-normalize page-content))
         ;; _ (log/debug (format "NORMALIZED: %s" normed))
@@ -1431,7 +1435,7 @@
   var y, get config data from the polymer/x map, then intern
   polymer.codom/y"
   [lib as-alias require]
-  (log/debug "    LOAD-POLYMER-LIB: " lib as-alias require)
+  ;; (log/debug "    LOAD-POLYMER-LIB: " lib as-alias require)
   (let [lns (create-ns lib)
         _ (log/debug "    created ns:  " lns)
         segs (str/split (str lib) #"\.")
@@ -1475,7 +1479,7 @@
 (defn- load-miraj-lib
   "load miraj web component lib"
   [lib as-alias require opts]
-  (log/debug "    LOAD-MIRAJ-LIB: " lib as-alias require opts)
+  ;;(log/debug "    LOAD-MIRAJ-LIB: " lib as-alias require opts)
 
   ;; in dynamic mode, component is loadable from the defweb-component ns
   ;; in static mode, the component is static html/cljs, not loadable
@@ -1492,9 +1496,10 @@
               (clojure.core/create-ns lib)
               reqns)]
     (log/debug "    REQUIRED NS: " reqns)
-    (if as-alias
+    #_(if as-alias
       (alias (symbol as-alias) (symbol lib)))
     ;; TODO: find and load jarfile?
+    (log/debug "OPTS:" (hash-map opts))
     (doseq [sym (:refer (apply hash-map opts))]
       (let [elt (if (nil? reqns)
                   (load-miraj-lib-static-resource lns sym)
@@ -1525,9 +1530,9 @@
   (let [segs (str/split (str lib) #"\.")
         seg1 (first segs)]
 
-    ;; FIXME: why is miraj.polymer special?
+    ;; FIXME: why is miraj.polymer special? check metadata instead
     ;; (log/debug "segs: " segs)
-    (if (and (= seg1 "miraj") (= (second segs) "polymer"))
+    (if (and (= seg1 "miraj")) ;; (= (second segs) "polymer"))
       (do ;; (log/debug "    MIRAJ.POLYMER - requiring")
           #_(let [pl (load-polymer-lib lib as-alias require)]
               pl)
@@ -1664,10 +1669,12 @@
 
 ;; CHANGED: we used to insert polymer link elts at defpage time; now
 ;; we do it in the normalize routine.
+;; this routine is responsible for loading the required libs so that
+;; normalize can find the vars they contain
 (defn require
   "Called by defpage to have clojure.core/require load polymer libs."
   [page-sym & args]
-  ;; (log/debug "REQUIRE DIRECTIVE: " page-sym args)
+  (log/debug "REQUIRE DIRECTIVE: " page-sym args)
   (let [cljs-requires (filter map? args)
         clj-requires  (filter #(not (map? %) args))
         reqres (remove nil? (flatten (apply load-libs :require args)))
@@ -1694,7 +1701,7 @@
     ))
 
 ;;FIXME: put this in webc?
-(defn get-imports-config-map
+(defn get-imports-config-map            ;; OBSOLETE?
   []
   (let [home-imports-path (str (System/getProperty "user.home") "/.miraj/imports.edn")
         ;; _ (log/debug "home-imports-path: " home-imports-path)
@@ -1734,7 +1741,7 @@
 (defn css
   "Fn that handles :css directive of miraj.core/defpage"
   [page-sym & css-specs]
-  ;; (log/debug "CSS DIRECTIVE for page: " page-sym) ;;  css-specs)
+  (log/debug "CSS DIRECTIVE for page: " page-sym) ;;  css-specs)
   (let [flags (filter keyword? css-specs)
         opts (apply hash-map (interleave flags (repeat true)))
         args (filter (complement keyword?) css-specs)]
@@ -1744,6 +1751,7 @@
       (throw-if unsupported
                 (apply str "Unsupported :css option(s) supplied: "
                        (interpose \, unsupported))))
+    (log/trace "CSS args:" args (type (first args)))
     (let [arg1 (first args)
           elts (cond
                   (:custom opts)
@@ -1752,28 +1760,36 @@
                                      (if (:include opts) {:include "demo-pages-shared-styles"} {}))]
                     (codom/element :style attrs args))
 
-                  (string? arg1) (codom/element :link {:rel "stylesheet"
-                                                       :href arg1})
+                  (string? arg1) (codom/element :style arg1)
 
                   (vector? arg1) ;; maps and import vectors
                   (for [css-spec arg1]
-                    (vector (if (vector? css-spec)
+                    (vector (cond
+                              (vector? css-spec)
                               (css-spec->link css-spec)
-                              (if (map? css-spec)
-                                (css-map->link css-spec)
-                                (throw (Exception. (format "Invalid :css vector: %s" css-spec)))))))
 
+                              (map? css-spec)
+                              (css-map->link css-spec)
+
+                              (string? css-spec)
+                              (codom/element :link {:rel "stylesheet" :href css-spec})
+
+                              :else
+                              (throw (Exception. (format "Invalid :css vector: %s" css-spec))))))
                   :else
                   (for [css-spec args]
                     (css-spec->link css-spec))
                   )]
-      ;;(log/debug "css elts: " elts)
+      (log/debug "css elts: " elts)
       {:css elts})))
 
+;; FIXME: let normalize actually create the elements; this routine
+;; should just load the libs so that normalize can search them for
+;; miraj vars
 (defn styles
   ""
   [page-sym & import-specs]
-  ;; (log/debug "STYLES DIRECTIVE: " page-sym import-specs)
+  (log/debug "STYLES DIRECTIVE: " page-sym import-specs)
   (let [flags (filter keyword? import-specs)
         opts (apply hash-map (interleave flags (repeat true)))
         args (first (filter (complement keyword?) import-specs))]
@@ -1815,10 +1831,11 @@
                                   module (-> import-var var-get :miraj/module)
                                   ;; _ (log/debug (format "MODULE %s" module))
                                   ]
-                              (let [foo (remove nil? (vector (codom/element :link {:rel "import" :href href})
-                                                (if module
-                                                  (codom/element :style {:is "custom-style"
-                                                                     :include (str module)}))))]
+                              (let [foo (remove nil?
+                                                (vector (codom/element :link {:rel "import" :href href})
+                                                        (if module
+                                                          (codom/element :style {:is "custom-style"
+                                                                                 :include (str module)}))))]
                                         ;; (log/debug (format "FOO %s" (seq foo)))
                                         foo
                                         ))))))))]
@@ -1859,7 +1876,7 @@
   (let [flags (filter keyword? js-specs)
         opts (apply hash-map (interleave flags (repeat true)))
         args (filter (complement keyword?) js-specs)]
-    (log/debug "ARGS: " args)
+    ;; (log/debug "JS ARGS: " args)
     ;; check for unsupported options
     #_(let [supported codom/html5-script-attrs
           unsupported (seq (remove supported flags))]
@@ -1867,7 +1884,7 @@
                 (apply str "Unsupported :js option(s) supplied: "
                        (interpose \, unsupported))))
     (let [arg1 (first args)
-          _ (log/debug (format "arg1 %s" arg1))
+          ;; _ (log/debug (format "arg1 %s" arg1))
           elts (cond
 
                   ;; (:custom opts)
@@ -1879,19 +1896,30 @@
 
                   (vector? arg1) ;; maps and import vectors
                   (for [js-spec arg1]
-                    (vector (if (vector? js-spec)
+                    (vector (cond
+                              (vector? js-spec)
                               (js-spec->script-elt js-spec)
-                              (if (map? js-spec)
-                                (js-map->script-elt js-spec)
-                                (throw (Exception. (format "Invalid :js vector: %s" js-spec)))))))
+
+                              (map? js-spec)
+                              (js-map->script-elt js-spec)
+
+                              (string? js-spec)
+                              (codom/element :script {:type "text/javascript"
+                                                      :src js-spec})
+
+                              :else
+                              (throw (Exception. (format "Invalid :js vector: %s" js-spec))))))
 
                   :else
                   (for [js-spec args]
                     (js-spec->script-elt js-spec))
                   )]
-      (log/debug "js elts: " elts)
+      ;; (log/debug "js elts: " elts)
       {:js elts})))
 
+;; FIXME: let normalize actually create the elements; this routine
+;; should just load the libs so that normalize can search them for
+;; miraj vars
 (defn import
   ""
   [page-sym & import-specs]
@@ -1928,7 +1956,7 @@
 
                         (for [import-var import-vars]
                           (let [href (str "/" path "/" import-var ".html")]
-                            ;; (log/debug (format "CREATING IMPORT %s" import-var))
+                            (log/debug (format "CREATING IMPORT %s" import-var))
                             (codom/element :link {:rel "import" :href href})))))))]
       (log/debug "imports: " imports)
       {:import imports})))
@@ -1996,8 +2024,8 @@
 (defn body
   ""
   [page-sym & args]
-  (log/debug "BODY DIRECTIVE for page: " page-sym)
-  (log/debug "BODY ARGS: " args)
+  ;; (log/debug "BODY DIRECTIVE for page: " page-sym)
+  ;; (log/debug "BODY ARGS: " args)
   (let [;; page-ns (-> page-sym meta :ns)
         ;; page-ns-sym (ns-name page-ns)
         ;; [attrs content] (if (map? (first args))
@@ -2108,10 +2136,10 @@
                ;; html# (apply codom/element :html {} (vec (flatten (list head# body#))))
                codom# (concat head# body#)
 
-               _# (log/debug "ALL: " reqs#)
-               _# (log/debug "HEAD# " head#)
-               _# (log/debug "BODY# " body#)
-               _# (log/debug "CODOM# " codom#)
+               ;; _# (log/debug "ALL: " reqs#)
+               ;; _# (log/debug "HEAD# " head#)
+               ;; _# (log/debug "BODY# " body#)
+               ;; _# (log/debug "CODOM# " codom#)
 
            ;; (log/debug "HTML# " html#)
            ;; (clojure.core/intern *ns* '~name html#)
@@ -2806,7 +2834,7 @@
                                      (pprint-str `(.whenReady js/HTMLImports
                                                               (cljs.core/fn []
                                                                 (try
-                                                                  (println "FOOBAR")
+                                                                  ;;(println "FOOBAR")
                                                                   (js/Polymer
                                                                    (cljs.core/clj->js
                                                                     ~(merge {:is (keyword html-kw)} properties)))
@@ -3096,12 +3124,13 @@
   ;; [name & args]
   [& args]
   (let [fst (first args)
-        [args page-sym] (if (symbol? fst)
-                          [(rest args) (symbol (str (ns-name *ns*) "." fst))]
-                          [args (ns-name *ns*)])
-        page-var (if (symbol? fst) (intern *ns* fst) nil)
+        [args page-ns page-sym] (if (symbol? fst)
+                                  [(rest args) (ns-name *ns*) fst]
+                                   ;; (symbol (str (ns-name *ns*)) (str fst))]
+                                  [args (ns-name *ns*) nil])
+
         ;; name (-> page-var meta :name)
-        _ (log/debug "DEFPAGE: " page-sym page-var)
+        _ (log/info "DEFPAGE: " page-ns page-sym)
         ;; (log/debug "    META: " (meta name))
         ;; (log/debug "    REFS: " args)
 
@@ -3111,16 +3140,11 @@
         ;; base-path (-> name meta :miraj/base)
         ;; _ (log/debug (format "BASE-PATH %s" base-path))
 
-        html-meta {:miraj.html/meta (into {} (filter #(and (map? %)
-                                                           (not (instance? miraj.co_dom.Element %)))
-                                                     args))}
-        _ (log/debug (format "HTML-META %s" html-meta))
+        html-meta {:miraj.html/meta (into {} (filter codom/attr-map? args))}
+        ;; _ (log/debug (format "HTML-META %s" html-meta))
 
-        ;; html-meta (eval `(let [maybe-meta#  ~(first args)]
-        ;;            (cond ;;(instance? codom/Element maybe-meta#) false
-        ;;                  (map? maybe-meta#) maybe-meta#
-        ;;                  (symbol? maybe-meta#) (if (map? maybe-meta#) maybe-meta#))))
-        ;; html-meta (dissoc html-meta :base)
+        html-meta (miraj.html/validate-html-meta html-meta)
+        ;; _ (log/debug (format "VALIDATED HTML-META %s" html-meta))
 
         args (filter #(not (and (map? %)
                                 (not (instance? miraj.co_dom.Element %))))
@@ -3137,28 +3161,26 @@
               ~@(map #(list 'quote %) args))))
 
         docstring  (when (string? (first args)) (first args))
-        _ (log/debug (format "DOCSTRING %s" docstring))
+        ;; _ (log/debug (format "DOCSTRING %s" docstring))
 
         args (if docstring (next args) args)
         ;; _ (log/debug "ARGS: " args)
 
-        page-sym (if docstring
-                   (vary-meta page-sym assoc :doc docstring)
-                   page-sym)
+        _ (if page-sym (if docstring
+                         (vary-meta page-sym assoc :doc docstring)
+                         page-sym))
 
-        page-sym (if html-meta
-                   (vary-meta page-sym merge html-meta)
-                   page-sym)
+        ;; page-sym (if html-meta
+        ;;            (vary-meta page-sym merge html-meta)
+        ;;            page-sym)
 
-        ;; _ (log/debug "defweb-page NAME: " name)
-        ;; gen-class-clause (first (filter #(= :gen-class (first %)) args))
-        ;; gen-class-call
-        ;;   (when gen-class-clause
-        ;;     (list* `gen-class :name (.replace (str name) \- \_) :impl-ns name :main true (next gen-class-clause)))
-        ;; args (remove #(= :gen-class (first %)) args)
-                                        ;ns-effect (clojure.core/in-ns name)
-        ;; name-html-meta (meta name)
-        ;; _ (log/debug (format "NAME META %s" name-html-meta))
+        ;; _ (log/debug (format "Page Sym %s" page-sym))
+
+        ;; page-var (if (symbol? fst)
+        ;;            (intern *ns* fst nil) nil)
+        page-var (if page-sym (intern page-ns page-sym) nil)
+        ;; _ (log/debug (format "Page var %s" page-var))
+        ;; _ (log/debug (format "Page sym meta %s" (meta page-sym)))
         ]
     `(do
        (with-loading-context
@@ -3174,7 +3196,6 @@
                ;; _# (log/info (format "IMPORT ELTS 1 %s" (seq import-elts#)))
                import-elts# (flatten (map :import import-elts#))
                ;; _# (log/info (format "IMPORT ELTS 2 %s" (seq import-elts#)))
-
 
                css-elts# (filter (fn [entry#] (:css entry#)) reqsvec#)
                css-elts# (map :css css-elts#)
@@ -3213,7 +3234,7 @@
                codom# (binding [*ns* ~*ns*]
                         (apply codom/element :html html-content#))
                ]
-           (log/info "CODOM# " codom#)
+           ;; (log/info "CODOM# " codom#)
            ;; (clojure.core/intern *ns* '~name codom#)
            ;; (intern *ns*
            ;;         (with-meta
@@ -3221,16 +3242,17 @@
            ;;           (merge {:doc ~docstring :_webpage true} ~html-meta)))
            (if ~page-var
              (do
-               (log/info (format "CREATING PAGE VAR %s" ~page-var))
+               (log/info (format "ALTERING PAGE VAR ROOT %s" ~page-var))
                (clojure.core/alter-var-root ~page-var
                                             (fn [old# & args#] codom#))
+               ;; (log/info "Page sym meta:" (meta ~page-sym))
                (clojure.core/alter-meta! ~page-var
                                          (fn [old# new#]
                                            #_(merge old#
                                                     new#
                                                     ~html-meta
                                                     {:doc ~docstring :_webpage true})
-                                           (merge (dissoc old# :miraj/base)
+                                           (merge old#
                                                   {:doc ~docstring}
                                                   {:miraj/miraj (merge (:miraj/miraj old#)
                                                                        ~html-meta
@@ -3242,10 +3264,10 @@
                                                 ;;        ~base-path)
                                                 ;;    nil)}
                                                 ))
-               (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defpage true}})))
+               (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/pagespace true}})))
                ~page-var)
              ;; else *ns* is our page var
-             (do (log/info (format "ALTERING NS METADATA"))
+             (do (log/info (format "ALTERING NS METADATA\n"))
                  (alter-meta! *ns* (fn [old#]
                                      (merge old#
                                             {:miraj/miraj (merge {:miraj/defpage true
@@ -3311,4 +3333,4 @@
 
 (load "compiler")
 
-(log/debug "loaded miraj/core.clj")
+;; (log/debug "loaded miraj/core.clj")

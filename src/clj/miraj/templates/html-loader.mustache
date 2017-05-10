@@ -3,3 +3,28 @@
 {{#codoms}}
 <link rel="import" href="{{loader}}">
 {{/codoms}}
+
+{{#lexdeps}}
+<link rel="import" href="{{href}}">
+{{/lexdeps}}
+
+{{#imports}}
+<link rel="import" href="{{href}}">
+{{/imports}}
+
+{{#styles}}
+<link rel="import" href="{{href}}">
+{{#modules}}
+<custom-style>
+  <style is="custom-style" include="{{module}}">
+</custom-style>
+{{/modules}}
+{{/styles}}
+
+{{#css}}
+<link rel="stylesheet" type="text/css" href="{{href}}">
+{{/css}}
+
+{{#js}}
+<script src="{{src}}"></script>
+{{/js}}
