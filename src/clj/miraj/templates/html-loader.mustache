@@ -13,17 +13,34 @@
 {{/imports}}
 
 {{#styles}}
+<link rel="import" href="/miraj/polymer/assets/polymer/polymer.html">
 <link rel="import" href="{{href}}">
-{{#modules}}
-<custom-style>
-  <style is="custom-style" include="{{module}}">
-</custom-style>
-{{/modules}}
 {{/styles}}
+{{#modules}}
+<style is="custom-style" include="{{module}}">{{css}}</style>
+{{/modules}}
 
 {{#css}}
-<link rel="stylesheet" type="text/css" href="{{href}}">
+<link rel="stylesheet" href="{{href}}">
 {{/css}}
+
+{{#css-links}}
+<link rel="stylesheet" {{attribs}}>
+{{/css-links}}
+
+{{#inline-css}}
+<style>
+  {{css}}
+</style>
+{{/inline-css}}
+
+{{#custom-inline-css}}
+<custom-style>
+  <style>
+    {{css}}
+  </style>
+</custom-style>
+{{/custom-inline-css}}
 
 {{#js}}
 <script src="{{src}}"></script>

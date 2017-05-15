@@ -322,15 +322,15 @@
 (defn normalize
   "inspect webpage var, if necessary create <head> etc."
   [page-ref]
-  ;; (log/debug "\n\n\t\tNORMALIZING HTML PAGE-REF: " page-ref (type page-ref))
+  (log/debug "\n\n\t\tNORMALIZING HTML PAGE-REF: " page-ref (type page-ref))
   ;; (log/debug (format "NS %s" *ns*))
-  ;; (log/debug "NORMALIZE meta: " (-> page-ref meta))
+  (log/debug "NORMALIZE meta: " (-> page-ref meta))
   ;; (log/debug "NORMALIZE HTML deref: " (-> page-ref deref))
   (reset! codom/mode :html)
   (let [[page-ns page-ns-sym page-on-ns?] ;; page-name]
         (if (var? page-ref)
           [(-> page-ref meta :ns) (-> page-ref meta :ns ns-name) false]
-          [page-ref (-> page-ref ns-name) true])
+          [page-ref (-> page-ref ns-name) (-> page-ref meta :miraj/miraj :miraj/defpage)])
         _ (log/debug (format "page-on-ns? %s" page-on-ns?))
 
         polyfill (get polyfills (-> page-ref meta :miraj/miraj :miraj/polyfill))
@@ -1738,6 +1738,160 @@
   (codom/element :link (conj {:rel "stylesheet" :type "text/css"}
                          css-map)))
 
+(defn- get-styles-map
+  [v]
+  (log/trace "FN: get-styles-map" v)
+  (let [nspace (utils/ns-sym->path (first v))
+        names (if (some #{:custom} v)
+                  (let [i (.indexOf v :custom)]
+                        (nth v (inc i)))
+                  (rest v))
+        href {:href (str "/" nspace ".html")}
+        modules (for [module names]
+                  (do (log/trace "MODULE:" module)
+                      (if (vector? module)
+                        {:module (first module) :css (last module)}
+                        {:module module :css nil})))]
+    (log/trace "HREF:" href)
+    (log/trace "MODS:" modules)
+    {:href href :modules modules}))
+
+(defn- get-inlined-css-map
+  [args]
+  (log/trace "FN: get-inlined-css-map" args)
+;; {{#inline-css}}
+;; <style>
+;;   {{css}}
+;; </style>
+;; {{/inline-css}}
+  {:inline-css
+   (for [arg args]
+     {:css arg})})
+
+(defn- get-custom-inlined-css-map
+  [args]
+  (log/trace "FN: get-custom-inlined-css-map" args)
+  {:custom-inline-css
+   (for [arg args]
+     {:css (:custom arg)})})
+
+(defn- map->link
+  [m]
+  (let [attribs (str/join " " (for [[k v] m] (str (name k) "='" v "'")))]
+    {:links (list {:attribs attribs})}))
+
+(defn- get-css-imports-map
+  [args]
+  (log/trace "FN: get-css-imports-map" args)
+  (let [result ;; (merge-with concat
+                           (flatten (for [arg1 args]
+                          (do (log/trace "CSS arg:" arg1)
+                              (let [elts (cond
+                                           ;; inlined style
+                                           ;; (string? arg1)
+
+                                           ;; inlined custom style
+                                           ;; (:custom opts)
+                                           ;; (let [css (second args) ;; FIXME: this assumes css is a string
+                                           ;;       attrs (merge {:is "custom-style" :type "text/css"}
+                                           ;;                    (if (:include opts)
+                                           ;;                      {:include "demo-pages-shared-styles"} {}))]
+                                           ;;   (codom/element :style attrs args))
+
+                                           ;; explicit map import
+                                           (map? arg1) (map->link arg1)
+
+                                           ;; namespaced import vector
+                                           (vector? arg1)
+                                           (let [css-spec (first arg1)]
+                                             (log/trace "CSS-spec:" css-spec (type css-spec))
+                                             (vector (cond
+                                                       (symbol? css-spec)
+                                                       (let [x (get-styles-map arg1)]
+                                                         (log/trace "Styles map:" x)
+                                                         x)
+
+                                                       (vector? css-spec)
+                                                       (css-spec->link css-spec)
+
+                                                       (map? css-spec) css-spec
+
+                                                       (string? css-spec)
+                                                       {:css (for [s arg1]
+                                                               {:href s})}
+
+                                                       :else
+                                                       (throw (Exception. (format "Invalid :css vector: %s" css-spec))))))
+                                           :else
+                                           (for [css-spec args]
+                                             (css-spec->link css-spec))
+                                           )]
+                                elts)))) ;;)
+        _ (log/trace "RESULT:" result)
+        result (apply merge-with concat result)
+        _ (log/trace "RESULT2:" result)
+       result {:css (:css result)
+               :css-links (:links result)
+               :styles (:href result)
+               :modules (:modules result)}]
+    (log/trace "CSS/Styles result:" result)
+    result))
+
+(defn- get-css-ns-imports
+  [v]
+  (log/trace "get-css-ns-imports" v)
+  (let [nspace (utils/ns-sym->path (first v))
+        modules (str "/" nspace ".html")
+        m2 (str "target" modules)
+        names (if (some #{:custom} v)
+                  (let [i (.indexOf v :custom)]
+                        (nth v (inc i)))
+                  (rest v))]
+    (log/trace "Names:" names)
+    ;; (log/trace "Maybe Module: " modules)
+    ;; (log/trace modules "exists? "  (.exists (io/as-file modules)))
+    ;; (log/trace m2 "exists? "  (.exists (io/as-file m2)))
+
+    (list
+     (codom/element :link {:rel "import" :href "/miraj/polymer/assets/polymer/polymer.html"})
+     (codom/element :link {:rel "import" :href modules})
+     (for [nm names]
+       (if (vector? nm) ;;  e.g. [foo "button {color:green;}"]
+         ;; (codom/element :custom-style ;; FIXME: custom-style is only for defpage
+         (codom/element :style (merge {:include (name (first nm))}
+                                      (if (some #{:custom} v) {:is "custom-style"} {}))
+                        (last nm))
+                        ;;)
+         ;;(codom/element :custom-style
+         (codom/element :style (merge {:include (name nm)}
+                                      (if (some #{:custom} v) {:is "custom-style"} {})))
+                        ;;)
+         )))))
+
+(defn- handle-css-vector
+  [v]
+  (log/trace "handle-css-vector" v)
+  (let [css-spec (first v)]
+    (log/trace "CSS-spec:" css-spec (type css-spec))
+    (vector (cond
+              (symbol? css-spec)
+              (let [x (get-css-ns-imports v)]
+                (log/trace "Vec imports:" x)
+                x)
+
+              (vector? css-spec)
+              (css-spec->link css-spec)
+
+              (map? css-spec)
+              (css-map->link css-spec)
+
+              (string? css-spec)
+              (for [s v]
+                (codom/element :link {:rel "stylesheet" :href s}))
+
+              :else
+              (throw (Exception. (format "Invalid :css vector: %s" css-spec)))))))
+
 (defn css
   "Fn that handles :css directive of miraj.core/defpage"
   [page-sym & css-specs]
@@ -1752,36 +1906,77 @@
                 (apply str "Unsupported :css option(s) supplied: "
                        (interpose \, unsupported))))
     (log/trace "CSS args:" args (type (first args)))
-    (let [arg1 (first args)
-          elts (cond
-                  (:custom opts)
-                  (let [css (second args) ;; FIXME: this assumes css is a string
-                        attrs (merge {:is "custom-style" :type "text/css"}
-                                     (if (:include opts) {:include "demo-pages-shared-styles"} {}))]
-                    (codom/element :style attrs args))
+    (let [result (flatten (for [arg1 args]
+                            (do (log/trace "CSS arg:" arg1)
+                                (let [elts (cond
+                                             ;; inlined style
+                                             (string? arg1) (codom/element :style arg1)
 
-                  (string? arg1) (codom/element :style arg1)
+                                             ;; ;; inlined custom style
+                                             ;; (:custom opts)
+                                             ;; (let [css (second args) ;; FIXME: this assumes css is a string
+                                             ;;       attrs (merge {:is "custom-style" :type "text/css"}
+                                             ;;                    (if (:include opts) {:include "demo-pages-shared-styles"} {}))]
+                                             ;;   (codom/element :style attrs args))
 
-                  (vector? arg1) ;; maps and import vectors
-                  (for [css-spec arg1]
-                    (vector (cond
-                              (vector? css-spec)
-                              (css-spec->link css-spec)
+                                             ;; explicit map import
+                                             (map? arg1)
+                                             (if (:custom arg1)
+                                               (codom/element :custom-style
+                                                              (codom/element :style
+                                                                             (:custom arg1)))
+                                               (codom/element :link (assoc arg1 :rel "stylesheet")))
 
-                              (map? css-spec)
-                              (css-map->link css-spec)
+                                             ;; namespaced import vector
+                                             (vector? arg1)
+                                             (handle-css-vector arg1)
 
-                              (string? css-spec)
-                              (codom/element :link {:rel "stylesheet" :href css-spec})
+                                             :else
+                                             (for [css-spec args]
+                                               (css-spec->link css-spec))
+                                             )]
+                                  (log/debug "css elts: " elts)
+                                  elts))))]
+      (log/trace "CSS elts:" result)
+      {:css result})))
 
-                              :else
-                              (throw (Exception. (format "Invalid :css vector: %s" css-spec))))))
-                  :else
-                  (for [css-spec args]
-                    (css-spec->link css-spec))
-                  )]
-      (log/debug "css elts: " elts)
-      {:css elts})))
+(defn imports
+  "Fn that handles :import directive of miraj.core/defpage"
+  [page-sym & import-specs]
+  (log/debug "IMPORTS DIRECTIVE for page: " page-sym) ;;  import-specs)
+  (let [import-specs (first import-specs)
+        flags (filter keyword? import-specs)
+        opts (apply hash-map (interleave flags (repeat true)))
+        args (filter (complement keyword?) import-specs)]
+    ;; check for unsupported options
+    (let [supported (set (conj (keys codom/html5-link-attrs) :custom :include)) ;; html5-link-types
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported :import option(s) supplied: "
+                       (interpose \, unsupported))))
+    (log/trace "IMPORT args:" args (type (first args)))
+    (let [result (flatten (for [arg1 args]
+                            (do (log/trace "IMPORT arg:" arg1)
+                                (let [elts (cond
+
+                                             ;; explicit map import
+                                             (map? arg1)
+                                             (codom/element :link (assoc arg1 :rel "import"))
+
+                                             ;; namespaced import vector
+                                             (string? arg1)
+                                             (codom/element :link {:href arg1 :rel "import"})
+
+                                             :else
+                                             (throw (Exception.
+                                                     (format "Invalid :imports vector: %s" import-specs)))
+                                             ;; (for [import-spec args]
+                                             ;;   (import-spec->link import-spec))
+                                             )]
+                                  (log/debug "import elts: " elts)
+                                  elts))))]
+      (log/trace "IMPORT elts:" result)
+      {:import result})))
 
 ;; FIXME: let normalize actually create the elements; this routine
 ;; should just load the libs so that normalize can search them for
@@ -1920,15 +2115,15 @@
 ;; FIXME: let normalize actually create the elements; this routine
 ;; should just load the libs so that normalize can search them for
 ;; miraj vars
-(defn import
+(defn importsX
   ""
   [page-sym & import-specs]
-  ;; (log/debug "IMPORT DIRECTIVE for page: " page-sym import-specs)
+  (log/trace "IMPORTS DIRECTIVE for page: " page-sym import-specs)
   (let [flags (filter keyword? import-specs)
         opts (apply hash-map (interleave flags (repeat true)))
         args (first (filter (complement keyword?) import-specs))]
-    ;; (log/debug "Args: " args)
-    ;; (log/debug "OPTS: " opts)
+    (log/debug "Args: " args)
+    (log/debug "OPTS: " opts)
     ;; check for unsupported options
     (let [supported #{:modules :custom :uri}
           unsupported (seq (remove supported flags))]

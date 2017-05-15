@@ -402,21 +402,38 @@
     (log/trace "HAS-DEPS-EDN:" res)
     res))
 
-(defn get-external-deps
+(defn get-external-deps-map
+  ;; same as get-css-imports, but returns a map instead of elements
   [ns-path]
-  (log/trace "GET-EXTERNAL-DEPS" ns-path)
+  (log/trace "GET-EXTERNAL-DEPS-MAP" ns-path)
   (let [path (str ns-path "/deps.edn")
         res  (io/resource path)
         edn (if res (clojure.edn/read-string (slurp res)) nil)]
     (log/trace "DEPS.EDN:" edn)
+    (log/trace "CSS DEPS:" (:css edn))
     (if edn
       (let [js (for [item (:js edn)]
                  (if (string? item)
                    {:src item}
                    {:src (str "/" (str/replace item #"\." "/") ".js")}))
-            css (for [item (:css edn)] {:href (str "/" (str/replace item #"\." "/") ".css")})
+
+            ;; css (for [item (:css edn)]
+            ;;       {:href (str "/" (str/replace item #"\." "/") ".css")})
+
+            css (get-css-imports-map (filter #(and (not (string? %))
+                                                   (not (:custom %)))
+                                             (:css edn)))
+            _ (log/trace "CSS IMPORTS MAP result:" css)
+
+            inlined-css (get-inlined-css-map (filter #(string? %) (:css edn)))
+            _ (log/trace "INLINED CSS MAP result:" inlined-css)
+
+            custom-inlined-css (get-custom-inlined-css-map (filter #(:custom %) (:css edn)))
+            _ (log/trace "CUSTOM INLINED CSS MAP result:" custom-inlined-css)
+
             imports (for [item (:imports edn)]
                       {:href (str "/" (str/replace item #"\." "/") ".html")})
+            _ (log/trace "IMPORTS:" imports)
 
             ;; styles (for [item (:styles edn)]
             ;;          {:href (str "/" (str/replace item #"\." "/") ".html")
@@ -424,10 +441,13 @@
             ;; styles [{:href "/styles/demo.html"
             ;;          :modules [{:module "sweetest"}
             ;;                    {:module "foo"}]}]
-            ]
-        {:js js
-         :css css
-         :imports imports})
+            result (merge css
+                          inlined-css
+                          custom-inlined-css
+                          {:js js
+                           :imports imports})]
+        (log/trace "MERGED RESULT:" result)
+        result)
       nil)))
 
 (defn- write-deps-html
@@ -447,7 +467,8 @@
         _ (log/trace "loader:" html-loader-file)
 
           ;; a. get external imports from source file <ns>/deps.edn
-          external-deps (get-external-deps pagelib-path)
+          external-deps (get-external-deps-map pagelib-path)
+        _ (log/trace "EXTERNAL DEPS: " external-deps)
 
           ;; from normalize: get lexical deps
           ;; first: user-defined component spaces
@@ -1203,13 +1224,16 @@
               (spit hfile out-str))))))))
 
 (defn compile-page-ref
-  "Compile defpage var to html+js and write to *compile-path*."
+  "Compile pageref to html+js and write to *compile-path*."
   [page-ref]
   ;; (if *verbose* (log/debug "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
   ;; (if *verbose* (log/debug "COMPILE-PAGE-REF meta: " (-> page-ref meta)))
 
   ;; inject polyfill, so imports will work
   ;; inject link import page/imports.html, unless compile-only is specified
+
+  ;; 3 possibilities for page-ref: ns with defpage, ns containing defpages, and defpage var
+
 
    (let [[page-ref-name page-ref-ns]
          (if (var? page-ref)
@@ -1240,8 +1264,10 @@
     (doseq [page pages]
       (log/trace "Compiling Page:" page)
       ;; we need to reload for repl development - FIXME: put this in the boot task
-      ;; FIXME: what if page is a var?
+
       (clojure.core/require [page]) ;; :reload-all)
+
+      ;; FIXME: what if page is a var?
       (let [[page-ref page-ns page-var page-sym]
             (cond (var? page) [page (-> page meta :ns) page nil]
 
@@ -1264,6 +1290,7 @@
         (log/trace "Page ns: " page-ns)
         (log/trace "Page var: " page-var)
         (log/trace "Page sym: " page-sym)
+        (log/trace "Page meta: " (-> page-sym meta))
         (if (and (nil? page-ref) (nil? page-var))
           (throw (Exception. (format "Page not found: %s" page))))
         ;; reloading page is client responsibility - boot task or repl
