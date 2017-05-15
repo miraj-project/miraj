@@ -11,7 +11,7 @@ tucked away as implementation details. In much the same way that
 Clojure itself hides the unpleasantness of Java, and treats dealing
 with Java classes and objects as implementation details.
 
-There are two parts to this. One is to provide seamless functional
+There are three parts to this. One is to provide seamless functional
 support for HTML5. But it is not enough to provide a Clojure function
 for each HTML element. That would allow us to compose the functions,
 but the result would be higher-order _Clojure_ functions, not HTML
@@ -32,6 +32,75 @@ Miraj code -> Co-DOM (Clj data structure) ->(compile)-> HTML -> (send to browser
 
 
 NOTE: Currently only link:https://www.polymer-project.org/1.0/[Polymer] webcomponents are supported.
+
+
+The third part: idiomatic clojure, replacing HTML weirdness (e.g. `<head>`).
+
+== quickstart
+
+Sugar:
+
+[source,clojure]
+----
+(h/span :#foo.bar.baz!frob "hello") ; => <span id="foo" class="bar baz" frob>hello</span>
+;; with miraj.style aliased to s:
+(h/span {::s/color "red"} "hi")     ; => <span style="color:red;">hi</span>
+(h/span :#foo {::s/hover {:color "red"}} "hi")
+; => <span>hi</span><style>#foo:hover {color:red;}</style>
+----
+
+A page:
+
+.src/clj/index.clj
+[source,clojure]
+----
+(defpage
+  "Hellow World demo"
+  (:require [miraj.polymer.paper :as paper :refer [button card]])
+  (:body
+   (h1 "Hello, World!")
+   (div :#cards
+        (paper/card {:heading "Hello, you ol' Card!"}
+                    (div :.card-content "Some content")
+                    (div :.card-actions (paper/button :#btn!raised "Some action"))))))
+----
+
+.src/clj/index.cljs.edn
+[source,clojure]
+----
+{:require  [index.core]}
+----
+
+.src/clj/index/deps.edn
+[source,html]
+----
+{:imports [[assets hello-world]]}
+----
+
+.src/clj/index/core.cljs
+[source,clojure]
+----
+(ns index.core)
+(enable-console-print!)
+(println "Hello World")
+(let [btn (.getElementById js/document "btn")]
+  (.addEventListener btn "click" (fn [_] (js/alert "Hello, World!"))))
+----
+
+./assets/hello-world.html
+[source,assets/hello-world]
+----
+<style>
+      h1 {text-align:center;}
+      // etc.
+</style>
+<script>
+handle_click = function(msg) {
+    console.log("hey, " + msg + ", you clicked me!");
+    alert("Hello World (from " + msg + ")!");
+}
+</script>
+----
 
 
 == namespaces and pagespaces
@@ -71,7 +140,7 @@ The key function for building webpages with Miraj is `defpage`.
 
 Note that miraj component libs are required just like any libs.
 
-WARNING: Alwasy use an alias. Use :refer for efficiency - without it,
+WARNING: Always use an alias. Use :refer for efficiency - without it,
 all resources for the lib will be downloaded at runtime.
 
 [source,clojure]
@@ -141,7 +210,7 @@ directives:
 * :body
 
 
-== stylespaces
+== styling
 
 CSS Styling options:
 
@@ -173,9 +242,157 @@ Miraj:
 
 
 
-== assets
+== dependencies
 
-=== imported
+There are two kinds of dependencies involved in an HTML page, lexical
+and non-lexical.  Lexical dependencies are web component libraries,
+containing tags referred to by the HTML text; they are just like the
+lexical dependencies listed in the `:require` and `:import` directives
+of Clojure's `ns` form.  Non-lexical dependencies are the tradition
+assets like CSS and Javascript files.
+
+In principal, the program text of an HTML app should contain only HTML
+and references to lexical dependencies, just as the text of a Clojure
+program contains only Clojure text and references (via `:require` and
+`:import`) to lexical dependencies.  External dependencies should be
+specified separately as part of the buld structure.  Miraj uses a
+`deps.edn` file to support this structuring strategy. It also supports
+the more traditional direct embedding strategy using directives like
+`:css` (see below).
+
+== deps.edn
+
+Dependencies for page `foo/bar.clj` listed in `foo/bar/deps.edn` will
+be written to `foo/bar/deps.html` and included in `foo/bar.html` using
+an HTML import.  This separates lexical and non-lexical dependencies
+and minimizes the number of `<link>` and `<script>` tags used in the
+page.
+
+NOTE: A Clojure namespace may contain more than one `defpage`.  In
+this case, use the defpage var name to form the deps.edn path.  For
+example, if `foo/bar.clj` contains `defpage index`, the var will be
+`foo.bar/index`, generating `/foo/bar/index.html` so the deps file
+should be `foo/bar/index/deps.clj`.  If it contains a "lambda"
+defpage, the deps file should be `foo/bar/deps.edn`.
+
+
+The `deps.edn` file supports the following directives:
+
+
+===== :imports
+
+The syntax of this directive is similar to the syntax of Clojure's
+`require`: a dotted namespace followed by a list of elements in the
+namespace.  But here the "elements" in the (filesystem) namespace are
+treated as HTML files.  For example:
+
+[source,clojure]
+----
+[foo.bar a b]  =>  /foo/bar/a.html, /foo/bar/b.html
+----
+
+You can include any html in an HTML import file, so you can put both
+`<style>` and `<script>` elements in one import file, for example.
+
+[source,clojure]
+----
+{:import [[foo.bar baz buz]]}
+=>
+<link rel="import" href="/foo/bar/baz.html">
+<link rel="import" href="/foo/bar/buz.html">
+----
+
+
+===== :styles
+
+The `:styles` directive is similar to the `:import` directive, but it
+adds some special logic to support Polymer's "style modules" (see
+https://www.polymer-project.org/2.0/docs/devguide/style-shadow-dom#style-modules[Use
+style modules]).
+
+The syntax of this directive bears several possible interpretations.  For
+example `[foo.bar a b]` may be interpreted as:
+
+1. `foo/bar/a.css`, `foo/bar/b.css`
+2. `foo/bar.html`, containing modules `a` and `b`
+
+Miraj will try these in order.
+
+NOTE: If you want to put your CSS in an HTML file without using
+modules, use `:imports` rather than `:styles`.
+
+For example:
+
+./styles/demo.html
+[source,html]
+----
+<dom-module id="foo">
+  <template>
+    <style >
+    ...
+    </style>
+  </template>
+</dom-module>
+
+<dom-module id="bar">
+  <template>
+    <style >
+    ...
+    </style>
+  </template>
+</dom-module>
+
+----
+
+.deps.edn
+[source,clojure]
+----
+(:styles [[styles.demo foo bar]])
+==>
+<link rel="import" href="/styles/demo.html">
+<custom-style>
+   <style include="foo"></style>
+   <style include="bar"></style>
+</custom-style>
+----
+
+WARNING: FIXME: test custom-styles for main doc
+
+
+==== Examples:
+
+.sweetest/deps.edn
+[source,clojure]
+----
+{;; clojure-style (namespaces)
+ :styles  [[styles.demo foo bar]] ;; /styles.demo.html, modules=foo, bar
+ :scripts  [foo.bar a b]  ;; /foo/bar/a.js, /foo/bar/b.js
+ :imports [[foo.bar baz buz]] ;; /foo/bar/baz.html, /foo/bar/buz.html
+ ;; traditional (paths)
+ :js ["/js/custom-elements.min.js" "foo/bar.js"]
+:styles [css.sweetest]
+
+ :icons [[miraj.polymer.iron communication hardware iron social]
+         [miraj.vaadin vaadin]]
+ ;; :miraj.polymer/icons [[miraj.polymer.iron communication hardware iron social]]
+ ;; :miraj.polymer/icons [[iron communication hardware iron social]
+ ;;                       [miraj.vaadin]]
+ :miraj.polymer/styles [[miraj.polymer.iron.styles demo flex-mixins]
+                        [miraj.polymer.paper.styles color typography]]}
+
+
+----
+
+
+== embedded dependency references
+
+However, for a more traditional structure, miraj also supports direct
+embedding of dependency references, using `:css`, `:js` and `:link`
+directives.
+
+Dependencies listed using directives like :css or :js will be included
+in the <head> element of the generated HTML.
+
 
 ==== html5 imports
 
@@ -222,7 +439,7 @@ You can also import third-party assets. Instead of using the vector
 
 [source,clojure]
 ----
-  (:import [{:href ""https://unpkg.com/purecss@0.6.2/build/pure-min.css"
+  (:import [{:href "https://unpkg.com/purecss@0.6.2/build/pure-min.css"
 	        :integrity "sha384-UQiGfs9ICog+LwheBSRCt1o5cbyKIHbwjWscjemyBMT9YCUMZffs6UqUTd0hObXD"
 	        :crossorigin "anonymous"}])
 ----
@@ -317,22 +534,30 @@ automatically move it to the end of the document.
 
 [source,clojure]
 ----
-(h/div ::foo)               ; =>  <div id="foo"></div>
-(h/div ::.foo)              ; =>  <div class="foo"></div>
-(h/div ::foo.bar)           ; =>  <div id="foo" class="bar"></div>
+(h/div :#foo)               ; =>  <div id="foo"></div>
+(h/div :.foo)              ; =>  <div class="foo"></div>
+(h/div :#foo.bar)           ; =>  <div id="foo" class="bar"></div>
 ----
 
 * boolean attributes
 
 [source,clojure]
 ----
-(h/div {:foo nil})          ; =>  <div foo></div>
+(h/div :!foo)          ; =>  <div foo></div>
 (h/div {:foo ""})           ; =>  <div foo></div>
 (h/div {:foo "foo"})        ; =>  <div foo></div>
 ;; todo:
-(h/div :foo! "hi")          ; =>  <div foo>hi</div>
-(h/div "hi" :foo! " there") ; =>  <div foo>hi there</div>
-(h/div "hi" :foo!)          ; =>  <div foo>hi</div>
+(h/div :!foo "hi")          ; =>  <div foo>hi</div>
+(h/div "hi" :!foo " there") ; =>  <div foo>hi there</div>
+(h/div "hi" :!foo)          ; =>  <div foo>hi</div>
+----
+
+* style attribs
+
+[source,clojure]
+----
+;; (:require [miraj.style :as s])
+(h/span {::s/color "red"} "hello") ;=> <span style="color:red;">hello</span>
 ----
 
 = workflow
