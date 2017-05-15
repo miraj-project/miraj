@@ -60,7 +60,7 @@ A minimal simplest page:
 ----
 
 
-A page:
+A simple page using miraj facilities:
 
 .src/clj/index.clj
 [source,clojure]
