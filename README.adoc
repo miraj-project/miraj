@@ -49,6 +49,17 @@ Sugar:
 ; => <span>hi</span><style>#foo:hover {color:red;}</style>
 ----
 
+A minimal simplest page:
+
+.src/clj/index.clj
+[source,clojure]
+----
+(defpage
+  "Hellow World demo"
+  (:body (h1 "Hello, World!")))
+----
+
+
 A page:
 
 .src/clj/index.clj
