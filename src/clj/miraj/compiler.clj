@@ -396,21 +396,21 @@
 
 (defn- has-deps-edn
   [page-sym]
-  (let [page-path (utils/ns->path page-sym)
+  ;; assert: page-sym is a sym
+  (let [page-path (utils/sym->path page-sym)
         path (str page-path "/deps.edn")
         res  (io/resource path)]
-    (log/trace "HAS-DEPS-EDN:" res)
+    ;; (log/trace "HAS-DEPS-EDN:" page-sym path res)
     res))
 
 (defn get-external-deps-map
   ;; same as get-css-imports, but returns a map instead of elements
   [ns-path]
-  (log/trace "GET-EXTERNAL-DEPS-MAP" ns-path)
+  ;; (log/trace "GET-EXTERNAL-DEPS-MAP" ns-path)
   (let [path (str ns-path "/deps.edn")
         res  (io/resource path)
         edn (if res (clojure.edn/read-string (slurp res)) nil)]
-    (log/trace "DEPS.EDN:" edn)
-    (log/trace "CSS DEPS:" (:css edn))
+    ;; (log/trace "DEPS.EDN:" edn)
     (if edn
       (let [js (for [item (:js edn)]
                  (if (string? item)
@@ -420,20 +420,23 @@
             ;; css (for [item (:css edn)]
             ;;       {:href (str "/" (str/replace item #"\." "/") ".css")})
 
-            css (get-css-imports-map (filter #(and (not (string? %))
-                                                   (not (:custom %)))
-                                             (:css edn)))
-            _ (log/trace "CSS IMPORTS MAP result:" css)
+            css (:css edn)
+            ;; _ (log/trace "CSS DEPS:" (:css edn))
+            css (get-css-imports-map (filter #(do ;; (log/trace "CSS:" %)
+                                                  (and (not (string? %))
+                                                       (not (:custom %))))
+                                             css))
+            ;; _ (log/trace "CSS IMPORTS MAP result:" css)
 
             inlined-css (get-inlined-css-map (filter #(string? %) (:css edn)))
-            _ (log/trace "INLINED CSS MAP result:" inlined-css)
+            ;; _ (log/trace "INLINED CSS MAP result:" inlined-css)
 
             custom-inlined-css (get-custom-inlined-css-map (filter #(:custom %) (:css edn)))
-            _ (log/trace "CUSTOM INLINED CSS MAP result:" custom-inlined-css)
+            ;; _ (log/trace "CUSTOM INLINED CSS MAP result:" custom-inlined-css)
 
             imports (for [item (:imports edn)]
                       {:href (str "/" (str/replace item #"\." "/") ".html")})
-            _ (log/trace "IMPORTS:" imports)
+            ;; _ (log/trace "IMPORTS:" imports)
 
             ;; styles (for [item (:styles edn)]
             ;;          {:href (str "/" (str/replace item #"\." "/") ".html")
@@ -441,41 +444,47 @@
             ;; styles [{:href "/styles/demo.html"
             ;;          :modules [{:module "sweetest"}
             ;;                    {:module "foo"}]}]
+            polymers (:miraj.polymer/styles edn)
+            polymer-styles (apply merge-with concat (for [p polymers]
+                                                      (do (log/trace "P:" p)
+                                                      (get-polymer-style-map p))))
+            ;; _ (log/trace "POLYMER styles:" polymer-styles)
+
             result (merge css
                           inlined-css
                           custom-inlined-css
+                          polymer-styles
                           {:js js
                            :imports imports})]
-        (log/trace "MERGED RESULT:" result)
+        ;; (log/trace "MERGED RESULT:" result)
         result)
       nil)))
 
 (defn- write-deps-html
-  [page-ns codom-maps]
-  (log/trace "write-deps-html" page-ns codom-maps)
-  ;; (doseq [v defpage-vars]
-  ;; (log/trace "PROCESSING defpage" v " (var? " (var? v) ")")
-  (let [pagelib-path (utils/sym->path page-ns)
-        pagespace-sym (-> page-ns ns-name)
-        page-ns pagespace-sym
+  [page-sym codom-maps]
+  ;; (log/trace "FN: write-deps-html" page-sym codom-maps)
+  (let [page-ns-sym (if-let [pns (namespace page-sym)] (symbol pns) page-sym)
+        pagelib-path (utils/sym->path page-sym)
+        pagespace-sym page-sym ;; (-> page-ns ns-name)
+        page-ns (find-ns page-ns-sym)
           ;; here (-> v meta :name)
         here (utils/last-seg pagespace-sym)
           ;; _ (log/trace "PAGE VAR:" v)
           ;; must match import link href in html/normalize
           ;; html-loader-file (str here "/deps.html")
         html-loader-file (str/join "/" [pagelib-path "deps.html"])
-        _ (log/trace "loader:" html-loader-file)
+        ;; _ (log/trace "loader:" html-loader-file)
 
           ;; a. get external imports from source file <ns>/deps.edn
           external-deps (get-external-deps-map pagelib-path)
-        _ (log/trace "EXTERNAL DEPS: " external-deps)
+        ;; _ (log/trace "EXTERNAL DEPS: " external-deps)
 
           ;; from normalize: get lexical deps
           ;; first: user-defined component spaces
           miraj-vars (get-miraj-vars-for-pagespace page-ns)
-          _ (log/debug "MIRAJ-vars: " miraj-vars)
+          ;; _ (log/debug "MIRAJ-vars: " miraj-vars)
           miraj-nss (set (map (fn [r] (-> r meta :ns)) miraj-vars))
-          _ (log/debug (format "Miraj NSs %s" miraj-nss))
+          ;; _ (log/debug (format "Miraj NSs %s" miraj-nss))
 
           ;; miraj-built user-defined libs have non-empty :miraj/nss, link import
           ;; href will be constructed from ns
@@ -489,7 +498,7 @@
                                          (-> e meta :miraj/miraj :miraj/styles))
                                      #_(-> e meta :miraj/miraj :miraj/assets :miraj/impl-nss)))
                                   miraj-nss))
-          _ (log/debug "MIRAJ LIBS: " miraj-libs)
+          ;; _ (log/debug "MIRAJ LIBS: " miraj-libs)
 
           vendor-libs (set (filter (fn [e] #_(log/debug (format "MIRAJ LIB NSS %s %s"
                                                                 e (-> e meta :miraj/miraj :miraj/nss)))
@@ -499,7 +508,7 @@
                                           (-> e meta :miraj/miraj :miraj/styles))
                                       #_(-> e meta :miraj/miraj :miraj/assets :miraj/impl-nss)))
                                    miraj-nss))
-          _ (log/debug "VENDOR LIBS: " vendor-libs)
+          ;; _ (log/debug "VENDOR LIBS: " vendor-libs)
 
           vendor-vars (filter (fn [r] (let [rns (-> r meta :ns)] (contains? vendor-libs rns)))
                               miraj-vars)
@@ -508,7 +517,7 @@
 
           lex-deps (into [] (for [miraj-var miraj-vars]
                               {:href (str (-> miraj-var meta :miraj/miraj :miraj/assets :miraj/href))}))
-          _ (log/debug (format "LEX DEPS %s" (seq lex-deps)))
+          ;; _ (log/debug (format "LEX DEPS %s" (seq lex-deps)))
 
 
           ;; FIXME: one html loader for all libs, not one per lib
@@ -523,7 +532,7 @@
           ;;  :js lib-js-file})
           html-loader-path (str (str/join "/" [*compile-path* html-loader-file]))
           html-loader-out-file (doto (io/file html-loader-path) io/make-parents)]
-      (log/debug (format "Emitting %s" html-loader-path))
+      (log/debug (format "Emitting %s" html-loader-file))
       (spit html-loader-out-file html-loader)))
 
 ;; one html loader file per pagespace. all pages defpaged in one
@@ -532,53 +541,56 @@
   "Link pages/components - generate html loader and *.cljs.edn files."
   ;; go thru pages, pulling the required component libs, then generate files
   [nss-syms opts]
-  (if *verbose* (log/info "LINK-PAGES: " nss-syms))
+  (if *verbose* (log/info "Linking: " nss-syms))
   (doseq [pagespace-sym nss-syms]
-    (clojure.core/require pagespace-sym)
-    (log/trace "\nPAGESPACE sym: " pagespace-sym)
-    (let [pagespace-ns (find-ns pagespace-sym)]
-      (if (-> pagespace-ns meta :miraj/miraj :miraj/defpage)
-        (log/trace (format "FOUND defpage ns: %s" pagespace-ns)))
-      (if (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
-        (log/trace (format "FOUND pagespace ns: %s" pagespace-ns)))
+    (clojure.core/require (if (namespace pagespace-sym) (symbol (namespace pagespace-sym)) pagespace-sym))
+    (let [pagespace-ns (if-let [pns (namespace pagespace-sym)]
+                         (find-ns (symbol pns))
+                         (find-ns pagespace-sym))]
+      ;; (if (-> pagespace-ns meta :miraj/miraj :miraj/defpage)
+      ;;   (log/trace (format "FOUND defpage ns: %s" pagespace-ns)))
+      ;; (if (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
+      ;;   (log/trace (format "FOUND pagespace ns: %s" pagespace-ns)))
       (if (or (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
               (-> pagespace-ns meta :miraj/miraj :miraj/defpage))
         (do
-          (let [ns-map-nss (map #(-> % second meta :ns)
-                                (filter #(-> % second meta :miraj/miraj) (ns-map pagespace-ns)))
+          (let [ns-map-nss (set (map #(-> % second meta :ns)
+                                (filter #(-> % second meta :miraj/miraj) (ns-map pagespace-ns))))
                 ;; _ (log/debug "NS-MAP: " ns-map-nss)
-                ns-refers-nss (map #(-> % second meta :ns)
-                                   (filter #(-> % second meta :miraj/miraj) (ns-refers pagespace-ns)))
+                ns-refers-nss (set (map #(-> % second meta :ns)
+                                   (filter #(-> % second meta :miraj/miraj) (ns-refers pagespace-ns))))
                 ;; _ (log/debug "NS-REFERS: " ns-refers-nss)
-                ns-aliases-nss (map #(-> % second)
-                                    (filter #(-> % second meta :miraj/miraj) (ns-aliases pagespace-ns)))
+                ns-aliases-nss (set (map #(-> % second)
+                                    (filter #(-> % second meta :miraj/miraj) (ns-aliases pagespace-ns))))
                 ;; _ (log/debug "NS-ALIASES: " ns-aliases-nss)
 
-                component-nss (set (concat ns-map-nss ns-refers-nss ns-aliases-nss))
-                _ (log/debug "COMPONENT NSS: " component-nss)
+                ;; FIXME: use a metadatum to filter out miraj.html?
+                component-nss (set (filter #(not= (-> % ns-name) 'miraj.html)
+                                           (concat ns-map-nss ns-refers-nss ns-aliases-nss)))
+                ;; _ (log/debug "COMPONENT NSS: " component-nss)
 
                 ;; 1. iterate over component-nss, pulling out the :miraj/nss and converting to hrefs
                 ;;    NB: :miraj/nss lists the cljs implementation nss for each component lib
-                impl-nss (flatten (remove nil? (for [component-ns component-nss]
+                cljs-impl-nss (flatten (remove nil? (for [component-ns component-nss]
                                                  (do #_(log/debug (format "NS %s" component-ns))
                                                      #_(log/debug (format "META: %s"
                                                                         (-> component-ns meta :miraj/miraj :miraj/nss)))
                                                      (let [nss (-> component-ns meta
                                                                    :miraj/miraj :miraj/nss)]
                                                        (if (empty? nss) nil nss))))))
-                _ (log/debug (format "IMPL_NSS %s" (seq impl-nss)))
+                ;; _ (log/debug (format "CLJS_IMPL_NSS %s" (seq cljs-impl-nss)))
 
                 pagelib-path (utils/sym->path pagespace-sym)
                       ;; _ (log/debug "PAGELIB-PATH: " pagelib-path)
 
                 ;; FIXME: take :base-path into account
                 js-path (str pagelib-path "/js")
-                _ (log/debug (format "JS-PATH %s" js-path))
+                ;; _ (log/debug (format "JS-PATH %s" js-path))
 
                 ;; JS MODULES
                 ;; FIXME: one module per page, not per component in page!
                 ;; :entries #{} must contain all the component nss for the page module
-                ;; modules (into {} (merge-with concat (for [impl-ns impl-nss]
+                ;; modules (into {} (merge-with concat (for [impl-ns cljs-impl-nss]
                 ;;           (let [[pfx nm] (modularize-ns impl-ns)
                 ;;                 module {(keyword nm) {:output-to (str js-path "/" nm ".js")
                 ;;                         ;(str (sym->path pfx) "/js")
@@ -587,16 +599,16 @@
                 ;;             (log/debug (format "MODULE %s" module))
                 ;;             module))))
                 modules {(keyword pagespace-sym) {:output-to js-path
-                                                  :entries (into #{} impl-nss)}}
-                _ (log/debug (format "MODULES %s" modules))
+                                                  :entries (into #{} cljs-impl-nss)}}
+                ;; _ (log/debug (format "MODULES %s" modules))
 
                 codom-maps (vec (map (fn [ns]
                                        {:loader (str "/" (utils/sym->path ns) ".html")})
-                                     impl-nss))
-                _ (log/debug "CODOM-MAPS: " codom-maps)
+                                     cljs-impl-nss))
+                ;; _ (log/debug "CODOM-MAPS: " codom-maps)
 
                 interns (ns-interns pagespace-ns)
-                _ (log/debug "INTERNS: " interns)
+                ;; _ (log/debug "INTERNS: " interns)
                 ;; _ (doseq [i (seq interns)]
                 ;;     (log/debug "meta: " (-> i second meta :miraj/miraj :miraj/deflibrary)))
                 defpage-vars (if (-> pagespace-ns meta :miraj/miraj :miraj/defpage)
@@ -604,27 +616,24 @@
                                (map second
                                   (filter #(-> % second meta :miraj/miraj :miraj/defpage)
                                           (seq interns))))
-                _ (log/trace "DEFPAGE-VARS:" defpage-vars)
+                ;; _ (log/trace "DEFPAGE-VARS:" defpage-vars)
 
                 pagelib-file (str pagelib-path ".clj")
                 pagelib-js-file (str pagelib-path ".js")]
 
-            ;; 1. DEFAULT: always write the html import file <ns>/deps.html
-            ;;    NB: the deps.html file will load the js deps PLUS
-            ;;    user-supplied external deps from deps.edn
+            ;; FIXME: only write deps.html file if one of deps.edn and codoms is present
 
-            ;; FIXME: only write import file if one of deps.edn and codoms is present
-
-            (log/trace "PAGELIB-PATH: " pagelib-path)
+            ;; (log/trace "PAGELIB-PATH: " pagelib-path)
             (if (or (not (empty? codom-maps))
                     (has-deps-edn pagespace-sym))
-              (write-deps-html pagespace-ns codom-maps))
+              (write-deps-html pagespace-sym codom-maps)
+              #_(embed-lexdeps))
 
             (if (not (empty? codom-maps))
               (do
                 ;; 2. write cljs.edn file
                 (let [;;js-path (str pagelib-path "/js")
-                      edn-content {:require (apply vector impl-nss)
+                      edn-content {:require (apply vector cljs-impl-nss)
                                    :compiler-options {:optimizations :none
                                                       :asset-path (str "/" js-path)
                                                       :output-dir js-path
@@ -874,17 +883,17 @@
                               html-loader-out-file (doto (io/file html-loader-path) io/make-parents)
 
                               ;; then do .cljs.edn
-                              impl-nss
+                              cljs-impl-nss
                               (vec
                                (map (fn [v]
                                       (-> v meta :miraj/miraj :miraj/assets :miraj/impl-nss))
                                     ;;path->ns-sym))
                                     component-vars))
-                              _ (log/debug "IMPL-NSS: " impl-nss)
+                              _ (log/debug "CLJS-IMPL-NSS: " cljs-impl-nss)
 
 
                               js-path (str base-path "/js")
-                              edn-content {:require (apply vector impl-nss)
+                              edn-content {:require (apply vector cljs-impl-nss)
                                            :compiler-options {:optimizations :none
                                                       :asset-path (str "/" js-path)
                                                       :output-dir js-path
@@ -961,7 +970,7 @@
 
 (defn add-polyfill
   [page-ref polyfill]
-  (log/debug (format "add-polyfill %s %s" page-ref polyfill))
+  ;; (log/debug (format "add-polyfill %s %s" page-ref polyfill))
   ;; (log/debug (format "page meta %s" (-> page-ref meta)))
   (if (not (contains? #{:lite :heavy} polyfill))
     (throw (Exception.
@@ -1088,8 +1097,9 @@
         ;; _ (println "PATH: " path)
         name (str/replace (-> component-var meta :name) #"-" "_")
         codom (-> component-var meta :miraj/miraj :miraj/codom)
-        href (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets :miraj/impl-nss))
-        out-file (str/join "/" [*compile-path* (str href ".html")])]
+        href (str (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets :miraj/impl-nss))
+                  ".html")
+        out-file (str/join "/" [*compile-path* href])]
         ;; out-file (str/join "/" [*compile-path* path (str (-> component-var meta :name) ".html")])]
     (io/make-parents out-file)
     (if *verbose* (log/info (format "Emitting %s" out-file)))
@@ -1246,9 +1256,9 @@
          hfile (str/join "/" [*compile-path* page-html-name])]
      (io/make-parents hfile)
      (binding [*ns* page-ref-ns]
-       (if *verbose* (log/info (format "Compiling %s to %s" page-ref hfile)))
+       (if *verbose* (log/info (format "Compiling %s to %s" page-ref page-html-name)))
        (let [out-str (with-out-str (-> page-ref normalize optimize codom/serialize print))]
-         (if *verbose* (log/info (format "Emitting %s" hfile)))
+         ;; (if *verbose* (log/info (format "Emitting %s" page-html-name)))
          (spit hfile out-str)))))
 
 (defn mcc   ;;  compile
@@ -1257,15 +1267,17 @@
            imports polyfill
            debug]
     :as opts}]
-  (log/trace  (format "mcc %s" opts))
+  ;; (log/trace  (format "mcc %s" opts))
   ;; (let [pagespaces (or pagespaces (if (and page (nil? pages)) nil :all))
   ;;       pages (or pages (if (and page (nil? pagespaces)) nil :all))]
   (if pages
     (doseq [page pages]
-      (log/trace "Compiling Page:" page)
+      ;; (log/trace "Compiling Page:" page (-> page type))
       ;; we need to reload for repl development - FIXME: put this in the boot task
 
-      (clojure.core/require [page]) ;; :reload-all)
+      ;; (clojure.core/require (if (var? page)
+      ;;                         (-> page meta :ns)
+      ;;                         page)) ;; :reload-all)
 
       ;; FIXME: what if page is a var?
       (let [[page-ref page-ns page-var page-sym]
@@ -1273,24 +1285,28 @@
 
                   (symbol? page) (if (namespace page)
                                    ;; must be a var sym
-                                   (let [pvar (clojure.core/resolve page)
-                                         pns (-> pvar meta :ns)]
-                                     [pvar pns pvar page])
-                                   ;; must be an ns sym
+                                   (do
+                                     (clojure.core/require [(symbol (namespace page))])
+                                     (let [pvar (clojure.core/resolve page)
+                                           pns (-> pvar meta :ns)]
+                                       [pvar pns pvar page]))
+                                     ;; must be an ns sym
                                    (do
                                      ;; for interactive dev we need to reload the ns
                                      ;; should this be the responsibility of the dev?
-                                     ;; no, the boot task should do this
-                                     ;;(clojure.core/require page :reload)
+                                     ;; no, the boot task should do this?
+                                     (clojure.core/require page :reload)
                                      (let [pns (find-ns page)]
                                        [pns pns nil page])))
 
                   (instance? clojure.lang.Namespace page) (do [page page nil (-> page ns-name)]))]
-        (log/trace "Page Ref: " page-ref)
-        (log/trace "Page ns: " page-ns)
-        (log/trace "Page var: " page-var)
-        (log/trace "Page sym: " page-sym)
-        (log/trace "Page meta: " (-> page-sym meta))
+        ;; (log/trace "Page Ref: " page-ref)
+        ;; (log/trace "Page ns: " page-ns)
+        ;; (log/trace "Page ns meta: " (meta page-ns))
+        ;; (log/trace "Page var: " page-var)
+        ;; (log/trace "Page var meta: " (meta page-var))
+        ;; (log/trace "Page sym: " page-sym)
+        ;; (log/trace "Page meta: " (-> page-sym meta))
         (if (and (nil? page-ref) (nil? page-var))
           (throw (Exception. (format "Page not found: %s" page))))
         ;; reloading page is client responsibility - boot task or repl
@@ -1298,11 +1314,14 @@
         (if polyfill (add-polyfill page-ref polyfill))
         ;; FIXME: if page has lexical deps OR deps.edn is provided
         ;; FIXME: why not do this in defpage?
+        ;; (log/trace "page-sym has deps.edn?" page-sym (has-deps-edn page-sym))
         (if (has-deps-edn page-sym)
           (alter-meta! page-ref (fn [old new]
                                   (assoc-in old [:miraj/miraj :miraj/deps] new))
-                       [(str (utils/last-seg page-sym) "/deps.html")]))
-        (log/info (format "Compiling page %s" page-ref))
+                       [(str "/" (utils/sym->path page-sym) "/deps.html")]))
+        ;; (log/info (format "Compiling page ref %s" page-ref))
+        ;; (log/trace "page meta:" (-> page-ref meta))
+        ;; (log/trace "page content:" (deref page-ref))
         (compile-page-ref page-ref))))
   (if pagespaces
     (doseq [pagespace-sym pagespaces]
@@ -1320,10 +1339,11 @@
           (if polyfill (add-polyfill ps polyfill))
           ;; FIXME: if page has lexical deps OR deps.edn is provided
           ;; FIXME: why not do this in defpage?
+          ;; (log/trace "pagespace-sym has deps.edn?" pagespace-sym (has-deps-edn pagespace-sym))
           (if (has-deps-edn pagespace-sym)
             (alter-meta! ps (fn [old new]
                               (assoc-in old [:miraj/miraj :miraj/deps] new))
-                         [(str (utils/last-seg pagespace-sym) "/deps.html")]))
+                         [(str "/" (utils/sym->path pagespace-sym) "/deps.html")]))
           (log/trace (format "Compiling lambda-page %s" pagespace-sym))
           (compile-page-ref ps))))))
 
