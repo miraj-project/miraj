@@ -9,17 +9,19 @@
 
  ;; :checkouts '[[miraj/co-dom "1.0.0-SNAPSHOT"]]
 
- :dependencies   '[[org.clojure/clojure RELEASE]
+ :repositories #(conj % ["clojars" {:url "https://clojars.org/repo/"}])
+
+ :dependencies   '[[org.clojure/clojure "1.9.0-alpha16"]
                    [org.clojure/data.json "0.2.6"]
                    [clj-time "0.11.0"]
                    [miraj/co-dom "1.0.0-SNAPSHOT"]
                    [stencil "0.5.0"] ;; needed by compiler
 
-                   ;; testing
-                   [miraj/html "5.1.0-SNAPSHOT" :scope "test"]
-                   ;; [miraj.polymer/paper "1.2.3-SNAPSHOT" :scope "test"]
-                   [miraj.polymer/iron "1.2.3-SNAPSHOT" :scope "test"]
-                   [pandeiro/boot-http "0.7.3" :scope "test"]
+                   ;; ;; testing
+                   ;; [miraj/html "5.1.0-SNAPSHOT" :scope "test"]
+                   ;; ;; [miraj.polymer/paper "1.2.3-SNAPSHOT" :scope "test"]
+                   ;; [miraj.polymer/iron "1.2.3-SNAPSHOT" :scope "test"]
+                   ;; [pandeiro/boot-http "0.7.3" :scope "test"]
 
                    ;; [cheshire "5.7.0"]
 
@@ -40,11 +42,12 @@
                    ;; [boot/core "RELEASE" :scope "test"]
                    ;; [boot/pod "RELEASE" :scope "test"]
                    [adzerk/boot-test "1.2.0" :scope "test"]
-                   [miraj/boot-miraj "0.1.0-SNAPSHOT" :scope "test"]])
+                   #_[miraj/boot-miraj "0.1.0-SNAPSHOT" :scope "test"]
+                   ])
 
 (require ;; '[boot-bowdlerize :as b]
-         '[miraj.boot-miraj :as miraj]
-         '[pandeiro.boot-http :refer [serve]]
+         ;; '[miraj.boot-miraj :as miraj]
+         ;; '[pandeiro.boot-http :refer [serve]]
          '[adzerk.boot-test :refer [test]])
 
 (task-options!
@@ -53,8 +56,8 @@
  pom  {:project     +project+
        :version     +version+
        :description "miraj core"
-       :url         "https://github.com/miraj-project/miraj.core.git"
-       :scm         {:url "https://github.com/miraj-project/miraj.core.git"}
+       :url         "https://github.com/miraj-project/miraj.git"
+       :scm         {:url "https://github.com/miraj-project/miraj.git"}
        :license     {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}})
 
 (deftask build
@@ -87,18 +90,18 @@
         (target)
         (install)))
 
-(deftask run-tests
-  "compile, link, serve tests"
-  []
-  ;; (disable-reload! 'boot.user)
-  (set-env! :source-paths #(conj % "src/test/clj"))
-  (comp
-   (build)
-   (serve :dir "target") ;; :resource-root "resources")
-   (cider)
-   (repl)
-   (watch)
-   (notify :audible true)
-   ;; (refresh)
-   ;; (demos)
-   (target)))
+;; (deftask run-tests
+;;   "compile, link, serve tests"
+;;   []
+;;   ;; (disable-reload! 'boot.user)
+;;   (set-env! :source-paths #(conj % "src/test/clj"))
+;;   (comp
+;;    (build)
+;;    (serve :dir "target") ;; :resource-root "resources")
+;;    (cider)
+;;    (repl)
+;;    (watch)
+;;    (notify :audible true)
+;;    ;; (refresh)
+;;    ;; (demos)
+;;    (target)))
