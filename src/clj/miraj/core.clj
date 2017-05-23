@@ -123,7 +123,10 @@
   [doc]
   ;; (log/debug "JS optimizer: " doc)
   (with-meta
-    (codom/xsl-xform codom/js-optimizer doc)
+    (codom/xsl-xform
+     ;; codom/js-optimizer
+     "optimize-js"
+     doc)
     (meta doc)))
 
   ;; (let [doc-zip (zip/xml-zip doc)]
@@ -2377,7 +2380,10 @@
                             {:id ~(str name)} codom#)
                ;; _# (log/debug "defweb-codom TREE " tree#)
 
-               codom-norm# (codom/xsl-xform codom/xsl-normalize-codom tree#)
+               codom-norm# (codom/xsl-xform
+                            ;; codom/xsl-normalize-codom
+                            "normalize-codom"
+                            tree#)
                ;; _# (log/debug "defweb-codom NORMED# " codom-norm#)
 
                ]
@@ -2723,7 +2729,7 @@
 (defn validate-protocol-methods
   [opts+specs]
   "emit elements for protos"
-  (log/debug "validate-protocol-methods:" opts+specs)
+  ;; (log/debug "validate-protocol-methods:" opts+specs)
   (let [[opts specs] (parse-opts opts+specs)
         ;; _ (log/debug "OPTS: " opts)
         ;; _ (log/debug "SPECS: " specs)
@@ -2739,7 +2745,7 @@
                                                    (if (symbol? if-sym)
                                                      (let [;;_ (log/debug "IF-SYM1: " (first arg))
                                                            psym (interface-sym->protocol-sym (first arg))
-                                                           _ (log/debug "PSYM: " psym)
+                                                           ;; _ (log/debug "PSYM: " psym)
                                                            psym-var (resolve psym)]
                                                        (if (nil? psym-var)
                                                          (if (not= 'This (first arg))
@@ -2878,7 +2884,7 @@
   [name as html-tag & references]
   ;; (log/debug "    REFS: " references)
   (if (not= as :html) (throw (Exception. (format "Second argument must be :html, not %s" as))))
-  (log/debug "defcomponent: " html-tag " as " name)
+  (log/debug "DEFCOMPONENT: " html-tag " as " name)
   (let [component-var (intern *ns* name)
         ;; _ (log/debug "component var: " component-var)
         ;; process-reference will call fn require for :require, fn import for :import, etc.
@@ -2908,7 +2914,7 @@
         ;; _ (doseq [ref references] (log/debug (format "REF %s" ref)))
 
         cljs-preamble (first (seq (filter #(and (list? %) (= :cljs (first %))) references)))
-        _ (log/debug (format "CLJS PREAMBLE %s" cljs-preamble))
+        ;; _ (log/debug (format "CLJS PREAMBLE %s" cljs-preamble))
 
         ;; properties (eval `(let [maybe-meta#  ~(first references)]
         ;;                     (cond (map? maybe-meta#) maybe-meta#
@@ -2946,9 +2952,9 @@
 
         observers (normalize-compound-observers compound-observers interface-properties)
 
-        _ (log/debug (format "LOCAL PROPERTIES %s" local-properties))
-        _ (log/debug (format "LOCAL METHODS %s" local-methods))
-        _ (log/debug (format "COMPOUND OBSERVERS %s" observers))
+        ;; _ (log/debug (format "LOCAL PROPERTIES %s" local-properties))
+        ;; _ (log/debug (format "LOCAL METHODS %s" local-methods))
+        ;; _ (log/debug (format "COMPOUND OBSERVERS %s" observers))
 
         observer-array (observers->array observers)
         ;; _ (log/debug (format "OBSERVER ARRAY %s" observer-array))
@@ -2969,9 +2975,9 @@
                                (string? arg)
                                (and (list? arg) (contains? directives (first arg))))))
                        references)
-        _ (log/debug (format "PROTOS %s" protos))
+        ;; _ (log/debug (format "PROTOS %s" protos))
         _ (validate-protocol-methods protos)
-        _ (log/debug "PROTOCOL stanzas: " protos)
+        ;; _ (log/debug "PROTOCOL stanzas: " protos)
 
         ;; deal with lifecycle protocol
         ;; foo (seq (merge-with concat (mapcat (fn [arg] #_(log/debug (format "arg %s" arg))
@@ -2984,22 +2990,21 @@
                                                  (= psym 'miraj.polymer.protocol/Lifecycle))))
                           proto-sets))
         instance-methods (seq (mapcat identity (for [method instance-methods] (drop 1 method))))
-        _ (log/debug (format "INSTANCE-methods %s" instance-methods))
+        ;; _ (log/debug (format "INSTANCE-methods %s" instance-methods))
         instance-methods (apply merge-with concat
                                 (for [method instance-methods]
                                   {(keyword (first method)) (conj (rest method) 'fn)}))
-        _ (log/debug "INSTANCE methods: " instance-methods)
-
+        ;; _ (log/debug "INSTANCE methods: " instance-methods)
 
         listeners (seq (filter (fn [arg] (let [sym (first arg)
                                                psym (interface-sym->protocol-sym sym)]
                                            (and (not= sym 'This)
                                                 (not= psym 'miraj.polymer.protocol/Lifecycle))))
                                proto-sets))
-        _ (log/debug (format "LISTENERS %s" listeners))
+        ;; _ (log/debug (format "LISTENERS %s" listeners))
 
         listener-fns (seq (mapcat identity (for [listener listeners] (drop 1 listener))))
-        _ (log/debug (format "LISTENER-fns %s" listener-fns))
+        ;; _ (log/debug (format "LISTENER-fns %s" listener-fns))
 
         ;; protos  (filter #(not (symbol? %)) protos)
         ;; _ (log/debug "PROTOCOL fns: " protos)
@@ -3008,13 +3013,13 @@
                                          (for [listener listener-fns]
                                            {(keyword (first listener))
                                             (keyword (str "_" (first listener) "_Miraj"))}))}
-        _ (log/debug "LISTENERS map: " listeners-map)
+        ;; _ (log/debug "LISTENERS map: " listeners-map)
 
         listener-methods (apply merge-with concat
                                 (for [listener listener-fns]
                                   {(keyword (str "_" (first listener) "_Miraj"))
                                    (conj (rest listener) 'fn)}))
-        _ (log/debug "LISTENER methods: " listener-methods)
+        ;; _ (log/debug "LISTENER methods: " listener-methods)
 
                                         ;        listeners {:listeners proto-map}
 
@@ -3034,8 +3039,10 @@
         ;; _ (log/debug (format "COMBINED PROPS %s" properties))
         ;; _ (log/debug (format "COMBINED PROPS KEYS %s" (keys properties)))
 
-        component-cljs-ns (symbol (str (-> *ns* ns-name) "." (clojure.core/name html-kw)))
-        helper-cljs-ns (symbol (str (-> *ns* ns-name) ".delegate"))
+        ;; component-cljs-ns (symbol (str (-> *ns* ns-name) "." (clojure.core/name html-kw)))
+        ;; helper-cljs-ns (symbol (str (-> *ns* ns-name) ".delegate"))
+        component-cljs-ns (symbol (str (-> *ns* ns-name) "." name ".core"))
+        helper-cljs-ns (symbol (str (-> *ns* ns-name) "." name))
         polymer-ctor (str/join "\n" [(pprint-str (list 'ns component-cljs-ns
                                                        (list :require
                                                              (vector helper-cljs-ns :as 'del)
@@ -3067,8 +3074,11 @@
         ;; _ (log/debug (format "Polymer CTOR %s" polymer))
 
         ;; impl-ns (str (utils/ns->path *ns*) "/" (utils/sym->path (clojure.core/name html-kw)))
-        impl-ns (symbol (str (ns-name *ns*) "." (clojure.core/name html-kw)))
-        _ (log/debug (format "IMPL-NS %s" impl-ns))
+        ;; impl-ns (symbol (str (ns-name *ns*) "." (clojure.core/name html-kw)))
+        impl-ns (symbol (str (ns-name *ns*) "." name ".core"))
+        ;; _ (log/debug (format "IMPL-NS %s" impl-ns))
+
+        html-ns (symbol (str (ns-name *ns*) "." name))
 
         references (remove map? (filter #(and (list? %) (contains? directives (first %)))
                                         references))
@@ -3082,14 +3092,15 @@
                ;; head# (apply codom/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
                head# (flatten (list (:require reqs#) (:import reqs#)))
                ;; _# (log/debug "HEAD# " head#)
+               ;; _# (println "HEAD# " head#)
 
                ;; body# (apply codom/element :codom {} (:codom reqs#))
                body# (:miraj/codom reqs#)
-               ;; _# (log/debug "BODY# " body#)
+               ;; _# (println "BODY# " body#)
 
                ;; html# (apply codom/element :html {} (vec (flatten (list head# body#))))
                codom# (concat head# body#)
-               ;; _# (log/debug "CODOM# " codom#)
+               ;; _# (println "CODOM# " codom#)
 
                ;; reqsvec# [~@(map process-reference references)]
                ;; _# (log/info "reqsvec#: " reqsvec#)
@@ -3115,11 +3126,14 @@
                tree# (apply codom/element ;;~(keyword nm)
                             :CODOM_56477342333109
                             {:id ~(str name)} codom#)
-               ;; _# (log/debug "TREE# " tree#)
+               ;; _# (println "TREE# " tree#)
 
-               codom-norm# (codom/xsl-xform codom/xsl-normalize-codom tree#)
-
-                                        ;               ;; _# (log/debug "defcomponent codom: " tree#)
+               codom-norm# (codom/xsl-xform
+                            ;; FIXME: convert to reading xsl file
+                            ;; codom/xsl-normalize-codom
+                            "normalize-codom"
+                            tree#)
+               ;; _# (println "CODOM-NORM#: " codom-norm#)
 
                ;; html-constructor interns the name, binding it to ->html fn
                cvar# (codom/html-constructor ~*ns* '~name
@@ -3157,7 +3171,7 @@
                                                     ;; [~@behavior-elts]
                                                     #_[dom#]
                                                     [newdom#]
-                                                    [(codom/element :script "console.log ('LOADING CODOM');")]
+                                                    #_[(codom/element :script "console.log ('LOADING CODOM');")]
                                                     #_[(codom/element :link {:rel "import"
                                                                          :impl-ns (str '~html-kw ".js")})]
                                                     ))))
@@ -3174,11 +3188,12 @@
            ;;           (symbol ~(str name))
            ;;           (merge {:doc ~docstring :_webcomponent true} ~properties)))
 
-           ;;(println "ALTERING META FOR " cvar#)
+           ;; (println "ALTERING META FOR " cvar#)
            (alter-meta! cvar#
                         (fn [old# new#]
-                          (do ;;(println (format "old#: %s" old#))
-                            ;;(println "new#: " new#)
+                          (do
+                            ;; (println (format "meta old#: %s" old#))
+                            ;; (println "new#: " new#)
                             ;; (merge
                             #_(update-in old# [:doc] (:doc new#))
                             ;; (update-in old# [:miraj/miraj]
@@ -3190,13 +3205,14 @@
                         {:miraj/defcomponent true
                          :miraj/html-tag '~html-kw
                          :miraj/ns (str *ns* "." (name '~html-kw))
-                         :miraj/assets {:miraj/impl-nss '~impl-ns}
+                         :miraj/assets {:miraj/impl-nss '~impl-ns
+                                        :miraj/html-ns '~html-ns}
                          :miraj/prototype ~polymer-ctor
                          :miraj/codom result#}  ;; compile serializes codom to an html file
                         ;;:doc ~(str docstr)
                         )
 
-           ;; (log/debug "Component defined:" cvar#) ;; (meta cvar#))
+           ;; (println "Component defined:" cvar#) ;; (meta cvar#))
            #_(alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defcomponent true}})))
            ~component-var)))))
 
@@ -3307,7 +3323,7 @@
   {:arglists '([name docstring? attr-map? args*])
    :added "1.0"}
   [name & args]
-  ;; (log/debug "DEFLIBRARY: " name " in " *ns*)
+  (log/debug "DEFLIBRARY: " name " in " *ns*)
   (let [lib-sym (symbol (str (-> *ns* ns-name)) (str name))
         docstring  (when (string? (first args)) (first args))
         ;; _ (println "DOCSTR: " docstring)
@@ -3329,7 +3345,7 @@
                                     :miraj/elements
                                     (if (:miraj/defstyles args)
                                       :miraj/styles))}}
-        ;; _ (println "miraj-meta " miraj-meta)
+        _ (log/debug "miraj-meta " miraj-meta)
         ]
   `(do (if ~docstring
          (def ~lib-sym ~(str docstring) ~args)
@@ -3339,7 +3355,7 @@
                                  (fn [old# & args#] (merge old# ~miraj-meta))
                               )
        ;; set metadata for enclosing ns (not the var of the ns)
-       (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/deflibrary true}}))))))
+       (clojure.core/alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/deflibrary true}}))))))
 
 (defmacro defpage
   "define a web page"

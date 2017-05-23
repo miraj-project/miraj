@@ -138,7 +138,7 @@
 (defn get-component-maps-for-ns-sym
   "get config maps for components in ns"
   [component-ns-sym]
-  ;; (if *verbose* (log/debug (format "get-component-maps-for-ns-sym: %s" component-ns-sym)))
+  ;; (log/debug (format "get-component-maps-for-ns-sym: %s" component-ns-sym))
   ;; (clojure.core/require component-ns-sym)
 ;;  (binding [*ns* *ns*]
     (let [;;all-nss (all-ns)
@@ -159,9 +159,14 @@
                                      (utils/sym->path (:name m)) ".html")
                            elt-fn-meta (update-in m [:miraj/miraj]
                                                   (fn [old]
-                                                    (let [base (utils/sym->path
+                                                    (let [html-base (utils/sym->path
                                                                 (-> old :miraj/assets
-                                                                    :miraj/impl-nss))
+                                                                    :miraj/html-ns))
+                                                          ;; _ (log/trace "HTML BASE:" html-base)
+                                                          cljs-base (utils/sym->path
+                                                                     (-> old :miraj/assets
+                                                                         :miraj/impl-nss))
+                                                          ;; - (log/trace "CLJS BASE:" cljs-base)
                                                           miraj (assoc
                                                                  {:miraj/defn (symbol (:name m))
                                                                   :miraj/co-fn true
@@ -169,10 +174,10 @@
                                                                   :miraj/lib :miraj/demo
                                                                   :miraj/assets {:miraj/href
                                                                                  (str
-                                                                                  base ".html")
+                                                                                  html-base ".html")
                                                                                  :miraj/scripts
                                                                                  (str
-                                                                                  base
+                                                                                  cljs-base
                                                                                   ".cljs")}
                                                                   :miraj/help ""}
                                                                  :miraj/html-tag (keyword (-> old :miraj/html-tag)))]
@@ -292,7 +297,7 @@
           _ (log/debug (format "ns-sym %s" component-ns-sym))
           component-maps (get-component-maps-for-ns-sym component-ns-sym)
           ]
-      (log/debug "COMPONENT-MAPS: " component-maps)
+      ;; (log/debug "COMPONENT-MAPS: " component-maps)
       ;;(doseq [component-map component-maps]
       (let [lib-clj-path (str (utils/ns->path component-ns)) ;; "/test")
             _ (log/debug "LIB-CLJ-PATH: " lib-clj-path)
@@ -334,7 +339,7 @@
   "Link webcomponent libraries. This generates the .clj file
   containing element fns for components."
   [nss-syms]
-  (if *verbose* (log/info "link-component-libs: " nss-syms))
+  (log/trace "link-libraries: " nss-syms)
   (doseq [deflibspace-sym nss-syms]
       (clojure.core/require deflibspace-sym)
       (let [deflibspace-ns (find-ns deflibspace-sym)]
@@ -365,7 +370,7 @@
                                                           (clojure.core/require (first ns-vector))
                                                           (get-component-maps-for-ns-sym
                                                            (first ns-vector)))))]
-                          ;; (log/debug "COMPONENT-MAPS: " component-maps)
+                          ;; (log/info "COMPONENT-MAPS: " component-maps)
                           ;;(doseq [component-map component-maps]
                           (let [lib-clj-path (utils/sym->path component-lib-ns-sym)
                                 ;; _ (log/debug "LIB-CLJ-PATH: " lib-clj-path)
@@ -384,7 +389,7 @@
                                 component-out-path (str (str/join "/" [*compile-path* lib-clj-file]))
                                 component-out-file (doto (io/file component-out-path) io/make-parents)
                                 ]
-                            (if *verbose* (log/debug (format "Emitting %s" component-out-path)))
+                            (if *verbose* (log/debug (format "Emitting lib %s" component-out-path)))
                             (spit component-out-file component-defns)
                             ))
                         (do (log/debug (format "this is a 3rd party wrapper" ))
@@ -1089,21 +1094,6 @@
               (compile-polymer-component component imports-config-map assets-out *verbose*)
               (compile-required-component component imports-config-map assets-out *verbose*))))))))
 
-(defn compile-webcomponent-var-html
-  "Compile defcomponent var to html and write to files."
-  [component-var pprint verbose]
-  ;; (if *verbose* (log/debug "compile-webcomponent-var-html: " component-var))
-  (let [path (utils/ns->path (-> component-var meta :ns))
-        ;; _ (println "PATH: " path)
-        name (str/replace (-> component-var meta :name) #"-" "_")
-        codom (-> component-var meta :miraj/miraj :miraj/codom)
-        href (str (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets :miraj/impl-nss))
-                  ".html")
-        out-file (str/join "/" [*compile-path* href])]
-        ;; out-file (str/join "/" [*compile-path* path (str (-> component-var meta :name) ".html")])]
-    (io/make-parents out-file)
-    (if *verbose* (log/info (format "Emitting %s" out-file)))
-    (spit out-file (with-out-str (if miraj.co-dom/*pprint* (codom/pprint codom) (codom/serialize codom))))))
 #_(defn compile-webcomponent-var-cljs
   "Compile defcomponent var to cljs and write to files."
   [component-var pprint verbose]
@@ -1139,10 +1129,130 @@
 (defn compile-webcomponents-cljs
   "Compile defcomponent vars to cljs and write to files.
   This does *not* create the .edn.cljs that boot-cljs needs. That is the job of the link fn."
-  [nss pprint verbose]
-  (log/debug "compile-webcomponents-cljs " nss)
+  [opts]  ; pprint verbose]
+  (log/debug "compile-webcomponents-cljs " opts)
   ;;(ctnr/refresh)
-  (let [component-vars (flatten (get-component-vars nss))
+  (let [nss (:namespaces opts)
+        component-vars (flatten (get-component-vars nss))
+        ;; _ (log/debug "Component vars: " component-vars)
+        component-nss (set (map (fn [v] (-> v meta :ns)) component-vars))
+        ;; _ (log/debug "Component nss: " component-nss)
+        ]
+    (doseq [component-var component-vars]
+      (let [path (utils/ns->path (-> component-var meta :ns))
+            ;; _ (log/debug (format "CVAR META %s" (-> component-var meta :miraj/miraj)))
+            href (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets :miraj/impl-nss))
+            cljs-file (str *compile-path* "/" href ".cljs")]
+        (if *verbose* (log/info (format "Emitting %s" cljs-file)))
+        (io/make-parents cljs-file)
+        (spit cljs-file (-> component-var meta :miraj/miraj :miraj/prototype))))))
+
+(defn compile-webcomponent-vars-cljs
+  "Compile defcomponent vars to cljs and write to files.
+  This does *not* create the .edn.cljs that boot-cljs needs. That is the job of the link fn."
+  [opts]  ; pprint verbose]
+  (log/debug "compile-webcomponent-vars-cljs " opts)
+  (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
+        ;; _ (log/trace "NS SYMS:" ns-syms)
+
+        var-syms (set (filter #(namespace %) (:components opts)))
+        ;; _ (log/trace "VAR SYMS:" var-syms)
+        var-nss (set (map #(symbol (namespace %)) var-syms))
+        ;; _ (log/trace "VAR NSs:" var-nss)
+
+        ;; we'll want vars for nss, except where a var in that ns was passed
+        nss (clojure.set/difference ns-syms var-nss)
+        ;; _ (log/trace "Filtered NS SYMS:" nss)
+
+        cvars (get-component-vars nss)
+
+        component-refs (if (empty? nss)
+                         var-syms
+                         ;; (concat var-syms
+                         (map #(utils/var->varsym %) (flatten cvars)))
+        ;; _ (log/debug "Component refs: " component-refs)
+        component-nss (set (map #(namespace %) component-refs))
+        ;; _ (log/trace "Component NS syms:" component-nss)
+        ]
+    (if (not (empty? nss)) (apply clojure.core/require nss))
+
+    (doseq [component-sym component-refs]
+      (log/trace "Cljs Compiling:" component-sym)
+      (let [;; path (utils/ns->path (-> component-var meta :ns))
+            component-var (find-var component-sym)
+            ;; _ (log/trace "Compiling (cljs) var:" component-var)
+            ;; _ (log/debug (format "CVAR META %s" (-> component-var meta :miraj/miraj :miraj/assets)))
+            href (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets :miraj/impl-nss))
+            ;; _ (log/debug (format "CVAR href %s" href))
+            cljs-file (str *compile-path* "/" href ".cljs")]
+        (if *verbose* (log/info (format "Emitting %s" cljs-file)))
+        (io/make-parents cljs-file)
+        (spit cljs-file (-> component-var meta :miraj/miraj :miraj/prototype))))))
+
+(defn compile-webcomponent-ref-html
+  "Compile defcomponent ref to html and write to files."
+  [component-ref opts]
+  (log/debug "compile-webcomponent-ref-html: " component-ref opts)
+  (let [component-var (if (var? component-ref) component-ref (find-var component-ref))
+        ;; _ (log/trace "HTML Compiling var:" component-var)
+        ;; _ (log/debug (format "VAR META %s" (-> component-var meta :miraj/miraj)))
+
+        ;; path (utils/ns->path (-> component-var meta :ns))
+        ;; _ (println "PATH: " path)
+        name (str/replace (-> component-var meta :name) #"-" "_")
+        codom (-> component-var meta :miraj/miraj :miraj/codom)
+        ;; _ (log/trace "CODOM:" codom)
+        href (str (utils/sym->path (-> component-var meta :miraj/miraj :miraj/assets
+                                       :miraj/html-ns))
+                  ".html")
+        out-file (str/join "/" [*compile-path* href])]
+        ;; out-file (str/join "/" [*compile-path* path (str (-> component-var meta :name) ".html")])]
+    (io/make-parents out-file)
+    (if *verbose*
+      (log/info (format "Emitting %s" out-file)))
+    (spit out-file ;; (with-out-str
+                     (if (:pprint opts) ;; miraj.co-dom/*pprint*
+                       (codom/pprint codom)
+                       (codom/serialize codom)))))  ;)
+
+(defn compile-webcomponent-vars-html
+  "Compile all webcomponents in namespaces to html."
+  [opts] ;; pprint verbose]
+  (if (:verbose opts) (log/debug (format "compile-webcomponent-vars-html %s" (:components opts))))
+  ;;  (let [nss (into '() (set (map #(symbol (namespace %)) (:components opts))))]
+  (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
+        ;; _ (log/trace "HTML NS SYMS:" ns-syms)
+
+        var-syms (set (filter #(namespace %) (:components opts)))
+        ;; _ (log/trace "HTML VAR SYMS:" var-syms)
+        var-nss (set (map #(symbol (namespace %)) var-syms))
+        ;; _ (log/trace "HTML VAR NSs:" var-nss)
+
+        nss (clojure.set/difference ns-syms var-nss)
+        ;; _ (log/trace "HTML Filtered NS SYMS:" nss)
+
+        cvars (get-component-vars nss)
+
+        component-refs (if (empty? nss)
+                         var-syms
+                         ;; (concat var-syms
+                         (map #(utils/var->varsym %) (flatten cvars)))
+        ;; _ (log/debug "HTML Component refs: " component-refs)
+        component-nss (set (map #(namespace %) component-refs))
+        ;; _ (log/trace "HTML Component NS syms:" component-nss)
+        ]
+    (if (not (empty? nss)) (apply clojure.core/require nss))
+    (doseq [component-var component-refs]
+      (compile-webcomponent-ref-html component-var opts))))
+
+(defn compile-webcomponents-cljs
+  "Compile defcomponent vars to cljs and write to files.
+  This does *not* create the .edn.cljs that boot-cljs needs. That is the job of the link fn."
+  [opts]  ; pprint verbose]
+  (log/debug "compile-webcomponents-cljs " opts)
+  ;;(ctnr/refresh)
+  (let [nss (:namespaces opts)
+        component-vars (flatten (get-component-vars nss))
         ;; _ (log/debug "Component vars: " component-vars)
         component-nss (set (map (fn [v] (-> v meta :ns)) component-vars))
         ;; _ (log/debug "Component nss: " component-nss)
@@ -1164,18 +1274,18 @@
                                                     (apply get-webvars :_webcomponent nss))))]
     ;;(println "webcomponents: " components)
     (doseq [c components]
-      (compile-webcomponent-var-html (first c) (last c) html-out cljs-out))))
+      (compile-webcomponent-ref-html (first c) (last c) html-out cljs-out))))
 
 (defn compile-webcomponents-html
   "Compile all webcomponents in namespaces to html."
-  [component-nss pprint verbose]
-  (if *verbose* (log/debug (format "compile-webcomponents-html %s" component-nss)))
-  (doseq [component-ns component-nss]
+  [opts] ;; pprint verbose]
+  (if *verbose* (log/debug (format "compile-webcomponents-html: %s" opts)))
+  (doseq [component-ns (:namespaces opts)]
     (clojure.core/require component-ns)
     (let [component-ns (find-ns component-ns)
           component-vars (get-component-vars-for-ns component-ns)]
       (doseq [component-var component-vars]
-        (compile-webcomponent-var-html component-var miraj.co-dom/*pprint* *verbose*)))))
+        (compile-webcomponent-ref-html component-var opts)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1227,39 +1337,35 @@
             (if *verbose* (log/info (format "Compiling %s to %s" page-ref hfile)))
             ;;(let [out-str (if miraj.co-dom/*pprint*
             (let [out-str (with-out-str (-> page-ref normalize optimize codom/serialize print))]
-                            ;; (with-out-str (-> page-ref normalize optimize codom/pprint))
-                            ;; (with-out-str (-> page-ref
-                            ;;                   normalize optimize codom/serialize print)))]
               (if *verbose* (log/debug (format "Emitting %s" hfile)))
               (spit hfile out-str))))))))
 
 (defn compile-page-ref
   "Compile pageref to html+js and write to *compile-path*."
   [page-ref]
-  ;; (if *verbose* (log/debug "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
+  (if *verbose* (log/debug "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
   ;; (if *verbose* (log/debug "COMPILE-PAGE-REF meta: " (-> page-ref meta)))
 
   ;; inject polyfill, so imports will work
   ;; inject link import page/imports.html, unless compile-only is specified
 
   ;; 3 possibilities for page-ref: ns with defpage, ns containing defpages, and defpage var
-
-
-   (let [[page-ref-name page-ref-ns]
-         (if (var? page-ref)
-           [(str (-> page-ref meta :name)) (-> page-ref meta :ns)]
-           [(str (-> page-ref ns-name)) page-ref])
-         html-path (utils/ns->path page-ref-ns)
-         page-html-name (if (var? page-ref)
-                          (str html-path "/" page-ref-name ".html")
-                          (str html-path ".html"))
-         hfile (str/join "/" [*compile-path* page-html-name])]
-     (io/make-parents hfile)
-     (binding [*ns* page-ref-ns]
-       (if *verbose* (log/info (format "Compiling %s to %s" page-ref page-html-name)))
-       (let [out-str (with-out-str (-> page-ref normalize optimize codom/serialize print))]
-         ;; (if *verbose* (log/info (format "Emitting %s" page-html-name)))
-         (spit hfile out-str)))))
+  (let [[page-ref-name page-ref-ns]
+        (if (var? page-ref)
+          [(str (-> page-ref meta :name)) (-> page-ref meta :ns)]
+          ;; must be an ns?
+          [(str (-> page-ref ns-name)) page-ref])
+        html-path (utils/ns->path page-ref-ns)
+        page-html-name (if (var? page-ref)
+                         (str html-path "/" page-ref-name ".html")
+                         (str html-path ".html"))
+        hfile (str/join "/" [*compile-path* page-html-name])]
+    (io/make-parents hfile)
+    (binding [*ns* page-ref-ns]
+      (if *verbose* (log/info (format "Compiling %s to %s" page-ref page-html-name)))
+      (let [out-str (with-out-str (-> page-ref normalize optimize codom/serialize print))]
+        ;; (if *verbose* (log/info (format "Emitting %s" page-html-name)))
+        (spit hfile out-str)))))
 
 (defn mcc   ;;  compile
   [{:keys [pages pagespaces
@@ -1267,12 +1373,12 @@
            imports polyfill
            debug]
     :as opts}]
-  ;; (log/trace  (format "mcc %s" opts))
+  (log/trace  (format "mcc %s" opts))
   ;; (let [pagespaces (or pagespaces (if (and page (nil? pages)) nil :all))
   ;;       pages (or pages (if (and page (nil? pagespaces)) nil :all))]
   (if pages
     (doseq [page pages]
-      ;; (log/trace "Compiling Page:" page (-> page type))
+      (log/trace "Compiling Page:" page (-> page type))
       ;; we need to reload for repl development - FIXME: put this in the boot task
 
       ;; (clojure.core/require (if (var? page)

@@ -125,6 +125,17 @@
         ]
     (symbol (str ns-name "." nm))))
 
+(defn var->varsym
+  [v]
+  ;; (log/debug "var->sym: " v)
+  (let [nm (:name (meta v))
+        ;; _ (log/debug "nm: " nm)
+        namesp (:ns (meta v))
+        ;; _ (log/debug "namesp: " namesp)
+        ns-name (ns-name namesp)
+        ]
+    (symbol (str ns-name) (str nm))))
+
 (defn last-seg [sym]
   (if-let [nspace (namespace sym)]
     (name sym)
