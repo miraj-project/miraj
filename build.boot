@@ -7,7 +7,7 @@
  :resource-paths #{"src/clj" "resources/public"}
  ;; :source-paths #{"src/test"}
 
- ;; :checkouts '[[miraj/co-dom "1.0.0-SNAPSHOT"]]
+ :checkouts '[[miraj/co-dom "1.0.0-SNAPSHOT"]]
 
  :repositories #(conj % ["clojars" {:url "https://clojars.org/repo/"}])
 

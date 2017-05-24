@@ -168,6 +168,19 @@
                                   interns-map)]
         (map second component-vars)))))
 
+(defn get-deflib-vars
+  "Search namespaces for deflibrary"
+  [nss]
+  (log/debug "get-deflib-vars for nss: " nss)
+  (for [the-ns (seq nss)]
+    (do
+      (clojure.core/require the-ns)
+      (let [interns-map (ns-interns the-ns)
+            component-vars (filter (fn [entry]
+                                    (-> entry last meta :miraj/miraj :miraj/deflibrary))
+                                  interns-map)]
+        (map second component-vars)))))
+
 (defn get-component-vars-for-ns
   "Find all component vars in namespace."
   [component-ns]
@@ -336,7 +349,7 @@
 (defn normalize
   "inspect webpage var, if necessary create <head> etc."
   [page-ref]
-  ;; (log/debug "NORMALIZE: " page-ref (type page-ref))
+  (log/debug "NORMALIZE: " page-ref (type page-ref))
   ;; (log/debug (format "NS %s" *ns*))
   ;; (log/debug "NORMALIZE meta: " (-> page-ref meta))
   ;; (log/debug "NORMALIZE HTML deref: " (-> page-ref deref))
@@ -1546,10 +1559,10 @@
   "Loads a lib given its name. If as-alias, ensures that the associated
   namespace exists after loading. If require, records the load so any
   duplicate loads can be skipped."
-  [lib as-alias require opts]
-  ;; (log/debug "    LOAD-ONE: " lib as-alias require opts)
-  ;; (log/debug "    ALIAS: " as-alias)
-  ;; (log/debug "    OPTS: " opts)
+  [lib need-ns require opts]
+  (log/debug "LOAD-ONE: " lib need-ns require opts)
+  (log/debug "    ALIAS: " need-ns)
+  (log/debug "    OPTS: " opts)
   (let [segs (str/split (str lib) #"\.")
         seg1 (first segs)]
 
@@ -1557,20 +1570,20 @@
     ;; (log/debug "segs: " segs)
     (if (and (= seg1 "miraj")) ;; (= (second segs) "polymer"))
       (do ;; (log/debug "    MIRAJ.POLYMER - requiring")
-          #_(let [pl (load-polymer-lib lib as-alias require)]
-              pl)
-          (let [v [lib :as as-alias]
-                args (into v opts)
-                args (concat [args] [] #_[:verbose])
-                ]
-            ;; (log/debug "    ARGS: " args)
-            (apply clojure.core/require args)
-            #_(let [lns (find-ns lib)
+        #_(let [pl (load-polymer-lib lib need-ns require)]
+            pl)
+        (let [v [lib :as need-ns]
+              args (into v opts)
+              args (concat [args] [] #_[:verbose])
+              ]
+          ;; (log/debug "    ARGS: " args)
+          (apply clojure.core/require args)
+          #_(let [lns (find-ns lib)
                   _ (log/debug "    FOUND ns:  " lns)
                   interns (ns-interns lns)
                   _ (log/debug "    INTERNS:" interns)]))
-          )
-      (let [cl (load-miraj-lib lib as-alias require opts)]
+        )
+      (let [cl (load-miraj-lib lib need-ns require opts)]
         ;; (log/debug "custom lib: " cl)
         cl)
       )))
@@ -1613,7 +1626,7 @@
 (defn- load-lib
   "Loads a lib with options"
   [prefix lib & options]
-  ;; (log/debug "    LOAD-LIB: " prefix lib options)
+  (log/debug "    LOAD-LIB: " prefix "," lib "," options)
   (throw-if (and prefix (pos? (.indexOf (name lib) (int \.))))
             "Found lib name '%s' containing period with prefix '%s'.  lib names inside prefix lists must not contain periods"
             (name lib) prefix)
@@ -1621,63 +1634,65 @@
         opts (apply hash-map options)
         {:keys [as reload reload-all require use verbose]} opts
         loaded (contains? @*loaded-libs* lib)
-        ;; _ (log/debug "lib already loaded? " lib loaded)
+        _ (log/debug "lib already loaded? " lib loaded)
         load (cond reload-all
                    load-all
                    (or reload (not require) (not loaded))
                    load-one)
-        as-alias (or as use)
+        _ (log/trace "LOAD:" load)
+        need-ns (or as use)
         filter-opts (select-keys opts '(:exclude :only :rename :refer))
+        _ (log/trace "filter-opts:" filter-opts)
         undefined-on-entry (not (find-ns lib))]
-    ;; (log/debug "    LOAD: " load " as:" as-alias)
+    (log/debug "    LOAD: " load " as:" need-ns)
     (binding [*loading-verbosely* (or *loading-verbosely* verbose)]
       (if load
         (try
-          (load lib as-alias require (mapcat seq filter-opts))
+          (load lib need-ns require (mapcat seq filter-opts))
           (catch Exception e
             (when undefined-on-entry
               (remove-ns lib))
             (throw e)))
-        #_(throw-if (and as-alias (not (find-ns lib)))
+        (throw-if (and need-ns (not (find-ns lib)))
                   "namespace '%s' not found" lib))
-      #_(when (and as-alias *loading-verbosely*)
+      (when (and need-ns *loading-verbosely*)
         (printf "    (clojure.core/in-ns '%s)\n" (ns-name *ns*)))
-      #_(when as
+      (when as
         (when *loading-verbosely*
-          (printf "    (clojure.core/alias '%s '%s)\n" as-alias lib))
+          (printf "    (clojure.core/alias '%s '%s)\n" need-ns lib))
         (alias as lib))
       (when (or use (:refer filter-opts))
-        #_(when *loading-verbosely*
+        (when *loading-verbosely*
           (printf "    (miraj.core/refer '%s" lib)
           (doseq [opt filter-opts]
-            (printf "    KEYOPT: %s '%s" (key opt) (print-str (val opt))))
+            (printf "    %s '%s" (key opt) (print-str (val opt))))
           (printf ")\n"))
         (let [result (apply refer lib (mapcat seq filter-opts))]
-          #_(log/debug "    REFER RESULT: " result)
+          (log/debug "    REFER RESULT: " result)
           result)))))
 
 (defn- load-libs
   "Loads libs, interpreting libspecs, prefix lists, and flags for
   forwarding to load-lib"
   [& args]
-  ;; (log/debug "    LOAD-LIBS " args)
+  (log/debug "    LOAD-LIBS " args)
   ;; step 1: clojure.core/require the namespaces, without options
   ;;(doseq [arg args]
-    (let [;; ns-basic (first arg)
-          ;; segs (str/split (str ns-basic) #"\.")
-          flags (filter keyword? args)
-          opts (interleave flags (repeat true))
-          args (filter (complement keyword?) args)]
-      ;; (log/debug "MIRAJ.CORE/REQUIRE: " #_ns-basic)
-      ;; (log/debug "flags: " flags)
-      ;; (log/debug "opts:  " opts)
-      ;; (log/debug "args:  " args)
-      (let [supported #{:as :reload :reload-all :verbose :refer :require}
-            unsupported (seq (remove supported flags))]
-        (throw-if unsupported
-                  (apply str "Unsupported option(s) supplied: "
-                         (interpose \, unsupported))))
-    ; check a load target was specified
+  (let [;; ns-basic (first arg)
+        ;; segs (str/split (str ns-basic) #"\.")
+        flags (filter keyword? args)
+        opts (interleave flags (repeat true))
+        args (filter (complement keyword?) args)]
+    (log/debug "MIRAJ.CORE/REQUIRE: " #_ns-basic)
+    (log/debug "flags: " flags)
+    (log/debug "opts:  " opts)
+    (log/debug "args:  " args)
+    (let [supported #{:as :reload :reload-all :verbose :refer :require}
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported option(s) supplied: "
+                       (interpose \, unsupported))))
+                                        ; check a load target was specified
     (throw-if (not (seq args)) "Nothing specified to load")
     (for [arg args]
       (if (libspec? arg)
@@ -1697,20 +1712,47 @@
 (defn require
   "Called by defpage to have clojure.core/require load polymer libs."
   [page-sym & args]
-  ;; (log/debug "REQUIRE DIRECTIVE: " page-sym args)
-  (let [cljs-requires (filter map? args)
-        clj-requires  (filter #(not (map? %) args))
-        reqres (remove nil? (flatten (apply load-libs :require args)))
-        ;; _ (log/debug "    REQRESULT: " reqres)
-        ;; reqelts (for [arg args] ;; [req reqres]
-        ;;           (do ;; (log/debug "arg: " arg)
-        ;;           (codom/element :link {:rel "import"
-        ;;                             :href (str (first arg))
-        ;;                             #_req})))
-        ]
-    ;; (log/debug "    :REQUIRE RESULT: " reqelts)
-    ;;(alter-meta! page-sym (fn [old] (assoc old :_webcomponents args)))
-    {:require nil #_reqelts}))
+  (log/debug "REQUIRE DIRECTIVE: " page-sym args)
+  ;; (let [cljs-requires (filter map? args)
+  ;;       clj-requires  (filter #(not (map? %) args))
+  ;;       reqres (remove nil? (flatten (apply load-libs :require args)))
+  ;;       ;; _ (log/debug "    REQRESULT: " reqres)
+  ;;       ;; reqelts (for [arg args] ;; [req reqres]
+  ;;       ;;           (do ;; (log/debug "arg: " arg)
+  ;;       ;;           (codom/element :link {:rel "import"
+  ;;       ;;                             :href (str (first arg))
+  ;;       ;;                             #_req})))
+  ;;       ]
+  ;;   ;; (log/debug "    :REQUIRE RESULT: " reqelts)
+  ;;   ;;(alter-meta! page-sym (fn [old] (assoc old :_webcomponents args)))
+    {:require nil #_reqelts})
+
+(defn defcomponent-require
+  "Called by defcomponent to have clojure.core/require load polymer libs."
+  [page-sym & req-specs]
+  (log/debug "DEFCOMPONENT REQUIRE DIRECTIVE: " page-sym req-specs)
+  ;; first require nss so the codom code will work
+  (apply clojure.core/require req-specs)
+  ;; then construct the <link> elements needed in <head>
+  (let [flags (filter keyword? req-specs)
+        _ (log/trace "flags:" flags)
+        opts (apply hash-map (interleave flags (repeat true)))
+        _ (log/trace "opts:" opts)
+        reqs (filter (complement keyword?) req-specs)
+        _ (log/trace "reqs:" reqs)
+        reqs (flatten (for [req reqs]
+               (let [req-ns (str (first req))
+                     refer (.indexOf req :refer)
+                     refs (nth req (inc refer))]
+                 (for [ref refs]
+                   (let [ref-sym (symbol req-ns (str ref))
+                         ref-var (find-var ref-sym)
+                         href (-> ref-var meta :miraj/miraj :miraj/assets :miraj/href)]
+                     ;; (log/trace "ref var:" ref-var)
+                     ;; (log/trace "href:" href)
+                     (codom/element :link {:rel "import" :href href}))))))]
+    (log/trace "REQS:" reqs)
+    {:require reqs}))
 
 ;;obsolete
 #_(defn import-resources
@@ -2301,7 +2343,7 @@
 ;;                                      :elt-kw elt-kw
 ;;                                      :elt-uri elt-uri}})))
 
-(defn codom
+(defn defcomponent-codom
   "called by defcomponent and defweb-codom processing"
   [page-sym & args]
   ;; (log/debug "CODOM" page-sym)
@@ -2896,7 +2938,7 @@
           `(do
              ;; (log/debug "    process-reference: " '~(symbol "miraj.core" (clojure.core/name kname)))
              ;; (log/debug "    ARGS: " '~args)
-             (~(symbol "miraj.core" (clojure.core/name kname))
+             (~(symbol "miraj.core" (str "defcomponent-" (clojure.core/name kname)))
               ~component-var
               ~@(map #(list 'quote %) args))))
 
@@ -3087,11 +3129,11 @@
     `(do
        (with-loading-context
          (let [reqs# (into {} [~@(map process-reference references)])
-               ;; _# (log/info "reqs#: " reqs#)
+               ;; _# (println "reqs#: " reqs#)
 
                ;; head# (apply codom/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
                head# (flatten (list (:require reqs#) (:import reqs#)))
-               ;; _# (log/debug "HEAD# " head#)
+               ;; _# (println "HEAD# " head#)
                ;; _# (println "HEAD# " head#)
 
                ;; body# (apply codom/element :codom {} (:codom reqs#))
@@ -3212,7 +3254,7 @@
                         ;;:doc ~(str docstr)
                         )
 
-           ;; (println "Component defined:" cvar#) ;; (meta cvar#))
+           (println "Component defined:" cvar#) ;; (meta cvar#))
            #_(alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defcomponent true}})))
            ~component-var)))))
 

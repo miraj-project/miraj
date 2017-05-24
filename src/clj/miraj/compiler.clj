@@ -80,61 +80,6 @@
           (if *verbose* (println (format "bowerize: installing bower pkg:   %s\n" bower-pkg)))
           (apply sh c))))))
 
-
-;; finds and templates defcomponent vars
-;; for deflibrary vars use link-libraries
-;; for defcomponents we use a deflibrary listing the nss to search for defcomponents
-#_(defn assemble-component-lib-for-ns
-  "Assemble a library of webcomponents."
-  [component-ns-sym pprint verbose]
-  (if *verbose* (log/debug (format "Assembling lib for webcomponents in ns: %s" component-ns-sym)))
-;  (ctnr/refresh)
-  (clojure.core/require component-ns-sym)
-;;  (binding [*ns* *ns*]
-    (let [;;all-nss (all-ns)
-          ;;all-nss-names (sort (for [n all-nss] (-> n ns-name)))
-          ;; _ (doseq [n all-nss-names] (log/debug "NS: " n))
-          component-ns (find-ns component-ns-sym)
-          ;; _ (log/debug "component NS: " component-ns)
-          component-vars (remove nil? ;;(for [component-ns-sym all-nss]
-                                        (miraj/get-component-vars-for-ns component-ns))
-          ;; _ (log/debug "component vars: " component-vars)
-          ;; _ (doseq [v component-vars] (log/debug "cvar: " v))
-          var-maps (for [component-var component-vars]
-                     (let [m (-> component-var meta)
-                           ;;_ (log/debug "COMPVAR META: " m)
-                           href (str (ns->path (:ns m)) "/" (sym->path (:name m)) ".html")
-                           elt-fn-meta (update-in m [:miraj/miraj]
-                                                  (fn [old]
-                                                    (let [;oldmiraj (:miraj/miraj old)
-                                                          miraj (assoc
-                                                                 {:miraj/defn (symbol (:name m))
-                                                                  :miraj/fn (symbol (:name m))
-                                                                  :miraj/co-fn true
-                                                                  :miraj/element true
-                                                                  :miraj/lib :miraj/demo
-                                                                  :miraj/assets {:miraj/href href}
-                                                                  :miraj/help ""}
-                                                                 :miraj/html-tag (keyword (-> old :miraj/html-tag)))]
-                                                          ;; new (merge {:miraj/miraj old} clean)]
-                                                      miraj)))
-                           ]
-                       (assoc (:miraj/miraj elt-fn-meta)
-                              :miraj/doc {:miraj/short (:doc m)})))
-          ;; _ (log/debug "var-maps: " var-maps)
-          lib-map {:miraj/ns component-ns-sym :miraj/components (into [] var-maps)}
-          ]
-      ;; (log/debug "lib-map: " lib-map)
-      ;; (doseq [m var-maps] (log/debug (format "map: %s" m)))
-      (let [content (stencil/render-file
-                     "miraj/templates/componentlib.mustache"
-                     lib-map)
-            path (sym->path component-ns-sym)
-            component-out-path (str/join "/" [*compile-path* (str path ".clj")])
-            component-out-file (doto (io/file component-out-path) io/make-parents)]
-        (log/debug (format "writing assembly to %s" component-out-path))
-        (spit component-out-file content))))
-
 (defn get-component-maps-for-ns-sym
   "get config maps for components in ns"
   [component-ns-sym]
@@ -338,17 +283,45 @@
 (defn link-libraries
   "Link webcomponent libraries. This generates the .clj file
   containing element fns for components."
-  [nss-syms]
-  (log/trace "link-libraries: " nss-syms)
-  (doseq [deflibspace-sym nss-syms]
-      (clojure.core/require deflibspace-sym)
-      (let [deflibspace-ns (find-ns deflibspace-sym)]
-        (if *debug* (log/debug "Processing ns:" (-> deflibspace-ns ns-name)
-                                #_(-> deflibspace-ns meta :miraj/miraj :miraj/deflibrary)))
-        (if (-> deflibspace-ns meta :miraj/miraj :miraj/deflibrary)
+  [opts]
+  (log/trace "link-libraries: " opts)
+  (let [ns-syms (set (filter #(not (namespace %)) (:libraries opts)))
+        _ (log/trace "NS SYMS:" ns-syms)
+
+        var-syms (set (filter #(namespace %) (:libraries opts)))
+        _ (log/trace "VAR SYMS:" var-syms)
+        var-nss (set (map #(symbol (namespace %)) var-syms))
+        _ (log/trace "VAR NSs:" var-nss)
+
+        ;; we'll want vars for nss, except where a var in that ns was passed
+        nss (clojure.set/difference ns-syms var-nss)
+        _ (log/trace "Filtered NS SYMS:" nss)
+
+        libvars (if (empty? nss)
+                  var-syms
+                  (concat var-syms (get-deflib-vars nss)))
+        _ (log/trace "Deflib vars:" libvars)
+
+        lib-refs (if (empty? nss)
+                   var-syms
+                   (map #(utils/var->varsym %) (flatten libvars)))
+        _ (log/debug "Lib refs: " lib-refs)
+        lib-nss (into '() (set (map #(symbol (namespace %)) lib-refs)))
+        _ (log/trace "Lib ns syms:" lib-nss)
+        ]
+    (apply clojure.core/require lib-nss)
+
+    (doseq [lib-ref lib-refs]
+      (log/trace "Processing lib-ref" lib-ref)
+      (let [lib-ns-sym (if-let [n (symbol (namespace lib-ref))] n lib-ref)
+            _ (log/trace "lib-ns-sym:" lib-ns-sym)
+            lib-ns (find-ns lib-ns-sym)]
+        (if *debug* (log/debug "Processing ns:" (-> lib-ns ns-name)
+                               #_(-> lib-ns meta :miraj/miraj :miraj/deflibrary)))
+        (if (-> lib-ns meta :miraj/miraj :miraj/deflibrary)
           (do
-            (log/info (format "NS %s is a deflibrary space" deflibspace-ns))
-            (let [interns (ns-interns deflibspace-ns)
+            (log/info (format "NS %s is a deflibrary space" lib-ns))
+            (let [interns (ns-interns lib-ns)
                   ;; _ (log/debug "INTERNS: " interns)
                   ;; _ (doseq [i (seq interns)]
                   ;;     (log/debug "meta: " (-> i second meta :miraj/miraj :miraj/deflibrary)))
@@ -357,7 +330,7 @@
                                            (seq interns)))]
               (doseq [deflib-var deflib-vars]
                 (log/debug "Processing deflibrary: " deflib-var (-> deflib-var meta :miraj/miraj))
-                (let [component-lib-ns-sym (str deflibspace-ns
+                (let [component-lib-ns-sym (str lib-ns
                                                 "." (-> deflib-var meta :name))]
                   (if (= :miraj/elements (-> deflib-var meta :miraj/miraj :miraj/deflibrary))
                     (do
@@ -396,8 +369,8 @@
                             (assoc (deref deflib-var) :miraj/ns component-lib-ns-sym))))
                     (comment "process :miraj/styles here"))
                   ))))
-          (if *debug* (log/debug "no deflibrary found in ns" (-> deflibspace-ns ns-name)))
-          ))))
+          (if *debug* (log/debug "no deflibrary found in ns" (-> lib-ns ns-name)))
+          )))))
 
 (defn- has-deps-edn
   [page-sym]
@@ -1147,35 +1120,42 @@
         (io/make-parents cljs-file)
         (spit cljs-file (-> component-var meta :miraj/miraj :miraj/prototype))))))
 
+(defn get-component-refs
+  [opts]
+  (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
+        _ (log/trace "NS SYMS:" ns-syms)
+
+        var-syms (set (filter #(namespace %) (:components opts)))
+        _ (log/trace "VAR SYMS:" var-syms)
+        var-nss (set (map #(symbol (namespace %)) var-syms))
+        _ (log/trace "VAR NSs:" var-nss)
+
+        ;; we'll want vars for nss, except where a var in that ns was passed
+        nss (clojure.set/difference ns-syms var-nss)
+        _ (log/trace "Filtered NS SYMS:" nss)
+
+        cvars (if (empty? nss)
+                var-syms
+                (concat var-syms (get-component-vars nss)))
+
+        component-refs (if (empty? nss)
+                         var-syms
+                         (map #(utils/var->varsym %) (flatten cvars)))
+        ;; _ (log/debug "Component refs: " component-refs)
+        ;; component-nss (set (map #(namespace %) component-refs))
+        component-nss (into '() (set (map #(symbol (namespace %)) component-refs)))
+        ;; _ (log/trace "Component NS syms:" component-nss)
+        ]
+    (apply clojure.core/require component-nss)
+    component-refs))
+
+
 (defn compile-webcomponent-vars-cljs
   "Compile defcomponent vars to cljs and write to files.
   This does *not* create the .edn.cljs that boot-cljs needs. That is the job of the link fn."
   [opts]  ; pprint verbose]
   (log/debug "compile-webcomponent-vars-cljs " opts)
-  (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
-        ;; _ (log/trace "NS SYMS:" ns-syms)
-
-        var-syms (set (filter #(namespace %) (:components opts)))
-        ;; _ (log/trace "VAR SYMS:" var-syms)
-        var-nss (set (map #(symbol (namespace %)) var-syms))
-        ;; _ (log/trace "VAR NSs:" var-nss)
-
-        ;; we'll want vars for nss, except where a var in that ns was passed
-        nss (clojure.set/difference ns-syms var-nss)
-        ;; _ (log/trace "Filtered NS SYMS:" nss)
-
-        cvars (get-component-vars nss)
-
-        component-refs (if (empty? nss)
-                         var-syms
-                         ;; (concat var-syms
-                         (map #(utils/var->varsym %) (flatten cvars)))
-        ;; _ (log/debug "Component refs: " component-refs)
-        component-nss (set (map #(namespace %) component-refs))
-        ;; _ (log/trace "Component NS syms:" component-nss)
-        ]
-    (if (not (empty? nss)) (apply clojure.core/require nss))
-
+  (let [component-refs (get-component-refs opts)]
     (doseq [component-sym component-refs]
       (log/trace "Cljs Compiling:" component-sym)
       (let [;; path (utils/ns->path (-> component-var meta :ns))
@@ -1220,28 +1200,29 @@
   [opts] ;; pprint verbose]
   (if (:verbose opts) (log/debug (format "compile-webcomponent-vars-html %s" (:components opts))))
   ;;  (let [nss (into '() (set (map #(symbol (namespace %)) (:components opts))))]
-  (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
-        ;; _ (log/trace "HTML NS SYMS:" ns-syms)
+  (let [component-refs (get-component-refs opts)]
+  ;; (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
+  ;;       _ (log/trace "HTML NS SYMS:" ns-syms)
 
-        var-syms (set (filter #(namespace %) (:components opts)))
-        ;; _ (log/trace "HTML VAR SYMS:" var-syms)
-        var-nss (set (map #(symbol (namespace %)) var-syms))
-        ;; _ (log/trace "HTML VAR NSs:" var-nss)
+  ;;       var-syms (set (filter #(namespace %) (:components opts)))
+  ;;       _ (log/trace "HTML VAR SYMS:" var-syms)
+  ;;       var-nss (set (map #(symbol (namespace %)) var-syms))
+  ;;       _ (log/trace "HTML VAR NSs:" var-nss)
 
-        nss (clojure.set/difference ns-syms var-nss)
-        ;; _ (log/trace "HTML Filtered NS SYMS:" nss)
+  ;;       nss (clojure.set/difference ns-syms var-nss)
+  ;;       _ (log/trace "HTML Filtered NS SYMS:" nss)
 
-        cvars (get-component-vars nss)
+  ;;       cvars (get-component-vars nss)
 
-        component-refs (if (empty? nss)
-                         var-syms
-                         ;; (concat var-syms
-                         (map #(utils/var->varsym %) (flatten cvars)))
-        ;; _ (log/debug "HTML Component refs: " component-refs)
-        component-nss (set (map #(namespace %) component-refs))
-        ;; _ (log/trace "HTML Component NS syms:" component-nss)
-        ]
-    (if (not (empty? nss)) (apply clojure.core/require nss))
+  ;;       component-refs (if (empty? nss)
+  ;;                        var-syms
+  ;;                        ;; (concat var-syms
+  ;;                        (map #(utils/var->varsym %) (flatten cvars)))
+  ;;       _ (log/debug "HTML Component refs: " component-refs)
+  ;;       component-nss (set (map #(namespace %) component-refs))
+  ;;       _ (log/trace "HTML Component NS syms:" component-nss)
+  ;;       ]
+  ;;   (if (not (empty? nss)) (apply clojure.core/require nss))
     (doseq [component-var component-refs]
       (compile-webcomponent-ref-html component-var opts))))
 
