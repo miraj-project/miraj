@@ -1,5 +1,5 @@
 (def +project+ 'miraj/core)
-(def +version+ "0.1.0-SNAPSHOT")
+(def +version+ "1.0.0-SNAPSHOT")
 
 (set-env!
 
@@ -11,7 +11,7 @@
 
  :repositories #(conj % ["clojars" {:url "https://clojars.org/repo/"}])
 
- :dependencies   '[[org.clojure/clojure "1.9.0-alpha16"]
+ :dependencies   '[[org.clojure/clojure "1.9.0-alpha17"]
                    [org.clojure/data.json "0.2.6"]
                    [clj-time "0.11.0"]
                    [miraj/co-dom "1.0.0-SNAPSHOT"]
