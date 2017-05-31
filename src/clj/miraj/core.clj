@@ -154,19 +154,41 @@
         (optimize-js doc)))))
 ;;    (log/debug "Unrecognized optimizer: " strategy)))
 
-(defn get-component-vars
-  "Search namespaces for webcomponents"
+(defn get-defcomponent-vars-for-nss
+  "Search namespaces for defcomponent vars"
   [nss]
-  ;; (log/debug "get-componenent-vars for nss: " nss)
+  (log/debug "get-componenent-vars for nss: " nss)
   ;;(let [nss (or nss (all-ns))]
   (for [the-ns (seq nss)]
     (do
-      (clojure.core/require the-ns)
-      (let [interns-map (ns-interns the-ns)
+      (log/trace "getting ns:" the-ns)
+      (clojure.core/require [the-ns])
+      (let [interns-map (ns-interns (find-ns the-ns))
+            _ (log/trace "interns-map:" interns-map)
             component-vars (filter (fn [entry]
                                     (-> entry last meta :miraj/miraj :miraj/defcomponent))
-                                  interns-map)]
-        (map second component-vars)))))
+                                  interns-map)
+            result (map second component-vars)]
+        (log/trace "get-componenent-vars result:" result)
+        result))))
+
+(defn get-component-fnvars-for-lib-nss
+  "Search lib namespaces for component fn vars"
+  [nss]
+  (log/debug "get-component-fnvars-for-lib-nss:" nss)
+  ;;(let [nss (or nss (all-ns))]
+  (for [the-ns (seq nss)]
+    (do
+      (log/trace "getting ns:" the-ns)
+      (clojure.core/require [the-ns])
+      (let [interns-map (ns-interns (find-ns the-ns))
+            _ (log/trace "interns-map:" interns-map)
+            component-vars (filter (fn [entry]
+                                    (-> entry last meta :miraj/miraj :miraj/element))
+                                  interns-map)
+            result (map second component-vars)]
+        (log/trace "get-component-fnvars-for-lib-nss result:" result)
+        result))))
 
 (defn get-deflib-vars
   "Search namespaces for deflibrary"
@@ -349,7 +371,7 @@
 (defn normalize
   "inspect webpage var, if necessary create <head> etc."
   [page-ref]
-  (log/debug "NORMALIZE: " page-ref (type page-ref))
+  ;; (log/debug "NORMALIZE: " page-ref (type page-ref))
   ;; (log/debug (format "NS %s" *ns*))
   ;; (log/debug "NORMALIZE meta: " (-> page-ref meta))
   ;; (log/debug "NORMALIZE HTML deref: " (-> page-ref deref))
@@ -469,11 +491,44 @@
         header-elts (remove nil?
                             (flatten
                              (apply list ;;FIXME meta-elts
+
+;;                                     (codom/element :script
+;; "(function() {
+;;   if ('registerElement' in document
+;;       && 'import' in document.createElement('link')
+;;       && 'content' in document.createElement('template')) {
+;;     // platform is good!
+;;     // console.log('No Polyfill needed!');
+;;    } else {
+;;     // polyfill the platform!
+;;     // console.log('Using Polyfill!');
+;;     var e = document.createElement('script');
+;;     e.src = '/miraj/polymer/assets/webcomponentsjs/webcomponents.js';
+;;     document.head.insertBefore(e, document.head.firstChild);
+;;    };
+
+;;    if(document.head.createShadowRoot || document.head.attachShadow) {
+;;      // console.log('Shadow DOM supported!');
+;;      // but default is shady dom; to switch, run this script before Polymer is imported */
+;;      window.Polymer = {
+;;       dom: 'shadow',
+;;       lazyRegister: true
+;;       };
+;;     } else {
+;;     // console.log('Shadow DOM unsupported!');
+;;     }
+;; })();")
+
+;;                                     (codom/element :script
+;; "if (!window.HTMLImports) {
+;;     document.dispatchEvent(new CustomEvent('WebComponentsReady', {bubbles: true}));
+;; }")
+
                                     ;; FIXME: polyfill goes in user-defined imports.html
-                                    (if polyfill
-                                      (codom/element :script
-                                                     {:type "text/javascript"
-                                                      :src polyfill}))
+                                    ;; (if polyfill
+                                    ;;   (codom/element :script
+                                    ;;                  {:type "text/javascript"
+                                    ;;                   :src polyfill}))
 
                                     ;;(codom/element :link {:href "bower_components/iron-demo-helpers/demo-pages-shared-styles.html" :rel "import"})
 
@@ -1079,8 +1134,8 @@
 
 (defn- reduce-properties
   [all-props]
+  (log/debug "reduce-properties" all-props)
   (fn [m s]
-    ;; (log/debug (format "REDUCE1 M: %s" m))
     ;; (log/debug "REDUCE1 S: " s)
     (let [name-meta (meta (first s))
           ;; _ (log/debug "name-meta: " name-meta)
@@ -1730,20 +1785,21 @@
 (defn defcomponent-require
   "Called by defcomponent to have clojure.core/require load polymer libs."
   [page-sym & req-specs]
-  (log/debug "DEFCOMPONENT REQUIRE DIRECTIVE: " page-sym req-specs)
+  ;; (log/debug "DEFCOMPONENT REQUIRE DIRECTIVE: " page-sym req-specs)
   ;; first require nss so the codom code will work
   (apply clojure.core/require req-specs)
   ;; then construct the <link> elements needed in <head>
   (let [flags (filter keyword? req-specs)
-        _ (log/trace "flags:" flags)
+        ;; _ (log/trace "flags:" flags)
         opts (apply hash-map (interleave flags (repeat true)))
-        _ (log/trace "opts:" opts)
+        ;; _ (log/trace "opts:" opts)
         reqs (filter (complement keyword?) req-specs)
-        _ (log/trace "reqs:" reqs)
+        ;; _ (log/trace "reqs:" reqs)
         reqs (flatten (for [req reqs]
                (let [req-ns (str (first req))
                      refer (.indexOf req :refer)
                      refs (nth req (inc refer))]
+                 ;; FIXME: what if :refer :all, or no :refer?
                  (for [ref refs]
                    (let [ref-sym (symbol req-ns (str ref))
                          ref-var (find-var ref-sym)
@@ -1751,7 +1807,7 @@
                      ;; (log/trace "ref var:" ref-var)
                      ;; (log/trace "href:" href)
                      (codom/element :link {:rel "import" :href href}))))))]
-    (log/trace "REQS:" reqs)
+    ;; (log/trace "REQS:" reqs)
     {:require reqs}))
 
 ;;obsolete
@@ -2012,6 +2068,54 @@
                                   ;; (log/debug "css elts: " elts)
                                   elts))))]
       ;; (log/trace "CSS elts:" result)
+      {:css result})))
+
+(defn defcomponent-css
+  "Fn that handles :css directive of miraj.core/defcomponent"
+  [component-sym & css-specs]
+  (log/debug "DEFCOMPONENT CSS DIRECTIVE for : " component-sym css-specs)
+  (let [flags (filter keyword? css-specs)
+        opts (apply hash-map (interleave flags (repeat true)))
+        args (filter (complement keyword?) css-specs)]
+    ;; check for unsupported options
+    (let [supported (set (conj (keys codom/html5-link-attrs) :custom :include)) ;; html5-link-types
+          unsupported (seq (remove supported flags))]
+      (throw-if unsupported
+                (apply str "Unsupported :css option(s) supplied: "
+                       (interpose \, unsupported))))
+    ;; (log/trace "CSS args:" args (type (first args)))
+    (let [result (flatten (for [arg1 args]
+                            (do ;; (log/trace "CSS arg:" arg1)
+                                (let [elts (cond
+                                             ;; inlined style
+                                             (string? arg1) (codom/element :style arg1)
+
+                                             ;; ;; inlined custom style
+                                             ;; (:custom opts)
+                                             ;; (let [css (second args) ;; FIXME: this assumes css is a string
+                                             ;;       attrs (merge {:is "custom-style" :type "text/css"}
+                                             ;;                    (if (:include opts) {:include "demo-pages-shared-styles"} {}))]
+                                             ;;   (codom/element :style attrs args))
+
+                                             ;; explicit map import
+                                             (map? arg1)
+                                             (if (:custom arg1)
+                                               (codom/element :custom-style
+                                                              (codom/element :style
+                                                                             (:custom arg1)))
+                                               (codom/element :link (assoc arg1 :rel "stylesheet")))
+
+                                             ;; namespaced import vector
+                                             (vector? arg1)
+                                             (handle-css-vector arg1)
+
+                                             :else
+                                             (for [css-spec args]
+                                               (css-spec->link css-spec))
+                                             )]
+                                  ;; (log/debug "css elts: " elts)
+                                  elts))))]
+      ;; (log/trace "Component CSS elts:" result)
       {:css result})))
 
 (defn imports
@@ -2396,10 +2500,10 @@
          ;;       head# (codom/element :head reqs# imports#)
          ;;       html# (codom/element :html head# body#)]
          (let [reqs# (into {} [~@(map process-reference references)])
-               _# (log/debug "REQS# " reqs#)
+               ;; _# (log/debug "REQS# " reqs#)
                ;; head# (apply codom/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
                head# (flatten (list (:require reqs#) (:import reqs#)))
-               _# (log/debug "HEAD# " head#)
+               ;; _# (log/debug "HEAD# " head#)
                ;; body# (apply codom/element :codom {} (:codom reqs#))
                body# (:miraj/codom reqs#)
                ;; html# (apply codom/element :html {} (vec (flatten (list head# body#))))
@@ -2655,7 +2759,7 @@
 
 (defn sanitize-fn
   [f]
-  ;; (log/debug "sanitizing fn " f)
+  ;; (log/debug "FN sanitize-fn " f)
   (let [f-as-v (vec f)
         args (second f)
         ;; keyword args are for compound observers - should not occur in properties map?
@@ -2747,11 +2851,23 @@
 (defn normalize-properties
   "replace e.g. :foo [:G__123456789 (fn [x] )] with :foo :G__123456789"
   [all-props]
+  ;; (log/trace "normalize-properties" all-props)
   (let [props (:properties all-props)
         normalized-observers (into {} (for [[k v] props]
                                         [k (if (:observer v)
-                                             (update-in v [:observer] (fn [f] (-> f first)))
-                                        v)]))
+                                             (update-in v [:observer] (fn [f]
+                                                                        #_(-> f second)
+                                                                        (-> f first)))
+                                             v)]))
+        ;; normalized-observers (into {} (for [[k v] props]
+        ;;                                 [k (if-let [observer (:observer v)]
+        ;;                                      (let [_ (log/trace "OBSERVER:" observer)
+        ;;                                            vv (update-in v [:observer]
+        ;;                                                          (fn [f] observer))
+        ;;                                            _ (log/trace "val:" vv)]
+        ;;                                        vv)
+        ;;                                                 ;;(fn [f] (-> f first))
+        ;;                                      v)]))
         ;; _ (log/debug (format "NORMALIZED OBSERVERS: %s" normalized-observers))
         normalized-initializers (into {} (for [[k v] normalized-observers]
                                           [k (if-let [init (:value v)]
@@ -2880,9 +2996,11 @@
   ;; (log/debug (format "PARTITION-LOCAL-PROPERTIES %s" properties))
   (let [props (into {} (filter (fn [[k v]] (not (or (list? v) (seq? v)))) properties))
         methods (into {} (filter (fn [[k v]] (or (list? v) (seq? v))) properties))
+        ;; _ (log/trace "METHODS:" methods)
         observers (into {} (filter (fn [[k v]] (keyword? (first (fnext v))))
                                    methods))
         methods (apply dissoc methods (keys observers))
+        ;; _ (log/trace "METHODS:" methods)
         ]
     [observers methods props]))
 
@@ -2919,14 +3037,28 @@
                             observers))]
     {:observers items}))
 
+(defn- get-component-css
+  [page-sym]
+  ;; (log/trace "get-component-css:" page-sym)
+  ;; assert: page-sym is a sym
+  (let [page-path (utils/sym->path page-sym)
+        path (str page-path ".css")
+        ;; _ (log/trace "path:" path)
+        res  (io/resource path)
+        ;; _ (log/trace "HAS-COMPONENT-CSS:" page-sym path res)
+        content (if res (slurp res) res)]
+                     ;; (catch java.io.FileNotFoundException e nil))]
+    ;; (log/trace "COMPONENT-CSS content:" content)
+    content))
+
 (defmacro defcomponent
   "define a web component"
   {:arglists '([name docstring? attr-map? references*])
    :added "1.0"}
   [name as html-tag & references]
-  ;; (log/debug "    REFS: " references)
   (if (not= as :html) (throw (Exception. (format "Second argument must be :html, not %s" as))))
-  (log/debug "DEFCOMPONENT: " html-tag " as " name)
+  (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
+  ;; (log/debug "    REFS: " references)
   (let [component-var (intern *ns* name)
         ;; _ (log/debug "component var: " component-var)
         ;; process-reference will call fn require for :require, fn import for :import, etc.
@@ -2949,6 +3081,9 @@
                (vary-meta name assoc :doc docstring)
                name)
         ;; _ (log/debug "Name: " name)
+
+        cljs-delegate-ns (symbol (str (-> *ns* ns-name) "." name))
+        ;; _ (log/debug "cljs delegate ns: " cljs-delegate-ns)
 
         references (if docstring (next references) references)
         ;; _ (log/debug "REFERENCES: " references)
@@ -2974,16 +3109,18 @@
 
         ;; convert direct :foo (fn ...) to :foo [<gensym> (fn ...)] so we can construct indirection
         sanitized-interface-properties (sanitize-if-props (-> raw-properties :polymer/properties))
-        ;;_ (log/debug (format "INTERFACE PROPS %s" sanitized-interface-properties))
+        ;; _ (log/debug (format "SANITIZED INTERFACE PROPS %s" sanitized-interface-properties))
 
         ;; now in properties convert :foo (fn...) to :foo <gensym>
         interface-properties (normalize-properties
+;;                              cljs-delegate-ns
                               (validate-property-types
                                sanitized-interface-properties))
-        ;; _ (log/debug (format "NORMALIZED PROPS %s" interface-properties))
+        ;; _ (log/debug (format "NORMALIZED INTERFACE PROPS %s" interface-properties))
 
         ;; finally put the [<gensym> defn] entries in a map
         interface-methods (if-properties->methods sanitized-interface-properties)
+;;        interface-methods (if-properties->methods interface-properties)
         ;; _ (log/debug (format "INTERFACE METHODS %s" interface-methods))
 
         local-properties (dissoc raw-properties :polymer/properties :polymer/static)
@@ -2992,7 +3129,7 @@
         [compound-observers local-methods local-properties]
         (partition-local-properties local-properties)
 
-        observers (normalize-compound-observers compound-observers interface-properties)
+        observers (normalize-compound-observers compound-observers sanitized-interface-properties)
 
         ;; _ (log/debug (format "LOCAL PROPERTIES %s" local-properties))
         ;; _ (log/debug (format "LOCAL METHODS %s" local-methods))
@@ -3026,11 +3163,13 @@
         ;;                    {:protocol (first arg) :fns (rest arg)})
         proto-sets (apply list (partition-when symbol? protos)) ;;)))
         ;; _ (doseq [s proto-sets] (log/debug (format "p %s" s)))
+
         instance-methods (set (filter (fn [arg] (let [sym (first arg)
                                                  psym (interface-sym->protocol-sym sym)]
                                              (or (= sym 'This)
-                                                 (= psym 'miraj.polymer.protocol/Lifecycle))))
+                                                 (= psym 'miraj.polymer.protocols/Lifecycle))))
                           proto-sets))
+
         instance-methods (seq (mapcat identity (for [method instance-methods] (drop 1 method))))
         ;; _ (log/debug (format "INSTANCE-methods %s" instance-methods))
         instance-methods (apply merge-with concat
@@ -3038,10 +3177,17 @@
                                   {(keyword (first method)) (conj (rest method) 'fn)}))
         ;; _ (log/debug "INSTANCE methods: " instance-methods)
 
+        ;; lifecycle-cbs (seq (filter (fn [arg] (let [sym (first arg)
+        ;;                                            psym (interface-sym->protocol-sym sym)]
+        ;;                                        ;; (log/trace (format "SYM/PSYM: %s / %s" sym psym))
+        ;;                                        (= psym 'miraj.polymer.protocols/Lifecycle)))
+        ;;                        proto-sets))
+        ;; _ (log/debug (format "LIFECYCLE cbs %s" lifecycle-cbs))
+
         listeners (seq (filter (fn [arg] (let [sym (first arg)
                                                psym (interface-sym->protocol-sym sym)]
                                            (and (not= sym 'This)
-                                                (not= psym 'miraj.polymer.protocol/Lifecycle))))
+                                                (not= psym 'miraj.polymer.protocols/Lifecycle))))
                                proto-sets))
         ;; _ (log/debug (format "LISTENERS %s" listeners))
 
@@ -3077,7 +3223,8 @@
         properties (merge interface-properties static-properties
                           instance-methods
                           local-properties local-methods observers observer-array
-                          interface-methods listeners-map listener-methods)
+                          interface-methods
+                          listeners-map listener-methods)
         ;; _ (log/debug (format "COMBINED PROPS %s" properties))
         ;; _ (log/debug (format "COMBINED PROPS KEYS %s" (keys properties)))
 
@@ -3085,9 +3232,15 @@
         ;; helper-cljs-ns (symbol (str (-> *ns* ns-name) ".delegate"))
         component-cljs-ns (symbol (str (-> *ns* ns-name) "." name ".core"))
         helper-cljs-ns (symbol (str (-> *ns* ns-name) "." name))
+
+        component-css (get-component-css helper-cljs-ns)
+
+        ;; _ (log/trace "Component-css: " component-css)
+
+
         polymer-ctor (str/join "\n" [(pprint-str (list 'ns component-cljs-ns
                                                        (list :require
-                                                             (vector helper-cljs-ns :as 'del)
+                                                             (vector helper-cljs-ns :as name)
                                                              '[goog.string :as gstring]
                                                              '[goog.string.format]
                                                              #_'[weasel.repl :as repl])))
@@ -3104,7 +3257,8 @@
                                                                  (fn [] (println "import finished"))
                                                                  (fn [e#] (println "import error " e#))))
                                      (newline)
-                                     (pprint-str `(.whenReady js/HTMLImports
+                                     ;; (pprint-str `(.whenReady js/HTMLImports
+                                     (pprint-str `(.addEventListener js/document "WebComponentsReady"
                                                               (cljs.core/fn []
                                                                 (try
                                                                   ;;(println "FOOBAR")
@@ -3129,41 +3283,23 @@
     `(do
        (with-loading-context
          (let [reqs# (into {} [~@(map process-reference references)])
-               ;; _# (println "reqs#: " reqs#)
+               ;; _# (println "REQS#: " reqs#)
 
                ;; head# (apply codom/element :head {} (vec (flatten (list (:require reqs#) (:import reqs#)))))
                head# (flatten (list (:require reqs#) (:import reqs#)))
                ;; _# (println "HEAD# " head#)
-               ;; _# (println "HEAD# " head#)
 
-               ;; body# (apply codom/element :codom {} (:codom reqs#))
-               body# (:miraj/codom reqs#)
+               css# (:css reqs#)
+               compcss# (codom/element :style ~component-css)
+               ;; _# (println "COMPONENT-CSS#: " compcss#)
+               compcss# (conj css# compcss#) ; (if ~component-css (list ~component-css) nil))
+               ;; _# (println "COMPCSS# " compcss#)
+
+               body# (concat compcss# (:miraj/codom reqs#))
                ;; _# (println "BODY# " body#)
 
-               ;; html# (apply codom/element :html {} (vec (flatten (list head# body#))))
-               codom# (concat head# body#)
+               codom# (concat head# (concat body#))
                ;; _# (println "CODOM# " codom#)
-
-               ;; reqsvec# [~@(map process-reference references)]
-               ;; _# (log/info "reqsvec#: " reqsvec#)
-
-               ;; turn the vector into a map
-               ;; foo# (for [v# reqsvec#] {(first v#) [(second v#)]})
-               ;; _# (log/info "foo#: " foo#)
-
-               ;; pull the map out of the list
-               ;; reqs# (apply merge-with concat foo#)
-               ;; reqs# (into {} reqsvec#)
-               ;; _# (log/info "reqs#: " reqs#)
-
-               ;; head# (apply codom/element :head {} (vec (flatten (list
-               ;;                                                (:require reqs#)
-               ;;                                                (:import reqs#)
-               ;;                                                (:css reqs#)))))
-               ;; ;; _# (log/debug "HEAD# " head#)
-               ;; body# (apply codom/element :body {} (doall (:body reqs#)))
-               ;; html# (binding [*ns* ~*ns*]
-               ;;         (apply codom/element :html {} (vec (flatten (list head# body#)))))
 
                tree# (apply codom/element ;;~(keyword nm)
                             :CODOM_56477342333109
@@ -3171,8 +3307,6 @@
                ;; _# (println "TREE# " tree#)
 
                codom-norm# (codom/xsl-xform
-                            ;; FIXME: convert to reading xsl file
-                            ;; codom/xsl-normalize-codom
                             "normalize-codom"
                             tree#)
                ;; _# (println "CODOM-NORM#: " codom-norm#)

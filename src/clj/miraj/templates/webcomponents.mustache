@@ -5,15 +5,15 @@
   {{#miraj/refer-clojure}}(:refer-clojure :exclude {{exclude}}){{/miraj/refer-clojure}}
   (:require [miraj.co-dom :as codom])) ;; :refer [element #_parse-elt-args]]))
 
-;; (alter-meta! *ns* (fn [m] (assoc m :miraj/miraj {:miraj/elements true
-;;                                                  :miraj/nss '{{miraj/nss}}
-;;                                                  :miraj/codom "{{miraj/codom}}"
-;;                                                  :miraj/assets
-;;                                                  {:miraj/bower
-;;                                                   [
-;; {{#miraj/base.miraj/assets.miraj/bower}}"{{cmd}}" {{/miraj/base.miraj/assets.miraj/bower}}
-;;                                                    ]
-;;                                                    :miraj/base "{{miraj/base.miraj/assets.miraj/href}}"}})))
+(alter-meta! *ns* (fn [m] (assoc m :miraj/miraj {:miraj/elements true
+                                                 :miraj/nss '{{miraj/nss}}
+                                                 :miraj/codom "{{miraj/codom}}"
+                                                 :miraj/assets
+                                                 {:miraj/bower
+                                                  [
+{{#miraj/base.miraj/assets.miraj/bower}}"{{cmd}}" {{/miraj/base.miraj/assets.miraj/bower}}
+                                                   ]
+                                                   :miraj/base "{{miraj/base.miraj/assets.miraj/href}}"}})))
 
 ;; (println "loading {{miraj/ns}}")
 

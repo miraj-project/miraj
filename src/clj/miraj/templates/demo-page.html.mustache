@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+    <head>
+        <script type="text/javascript" src="/bower_components/webcomponentsjs/webcomponents-lite.min.js"></script>
+        <title>Demo Page</title>
+        <meta name="description" content="This page was generated for testing components.">
+	<link href="demo.css" type="text/css" rel="stylesheet">
+{{#hrefs}}
+        <link rel="import" href="{{href}}">
+{{/hrefs}}
+    </head>
+    <body>
+        <h1>Component Test Page </h1>
+{{#components}}
+	<div>
+          <h2>Component: {{component}} -> &langle;{{tag}}&rangle;  ({{href}})</h2>
+	  <div class="demo">
+            <{{tag}}></{{tag}}>
+	  </div>
+	</div>
+
+{{/components}}
+        <script src="{{js}}"></script>
+    </body>
+</html>
+
