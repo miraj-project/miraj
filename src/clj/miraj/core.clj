@@ -154,22 +154,31 @@
         (optimize-js doc)))))
 ;;    (log/debug "Unrecognized optimizer: " strategy)))
 
+(defn get-component-vars-for-ns
+  "Find all component vars in namespace."
+  [component-ns]
+  (binding [*ns* component-ns]
+    (let [component-vars (vals (into {}  (filter (fn [r] (-> r second meta :miraj/miraj :miraj/defcomponent))
+                                                 (ns-interns component-ns))))
+          ]
+      component-vars)))
+
 (defn get-defcomponent-vars-for-nss
   "Search namespaces for defcomponent vars"
   [nss]
-  (log/debug "get-componenent-vars for nss: " nss)
+  ;; (log/debug "get-defcomponenent-vars for nss: " nss)
   ;;(let [nss (or nss (all-ns))]
   (for [the-ns (seq nss)]
     (do
-      (log/trace "getting ns:" the-ns)
+      ;; (log/trace "getting ns:" the-ns)
       (clojure.core/require [the-ns])
       (let [interns-map (ns-interns (find-ns the-ns))
-            _ (log/trace "interns-map:" interns-map)
+            ;; _ (log/trace "interns-map:" interns-map)
             component-vars (filter (fn [entry]
                                     (-> entry last meta :miraj/miraj :miraj/defcomponent))
                                   interns-map)
             result (map second component-vars)]
-        (log/trace "get-componenent-vars result:" result)
+        ;; (log/trace "get-componenent-vars result:" result)
         result))))
 
 (defn get-component-fnvars-for-lib-nss
@@ -189,44 +198,6 @@
             result (map second component-vars)]
         (log/trace "get-component-fnvars-for-lib-nss result:" result)
         result))))
-
-(defn get-deflib-vars
-  "Search namespaces for deflibrary"
-  [nss]
-  (log/debug "get-deflib-vars for nss: " nss)
-  (for [the-ns (seq nss)]
-    (do
-      (clojure.core/require the-ns)
-      (let [interns-map (ns-interns the-ns)
-            component-vars (filter (fn [entry]
-                                    (-> entry last meta :miraj/miraj :miraj/deflibrary))
-                                  interns-map)]
-        (map second component-vars)))))
-
-(defn get-component-vars-for-ns
-  "Find all component vars in namespace."
-  [component-ns]
-  ;; (log/debug "get-component-vars-for-ns: " component-ns)
-  #_(binding [*ns* component-ns]
-    (doseq [n (ns-interns component-ns)]
-      (log/debug "INTERN: " n)
-      (log/debug (-> n second meta :miraj/miraj :miraj/defcomponent))))
-  (binding [*ns* component-ns]
-    (let [component-vars (vals (into {}  (filter (fn [r] (-> r second meta :miraj/miraj :miraj/defcomponent))
-                                                 (ns-interns component-ns))))
-          ]
-      component-vars)))
-
-(defn get-page-vars-for-ns
-  "Find all defpage vars in namespace."
-  [page-ns]
-  (binding [*ns* page-ns]
-    (let [page-vars (vals (into {}
-                                (filter (fn [r]
-                                          (-> r second meta :miraj/miraj :miraj/defpage))
-                                        (ns-interns page-ns))))
-          ]
-      page-vars)))
 
 (defn get-component-vars-all-nss
   "Find all miraj vars with :miraj/assets metadata, so we can construct link
@@ -352,20 +323,47 @@
       ;; (doseq [refvar allrefs] (log/debug " REFVAR: " refvar))
       allrefs)))
 
+(defn get-page-vars-for-ns
+  "Find all defpage vars in namespace."
+  [page-ns]
+  (binding [*ns* page-ns]
+    (let [page-vars (vals (into {}
+                                (filter (fn [r]
+                                          (-> r second meta :miraj/miraj :miraj/defpage))
+                                        (ns-interns page-ns))))
+          ]
+      page-vars)))
+
+(defn get-deflib-vars
+  "Search namespaces for deflibrary"
+  [nss]
+  (log/debug "get-deflib-vars for nss: " nss)
+  (for [the-ns (seq nss)]
+    (do
+      (clojure.core/require the-ns)
+      (let [interns-map (ns-interns the-ns)
+            component-vars (filter (fn [entry]
+                                    (-> entry last meta :miraj/miraj :miraj/deflibrary))
+                                  interns-map)]
+        (map second component-vars)))))
+
 (def polyfills
   {:lite  (str bower-repo "/webcomponentsjs/webcomponents-lite.js")
    :heavy (str bower-repo "/webcomponentsjs/webcomponents.js")})
 
 (declare has-deps-edn)
 
-(defn- has-cljs-edn
+(defn- has-cljs
   [page-sym]
   ;; assert: page-sym is a sym
   (let [page-path (utils/sym->path page-sym)
-        path (str page-path ".cljs.edn")
+        path (str page-path ".cljs")
         ;; _ (log/trace "PAGEPATH:" path)
         res  (io/resource path)]
-    (if res (str "/" page-path ".js") false)))
+    (if res
+      "main.js"
+      ;;(str "/" page-path ".js")
+      false)))
 
 ;; FIXME: call this compiler.clj? it's called by compiler.clj/compile-page-ref
 (defn normalize
@@ -408,6 +406,7 @@
                                                            e (-> e meta :miraj/miraj :miraj/nss)))
                                   (and
                                    (not (empty? (-> e meta :miraj/miraj :miraj/nss)))
+                                   (not (-> e meta :miraj/miraj :miraj/deflibrary))
                                    (or (-> e meta :miraj/miraj :miraj/elements)
                                        (-> e meta :miraj/miraj :miraj/styles))
                                    #_(-> e meta :miraj/miraj :miraj/assets :miraj/impl-nss)))
@@ -450,9 +449,9 @@
                                         ;; :href (str "miraj/" *miraj-sym* "-import.html")}))
                                   ;; :href (str (-> lib meta :miraj/miraj :miraj/assets :miraj/href))}))
 
-        script-links (if (not (empty? miraj-links)) ;; (for [lib miraj-libs]
-                       (apply codom/element :script
-                              {:src (str "/" (utils/ns->path page-ns) "/js/components.js")}))
+        ;; script-links (if (not (empty? miraj-links)) ;; (for [lib miraj-libs]
+        ;;                (apply codom/element :script
+        ;;                       {:src (str "/" (utils/ns->path page-ns) "/js/components.js")}))
         ;; _ (log/debug (format "Script Links %s" (seq script-links)))
 
                                            ;; #_(str (-> lib meta
@@ -460,8 +459,8 @@
                                            ;;            :miraj/assets
                                            ;;            :miraj/script))}))
 
-        cljs-main (if-let [cljs-edn (has-cljs-edn page-ref)]
-                    (codom/element :script {:src cljs-edn}))
+        cljs-main (if-let [cljs (has-cljs page-ref)]
+                    (codom/element :script {:src cljs}))
         ;; _ (log/trace "CLJS MAIN:" cljs-main)
 
         ;; _ (log/debug "PAGE META: " (meta page-ref))
@@ -544,10 +543,12 @@
                                                               :href import})))
                                     html-meta-elts
                                     (if (not (has-deps-edn page-ref-sym))
-                                      (list vendor-links
-                                            miraj-links))
-                                    (if cljs-main cljs-main)
-                                    script-links
+                                      (list miraj-links
+                                            vendor-links))
+                                    (if cljs-main
+                                      (list (codom/element :base {:href "/"})
+                                            cljs-main))
+                                    ;; script-links
                                     (:content header))))
         ;; _ (log/debug (format "HEADER-ELTS %s" (seq header-elts)))
         newheader (apply codom/element :head header-elts)
@@ -1767,20 +1768,9 @@
 (defn require
   "Called by defpage to have clojure.core/require load polymer libs."
   [page-sym & args]
-  (log/debug "REQUIRE DIRECTIVE: " page-sym args)
-  ;; (let [cljs-requires (filter map? args)
-  ;;       clj-requires  (filter #(not (map? %) args))
-  ;;       reqres (remove nil? (flatten (apply load-libs :require args)))
-  ;;       ;; _ (log/debug "    REQRESULT: " reqres)
-  ;;       ;; reqelts (for [arg args] ;; [req reqres]
-  ;;       ;;           (do ;; (log/debug "arg: " arg)
-  ;;       ;;           (codom/element :link {:rel "import"
-  ;;       ;;                             :href (str (first arg))
-  ;;       ;;                             #_req})))
-  ;;       ]
-  ;;   ;; (log/debug "    :REQUIRE RESULT: " reqelts)
-  ;;   ;;(alter-meta! page-sym (fn [old] (assoc old :_webcomponents args)))
-    {:require nil #_reqelts})
+  ;; (log/debug "REQUIRE DIRECTIVE: " page-sym args)
+  (apply clojure.core/require args)
+  {:require nil})
 
 (defn defcomponent-require
   "Called by defcomponent to have clojure.core/require load polymer libs."
@@ -2073,7 +2063,7 @@
 (defn defcomponent-css
   "Fn that handles :css directive of miraj.core/defcomponent"
   [component-sym & css-specs]
-  (log/debug "DEFCOMPONENT CSS DIRECTIVE for : " component-sym css-specs)
+  ;; (log/debug "DEFCOMPONENT CSS DIRECTIVE for : " component-sym css-specs)
   (let [flags (filter keyword? css-specs)
         opts (apply hash-map (interleave flags (repeat true)))
         args (filter (complement keyword?) css-specs)]
@@ -2456,7 +2446,7 @@
     ;; (log/debug ":BODY " content)
     [:miraj/codom content]))
 
-(defmacro defweb-codom
+#_(defmacro defweb-codom
   ""
   {:arglists '([name docstring? attr-map? references*])
    :added "1.0"}
@@ -3057,7 +3047,7 @@
    :added "1.0"}
   [name as html-tag & references]
   (if (not= as :html) (throw (Exception. (format "Second argument must be :html, not %s" as))))
-  (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
+  ;; (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
   ;; (log/debug "    REFS: " references)
   (let [component-var (intern *ns* name)
         ;; _ (log/debug "component var: " component-var)
@@ -3234,9 +3224,7 @@
         helper-cljs-ns (symbol (str (-> *ns* ns-name) "." name))
 
         component-css (get-component-css helper-cljs-ns)
-
         ;; _ (log/trace "Component-css: " component-css)
-
 
         polymer-ctor (str/join "\n" [(pprint-str (list 'ns component-cljs-ns
                                                        (list :require
@@ -3251,12 +3239,12 @@
                                      ;; FIXME: parameterize host and port
                                      (pprint-str (list 'enable-console-print!))
                                      (str/join "\n" (rest cljs-preamble))
-                                     (newline)
+                                     "\n"
                                      #_(pprint-str `(.importHref js/Polymer.Base
                                                                  ~(str "/" (utils/sym->path cljs-ns) ".html")
                                                                  (fn [] (println "import finished"))
                                                                  (fn [e#] (println "import error " e#))))
-                                     (newline)
+                                     "\n"
                                      ;; (pprint-str `(.whenReady js/HTMLImports
                                      (pprint-str `(.addEventListener js/document "WebComponentsReady"
                                                               (cljs.core/fn []
@@ -3267,7 +3255,7 @@
                                                                     ~(merge {:is (keyword html-kw)} properties)))
                                                                   (catch js/Error e#
                                                                     (println "Caught exception on registration:" e#))))))])
-        ;; _ (log/debug (format "Polymer CTOR %s" polymer))
+        ;; _ (log/debug (format "Polymer CTOR %s" polymer-ctor))
 
         ;; impl-ns (str (utils/ns->path *ns*) "/" (utils/sym->path (clojure.core/name html-kw)))
         ;; impl-ns (symbol (str (ns-name *ns*) "." (clojure.core/name html-kw)))
@@ -3388,7 +3376,7 @@
                         ;;:doc ~(str docstr)
                         )
 
-           (println "Component defined:" cvar#) ;; (meta cvar#))
+           ;; (println "Component defined:" cvar#) ;; (meta cvar#))
            #_(alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defcomponent true}})))
            ~component-var)))))
 
@@ -3499,7 +3487,7 @@
   {:arglists '([name docstring? attr-map? args*])
    :added "1.0"}
   [name & args]
-  (log/debug "DEFLIBRARY: " name " in " *ns*)
+  ;; (log/debug "DEFLIBRARY: " name " in " *ns*)
   (let [lib-sym (symbol (str (-> *ns* ns-name)) (str name))
         docstring  (when (string? (first args)) (first args))
         ;; _ (println "DOCSTR: " docstring)
@@ -3521,7 +3509,7 @@
                                     :miraj/elements
                                     (if (:miraj/defstyles args)
                                       :miraj/styles))}}
-        _ (log/debug "miraj-meta " miraj-meta)
+        ;; _ (log/debug "miraj-meta " miraj-meta)
         ]
   `(do (if ~docstring
          (def ~lib-sym ~(str docstring) ~args)
