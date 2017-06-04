@@ -7,7 +7,7 @@
  :resource-paths #{"src/clj" "resources/public"}
  ;; :source-paths #{"src/test"}
 
- :checkouts '[[miraj/co-dom "1.0.0-SNAPSHOT"]]
+ ;; :checkouts '[[miraj/co-dom "1.0.0-SNAPSHOT"]]
 
  :repositories #(conj % ["clojars" {:url "https://clojars.org/repo/"}])
 
@@ -15,10 +15,10 @@
                    [org.clojure/data.json "0.2.6"]
                    [clj-time "0.11.0"]
                    [miraj/co-dom "1.0.0-SNAPSHOT"]
+                   [miraj/html "5.1.0-SNAPSHOT"]
                    [stencil "0.5.0"] ;; needed by compiler
 
                    ;; ;; testing
-                   ;; [miraj/html "5.1.0-SNAPSHOT" :scope "test"]
                    ;; ;; [miraj.polymer/paper "1.2.3-SNAPSHOT" :scope "test"]
                    ;; [miraj.polymer/iron "1.2.3-SNAPSHOT" :scope "test"]
                    ;; [pandeiro/boot-http "0.7.3" :scope "test"]
@@ -58,15 +58,29 @@
        :description "miraj core"
        :url         "https://github.com/miraj-project/miraj.git"
        :scm         {:url "https://github.com/miraj-project/miraj.git"}
-       :license     {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}})
+       :license     {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}}
+ push {:repo "clojars"})
 
 (deftask build
   "build"
   []
   (comp (pom)
+        (jar)))
+
+(deftask install-local
+  "Build and install component libraries"
+  []
+  (comp (build)
+        (pom)
         (jar)
-        (install)
-        (target)))
+        (target)
+        (install)))
+
+(deftask deploy
+  "deploy to clojars"
+  []
+  (comp (install-local)
+        (push)))
 
 (deftask dev
   "watch etc."

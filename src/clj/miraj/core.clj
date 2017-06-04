@@ -65,8 +65,11 @@
 
 (def bower-repo "/miraj/polymer/assets") ;; "bower_components")
 
-(defn pprint-str [m]
-  (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
+;; (defn pprint-str [m]
+;;   (with-out-str (pp/write m :dispatch pp/code-dispatch)))
+
+;; (defn pprint-str [m]
+;;   (let [w (StringWriter.)] (pp/pprint m w)(.toString w)))
 
 (def cljkey->jskey
   {:notify :notify
@@ -158,15 +161,16 @@
   "Find all component vars in namespace."
   [component-ns]
   (binding [*ns* component-ns]
-    (let [component-vars (vals (into {}  (filter (fn [r] (-> r second meta :miraj/miraj :miraj/defcomponent))
+    (let [component-vars (vals (into {}  (filter (fn [r] (-> r second meta
+                                                             :miraj/miraj :miraj/defcomponent))
                                                  (ns-interns component-ns))))
           ]
       component-vars)))
 
-(defn get-defcomponent-vars-for-nss
-  "Search namespaces for defcomponent vars"
+(defn get-component-fnvars-for-lib-nss
+  "Search lib namespaces for component fn vars"
   [nss]
-  ;; (log/debug "get-defcomponenent-vars for nss: " nss)
+  ;; (log/debug "get-component-fnvars-for-lib-nss:" nss)
   ;;(let [nss (or nss (all-ns))]
   (for [the-ns (seq nss)]
     (do
@@ -175,28 +179,10 @@
       (let [interns-map (ns-interns (find-ns the-ns))
             ;; _ (log/trace "interns-map:" interns-map)
             component-vars (filter (fn [entry]
-                                    (-> entry last meta :miraj/miraj :miraj/defcomponent))
-                                  interns-map)
-            result (map second component-vars)]
-        ;; (log/trace "get-componenent-vars result:" result)
-        result))))
-
-(defn get-component-fnvars-for-lib-nss
-  "Search lib namespaces for component fn vars"
-  [nss]
-  (log/debug "get-component-fnvars-for-lib-nss:" nss)
-  ;;(let [nss (or nss (all-ns))]
-  (for [the-ns (seq nss)]
-    (do
-      (log/trace "getting ns:" the-ns)
-      (clojure.core/require [the-ns])
-      (let [interns-map (ns-interns (find-ns the-ns))
-            _ (log/trace "interns-map:" interns-map)
-            component-vars (filter (fn [entry]
                                     (-> entry last meta :miraj/miraj :miraj/element))
                                   interns-map)
             result (map second component-vars)]
-        (log/trace "get-component-fnvars-for-lib-nss result:" result)
+        ;; (log/trace "get-component-fnvars-for-lib-nss result:" result)
         result))))
 
 (defn get-component-vars-all-nss
@@ -442,7 +428,7 @@
         miraj-links (for [lib miraj-libs]
                       (codom/element :link
                                      {:rel "import"
-                                      :href (str "/" (utils/ns->path page-ns) "/miraj-imports.html")}))
+                                      :href (str (utils/ns->path page-ns) "/deps.html")}))
 
         ;; _ (log/debug (format "Miraj Links %s" (seq miraj-links)))
 
@@ -1466,6 +1452,7 @@
      "True while a verbose load is pending"}
   *loading-verbosely* false)
 
+;; OBSOLETE
 (defn declare-webcomponent
   [ns-sym nm-sym type & docstring]
   (log/debug "    DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
@@ -1883,7 +1870,7 @@
 
 (defn- get-polymer-style-map
   [style-vec]
-  (log/trace "FN: get-polymer-style-map" style-vec)
+  ;; (log/trace "FN: get-polymer-style-map" style-vec)
   (let [lib (first style-vec)
         fns (rest style-vec)]
     (clojure.core/require lib)
@@ -2675,6 +2662,7 @@
   (let [behaviors (keys  (:behaviors behs))]
     {:behaviors (into [] (map keyword behaviors))}))
 
+;; OBSOLETE?
 (defn component->prototype
   [cvar html-tag args-map] ;; rawprops rawlisteners rawbehaviors rawmethods]
   (log/debug "COMPONENT->PROTOTYPE: " cvar (type cvar))
@@ -2705,10 +2693,10 @@
                                       (:behaviors args-map) (:methods args-map)))
         _ (log/debug "METHODS MAP: " methmap)
         behaviors (behaviors->cljs (:behaviors args-map))
-        ;; cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns))
-        ;;                      (pprint-str '(enable-console-print!))
-        ;;                      (pprint-str '(log/debug "hello"))])
-        ;;                      ;; (pprint-str (list 'js/Polymer
+        ;; cljs (str/join "\n" [(codom/pprint-str (list 'ns cljs-ns))
+        ;;                      (codom/pprint-str '(enable-console-print!))
+        ;;                      (codom/pprint-str '(log/debug "hello"))])
+        ;;                      ;; (codom/pprint-str (list 'js/Polymer
         ;;                      ;;                   (list 'clj->js
         ;;                      ;;                         (merge {:is (keyword (:name (meta cvar)))}
         ;;                      ;;                                interface-properties
@@ -2719,16 +2707,16 @@
         ;; FIXME: parameterize repl and console print
 
         ;;clsj (->prototype ...)
-        cljs (str/join "\n" [(pprint-str (list 'ns cljs-ns
+        cljs (str/join "\n" [(codom/pprint-str (list 'ns cljs-ns
                                                #_'(:require #_[clojure.browser.repl :as repl]
                                                           #_[weasel.repl :as repl])))
                              ;; FIXME: parameterize host and port
-                             (pprint-str '(when-not (repl/alive?)
+                             (codom/pprint-str '(when-not (repl/alive?)
                                             (repl/connect "ws://localhost:9001/repl")))
-                             (pprint-str '(defonce conn
+                             (codom/pprint-str '(defonce conn
                                             (repl/connect "http://localhost:9000/repl")))
-                             (pprint-str (list 'enable-console-print!))
-                             (pprint-str (list 'js/Polymer
+                             (codom/pprint-str (list 'enable-console-print!))
+                             (codom/pprint-str (list 'js/Polymer
                                                (list 'clj->js
                                                      (merge {:is (keyword html-tag)}; (keyword (:name (meta cvar)))}
                                                             interface-properties
@@ -3041,13 +3029,36 @@
     ;; (log/trace "COMPONENT-CSS content:" content)
     content))
 
+(declare get-external-deps-map)
+
+(defn- get-component-deps
+  [page-sym]
+  ;; (log/trace "get-component-deps:" page-sym)
+  ;; assert: page-sym is a sym
+  (let [pagelib-path (utils/sym->path page-sym)
+        ;; _ (log/trace "pagelib-path:" pagelib-path)
+        external-deps (get-external-deps-map pagelib-path)
+        ;; _ (log/trace "EXTERNAL DEPS: " external-deps)
+        css (for [m (:css external-deps)]
+                       (codom/element :link {:rel "stylesheet"
+                                             :href (:href m)}))
+        ;; _ (log/trace "CSS deps:" css)
+        inline-css (into css (for [inline (:inline-css external-deps)]
+                         (codom/element :style (:css inline))))
+        deps (into inline-css (for [style (:polymer-styles external-deps)]
+                                (codom/element :link {:rel "import"
+                                                      :href (:href style)})))
+        ]
+    (vec deps)))
+    ;; [(apply codom/element :div {:id "component-deps"} deps)]))
+
 (defmacro defcomponent
   "define a web component"
   {:arglists '([name docstring? attr-map? references*])
    :added "1.0"}
   [name as html-tag & references]
   (if (not= as :html) (throw (Exception. (format "Second argument must be :html, not %s" as))))
-  ;; (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
+  (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
   ;; (log/debug "    REFS: " references)
   (let [component-var (intern *ns* name)
         ;; _ (log/debug "component var: " component-var)
@@ -3219,48 +3230,56 @@
         ;; _ (log/debug (format "COMBINED PROPS KEYS %s" (keys properties)))
 
         ;; component-cljs-ns (symbol (str (-> *ns* ns-name) "." (clojure.core/name html-kw)))
-        ;; helper-cljs-ns (symbol (str (-> *ns* ns-name) ".delegate"))
         component-cljs-ns (symbol (str (-> *ns* ns-name) "." name ".core"))
-        helper-cljs-ns (symbol (str (-> *ns* ns-name) "." name))
 
-        component-css (get-component-css helper-cljs-ns)
+        ;; component-sym (symbol (str (-> *ns* ns-name) ".delegate"))
+        component-sym (symbol (str (-> *ns* ns-name) "." name))
+
+        component-css (get-component-css component-sym)
         ;; _ (log/trace "Component-css: " component-css)
 
-        polymer-ctor (str/join "\n" [(pprint-str (list 'ns component-cljs-ns
-                                                       (list :require
-                                                             (vector helper-cljs-ns :as name)
-                                                             '[goog.string :as gstring]
-                                                             '[goog.string.format]
-                                                             #_'[weasel.repl :as repl])))
-                                     #_(pprint-str '(when-not (repl/alive?)
+        polymer-ctor (str/join "\n" [(codom/pprint-str (remove nil?
+                                                         (list 'ns component-cljs-ns
+                                                               (if (has-cljs component-sym)
+                                                                 (list :require
+                                                                       (vector component-sym :as name))))))
+                                                             ;; '[goog.string :as gstring]
+                                                             ;; '[goog.string.format]
+                                                             ;; #_'[weasel.repl :as repl]))))
+                                     #_(codom/pprint-str '(when-not (repl/alive?)
                                                       (repl/connect "ws://localhost:9001/repl")))
-                                     #_(pprint-str '(defonce conn
+                                     #_(codom/pprint-str '(defonce conn
                                                       (repl/connect "ws://localhost:9000/repl")))
                                      ;; FIXME: parameterize host and port
-                                     (pprint-str (list 'enable-console-print!))
+                                     ;; (codom/pprint-str (list 'enable-console-print!))
                                      (str/join "\n" (rest cljs-preamble))
                                      "\n"
-                                     #_(pprint-str `(.importHref js/Polymer.Base
+                                     #_(codom/pprint-str `(.importHref js/Polymer.Base
                                                                  ~(str "/" (utils/sym->path cljs-ns) ".html")
                                                                  (fn [] (println "import finished"))
                                                                  (fn [e#] (println "import error " e#))))
                                      "\n"
-                                     ;; (pprint-str `(.whenReady js/HTMLImports
-                                     (pprint-str `(.addEventListener js/document "WebComponentsReady"
+                                     ;; (codom/pprint-str `(.whenReady js/HTMLImports
+                                     ;;(with-out-str
+                                       (codom/pprint-str `(.addEventListener js/document "WebComponentsReady"
                                                               (cljs.core/fn []
                                                                 (try
-                                                                  ;;(println "FOOBAR")
                                                                   (js/Polymer
                                                                    (cljs.core/clj->js
-                                                                    ~(merge {:is (keyword html-kw)} properties)))
+                                                                    ~(merge {:is (keyword html-kw)}
+                                                                            properties)))
                                                                   (catch js/Error e#
-                                                                    (println "Caught exception on registration:" e#))))))])
-        ;; _ (log/debug (format "Polymer CTOR %s" polymer-ctor))
+                                                                    (println "\"Caught exception on registration:\"" e#))))))])
+
+        ;; _ (log/trace "Polymer CTOR" polymer-ctor)
 
         ;; impl-ns (str (utils/ns->path *ns*) "/" (utils/sym->path (clojure.core/name html-kw)))
         ;; impl-ns (symbol (str (ns-name *ns*) "." (clojure.core/name html-kw)))
         impl-ns (symbol (str (ns-name *ns*) "." name ".core"))
         ;; _ (log/debug (format "IMPL-NS %s" impl-ns))
+
+        component-deps (get-component-deps component-sym)
+        ;; _ (log/trace "Component-deps: " component-deps)
 
         html-ns (symbol (str (ns-name *ns*) "." name))
 
@@ -3270,6 +3289,7 @@
         ]
     `(do
        (with-loading-context
+         ;; (println "component var:" ~component-var)
          (let [reqs# (into {} [~@(map process-reference references)])
                ;; _# (println "REQS#: " reqs#)
 
@@ -3283,7 +3303,9 @@
                compcss# (conj css# compcss#) ; (if ~component-css (list ~component-css) nil))
                ;; _# (println "COMPCSS# " compcss#)
 
-               body# (concat compcss# (:miraj/codom reqs#))
+               body1# (concat compcss# (:miraj/codom reqs#))
+
+               body# (concat ~component-deps body1#)
                ;; _# (println "BODY# " body#)
 
                codom# (concat head# (concat body#))
@@ -3353,6 +3375,7 @@
            ;;           (merge {:doc ~docstring :_webcomponent true} ~properties)))
 
            ;; (println "ALTERING META FOR " cvar#)
+           ;; (println "PRE ctor:" ~polymer-ctor)
            (alter-meta! cvar#
                         (fn [old# new#]
                           (do
@@ -3375,9 +3398,17 @@
                          :miraj/codom result#}  ;; compile serializes codom to an html file
                         ;;:doc ~(str docstr)
                         )
+           ;; (println "P CTOR:" (-> cvar# meta :miraj/miraj :miraj/prototype))
 
            ;; (println "Component defined:" cvar#) ;; (meta cvar#))
-           #_(alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/defcomponent true}})))
+           (alter-meta! *ns*  (fn [old#] (merge old# {:miraj/miraj {:miraj/defcomponent true}}))
+                        #_(fn [m] (assoc m :miraj/miraj {:miraj/elements true
+                                                       :miraj/nss '[]
+                                                       :miraj/codom ""
+                                                       :miraj/assets
+                                                       {:miraj/bower
+                                                        [ ]
+                                                        :miraj/base ""}})))
            ~component-var)))))
 
 ;; version 1:

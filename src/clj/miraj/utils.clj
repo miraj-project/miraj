@@ -127,7 +127,7 @@
 
 (defn var->varsym
   [v]
-  ;; (log/debug "var->sym: " v)
+  ;; (log/debug "var->varsym: " v)
   (let [nm (:name (meta v))
         ;; _ (log/debug "nm: " nm)
         namesp (:ns (meta v))
