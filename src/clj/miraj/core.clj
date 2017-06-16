@@ -333,9 +333,9 @@
                                   interns-map)]
         (map second component-vars)))))
 
-(def polyfills
-  {:lite  (str bower-repo "/webcomponentsjs/webcomponents-lite.js")
-   :heavy (str bower-repo "/webcomponentsjs/webcomponents.js")})
+;; (def polyfills
+;;   {:lite  (str bower-repo "/webcomponentsjs/webcomponents-lite.js")
+;;    :heavy (str bower-repo "/webcomponentsjs/webcomponents.js")})
 
 (declare has-deps-edn)
 
@@ -367,7 +367,7 @@
           [(ns-name page-ref) page-ref (-> page-ref ns-name) (-> page-ref meta :miraj/miraj :miraj/defpage)])
         ;; _ (log/debug (format "page-on-ns? %s" page-on-ns?))
 
-        polyfill (get polyfills (-> page-ref meta :miraj/miraj :miraj/polyfill))
+        ;; polyfill (get polyfills (-> page-ref meta :miraj/miraj :miraj/polyfill))
         ;; _ (log/debug (format "Polyfill %s" polyfill))
 
         imports (-> page-ref meta :miraj/miraj :miraj/deps)
@@ -729,7 +729,7 @@
                                                   (meta (resolve (interface-sym->protocol-sym p))))))))
                                          protos)]
                        (do
-                         (log/debug "P META: " proto
+                         #_(log/debug "P META: " proto
                                   (meta (resolve (interface-sym->protocol-sym proto))))
 
                          (str (:resource-name (meta (resolve
@@ -1453,97 +1453,97 @@
   *loading-verbosely* false)
 
 ;; OBSOLETE
-(defn declare-webcomponent
-  [ns-sym nm-sym type & docstring]
-  (log/debug "    DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
-  (let [ds (if (empty? docstring) ""
-               (if (string? (first docstring))
-                 (first docstring)
-                 (if (vector? (first docstring))
-                   (if (empty? (last (first docstring))) "" (last (first docstring))))))
-        segs (str/split (str ns-sym) #"\.")]
-    (if (= (first segs) "polymer")
-      (let [polymer-cat (last segs)
-            ;; _ (log/debug "polymer category: " polymer-cat)
-            html-tag (str polymer-cat "-" nm-sym)
-            ;; _ (log/debug "html-tag: " html-tag)
-            html-kw (keyword html-tag)
-            uri (str bower-repo "/" (if (vector? (first docstring))
-                                      (ffirst docstring)
-                                      (str html-tag "/" html-tag ".html")))
-            ;; _ (log/debug "uri:      " uri)
-            newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
-                           (fn [& args]
-                             (let [elt (if (empty? args)
-                                         (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
-                                             (codom/element html-kw))
-                                         (let [first (first args)
-                                               rest (rest args)
-                                               [attrs content] (codom/parse-elt-args first rest)]
-                                           (apply codom/element html-kw attrs content)))]
-                               elt)))]
-        ;; (log/debug "NS-SYM: " ns-sym)
-        ;; (log/debug "NM-SYM: " nm-sym)
-        ;; (log/debug "NEWVAR: " newvar)
-        newvar)
-      ;; else custom component
-      (let [html-tag nm-sym
-            html-kw (keyword html-tag)
-            uri (str "/" (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
-            uri (str/replace uri #"-" "_")
-            newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
-                           (fn [& args]
-                             (let [elt (if (empty? args)
-                                         (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
-                                             (codom/element html-kw))
-                                         (let [first (first args)
-                                               rest (rest args)
-                                               [attrs content] (codom/parse-elt-args first rest)]
-                                           (apply codom/element html-kw attrs content)))]
-                               elt)))]
-        ;; (log/debug "NS-SYM: " ns-sym)
-        ;; (log/debug "NM-SYM: " nm-sym)
-        ;; (log/debug "NEWVAR: " newvar)
-        newvar))))
+;; (defn declare-webcomponent
+;;   [ns-sym nm-sym type & docstring]
+;;   (log/debug "    DECLARE-WEBCOMPONENT:" ns-sym nm-sym docstring) ;; elt-kw uri docstring)
+;;   (let [ds (if (empty? docstring) ""
+;;                (if (string? (first docstring))
+;;                  (first docstring)
+;;                  (if (vector? (first docstring))
+;;                    (if (empty? (last (first docstring))) "" (last (first docstring))))))
+;;         segs (str/split (str ns-sym) #"\.")]
+;;     (if (= (first segs) "polymer")
+;;       (let [polymer-cat (last segs)
+;;             ;; _ (log/debug "polymer category: " polymer-cat)
+;;             html-tag (str polymer-cat "-" nm-sym)
+;;             ;; _ (log/debug "html-tag: " html-tag)
+;;             html-kw (keyword html-tag)
+;;             uri (str bower-repo "/" (if (vector? (first docstring))
+;;                                       (ffirst docstring)
+;;                                       (str html-tag "/" html-tag ".html")))
+;;             ;; _ (log/debug "uri:      " uri)
+;;             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
+;;                            (fn [& args]
+;;                              (let [elt (if (empty? args)
+;;                                          (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
+;;                                              (codom/element html-kw))
+;;                                          (let [first (first args)
+;;                                                rest (rest args)
+;;                                                [attrs content] (codom/parse-elt-args first rest)]
+;;                                            (apply codom/element html-kw attrs content)))]
+;;                                elt)))]
+;;         ;; (log/debug "NS-SYM: " ns-sym)
+;;         ;; (log/debug "NM-SYM: " nm-sym)
+;;         ;; (log/debug "NEWVAR: " newvar)
+;;         newvar)
+;;       ;; else custom component
+;;       (let [html-tag nm-sym
+;;             html-kw (keyword html-tag)
+;;             uri (str "/" (str/replace (str ns-sym) #"\." "/") "/" nm-sym ".html")
+;;             uri (str/replace uri #"-" "_")
+;;             newvar (intern ns-sym (with-meta (symbol (str nm-sym)) {:doc ds :uri uri type true})
+;;                            (fn [& args]
+;;                              (let [elt (if (empty? args)
+;;                                          (do ;; (log/debug "COMPONENT FN NO ARGS: " html-kw)
+;;                                              (codom/element html-kw))
+;;                                          (let [first (first args)
+;;                                                rest (rest args)
+;;                                                [attrs content] (codom/parse-elt-args first rest)]
+;;                                            (apply codom/element html-kw attrs content)))]
+;;                                elt)))]
+;;         ;; (log/debug "NS-SYM: " ns-sym)
+;;         ;; (log/debug "NM-SYM: " nm-sym)
+;;         ;; (log/debug "NEWVAR: " newvar)
+;;         newvar))))
 
 ;; OBSOLETE: in earlier versions, we dynamically created and populated
 ;; the lib namespace, rather than loading a lib from a jar.  now we
 ;; now use statically generated libs in jars
-(defn- load-polymer-lib
-  "Dynamically load a polymer lib. Create the namespace (e.g. polymer.x); for each
-  var y, get config data from the polymer/x map, then intern
-  polymer.codom/y"
-  [lib as-alias require]
-  ;; (log/debug "    LOAD-POLYMER-LIB: " lib as-alias require)
-  (let [lns (create-ns lib)
-        _ (log/debug "    created ns:  " lns)
-        segs (str/split (str lib) #"\.")
-        pns (find-ns lib) ; 'miraj.polymer)
-        _ (log/debug "    polymer ns:  " pns)
-        psym (symbol (str lib) (str as-alias))
-        _ (log/debug "    psym: " psym)
-        v (find-var psym)
-        _ (log/debug "    polymer var: " v)
-        kw-docstring-map (deref v)]
-    (log/debug "var val: " kw-docstring-map)
-    (if as-alias
-      (do ;; (log/debug "making alias " as-alias lns)
-        ;; (log/debug "current ns: " *ns*)
-        (alias (symbol as-alias) (symbol lib))
-        #_(log/debug "ALIASES: " (ns-aliases *ns*))))
-    (doseq [[kw docstring] kw-docstring-map]
-      (do
-        (let [sym (symbol (name kw))
-              elt (declare-webcomponent lns sym :polymer docstring)]
-          ;; (log/debug "ELT: " elt)
-          #_(load (root-resource lib))
-          (throw-if (and as-alias (not (find-ns lib)))
-                    "namespace '%s' not found after loading '%s'"
-                    lib lib #_(root-resource lib))
-          (when require
-            (dosync
-             (commute *loaded-libs* conj lib)))
-          elt)))))
+;; (defn- load-polymer-lib
+;;   "Dynamically load a polymer lib. Create the namespace (e.g. polymer.x); for each
+;;   var y, get config data from the polymer/x map, then intern
+;;   polymer.codom/y"
+;;   [lib as-alias require]
+;;   ;; (log/debug "    LOAD-POLYMER-LIB: " lib as-alias require)
+;;   (let [lns (create-ns lib)
+;;         _ (log/debug "    created ns:  " lns)
+;;         segs (str/split (str lib) #"\.")
+;;         pns (find-ns lib) ; 'miraj.polymer)
+;;         _ (log/debug "    polymer ns:  " pns)
+;;         psym (symbol (str lib) (str as-alias))
+;;         _ (log/debug "    psym: " psym)
+;;         v (find-var psym)
+;;         _ (log/debug "    polymer var: " v)
+;;         kw-docstring-map (deref v)]
+;;     (log/debug "var val: " kw-docstring-map)
+;;     (if as-alias
+;;       (do ;; (log/debug "making alias " as-alias lns)
+;;         ;; (log/debug "current ns: " *ns*)
+;;         (alias (symbol as-alias) (symbol lib))
+;;         #_(log/debug "ALIASES: " (ns-aliases *ns*))))
+;;     (doseq [[kw docstring] kw-docstring-map]
+;;       (do
+;;         (let [sym (symbol (name kw))
+;;               elt (declare-webcomponent lns sym :polymer docstring)]
+;;           ;; (log/debug "ELT: " elt)
+;;           #_(load (root-resource lib))
+;;           (throw-if (and as-alias (not (find-ns lib)))
+;;                     "namespace '%s' not found after loading '%s'"
+;;                     lib lib #_(root-resource lib))
+;;           (when require
+;;             (dosync
+;;              (commute *loaded-libs* conj lib)))
+;;           elt)))))
 
 (defn- load-miraj-lib-static-resource
   [ns-sym nm-sym]
@@ -3261,15 +3261,17 @@
                                      "\n"
                                      ;; (codom/pprint-str `(.whenReady js/HTMLImports
                                      ;;(with-out-str
-                                       (codom/pprint-str `(.addEventListener js/document "WebComponentsReady"
-                                                              (cljs.core/fn []
-                                                                (try
-                                                                  (js/Polymer
-                                                                   (cljs.core/clj->js
-                                                                    ~(merge {:is (keyword html-kw)}
-                                                                            properties)))
-                                                                  (catch js/Error e#
-                                                                    (println "\"Caught exception on registration:\"" e#))))))])
+                                       ;; (codom/pprint-str `(.addEventListener
+                                       ;;                     js/document
+                                     ;;                     "WebComponentsReady"
+                                     ;; (cljs.core/fn []
+                                       (codom/pprint-str `(try
+                                                              (js/Polymer
+                                                               (cljs.core/clj->js
+                                                                ~(merge {:is (keyword html-kw)}
+                                                                        properties)))
+                                                              (catch js/Error e#
+                                                                    (println "\"Caught exception on component registration:\"" e#))))])
 
         ;; _ (log/trace "Polymer CTOR" polymer-ctor)
 
@@ -3680,7 +3682,7 @@
            ;;           (merge {:doc ~docstring :_webpage true} ~html-meta)))
            (if ~page-var
              (do
-               ;; (log/info (format "ALTERING PAGE VAR ROOT %s" ~page-var))
+               ;;(log/info (format "ALTERING PAGE VAR ROOT %s" ~page-var))
                ;; (log/info "Page Var Meta:" (meta ~page-var))
                (clojure.core/alter-var-root ~page-var
                                             (fn [old# & args#] codom#))
@@ -3704,17 +3706,30 @@
                                                 ;;        ~base-path)
                                                 ;;    nil)}
                                                 ))
-               (alter-meta! *ns* (fn [old#] (merge old# {:miraj/miraj {:miraj/pagespace true}})))
+               ;; (alter-meta! *ns* (fn [old#] (let [mrj# (:miraj/miraj old#)]
+               ;;                                 (merge old#
+               ;;                                       {:miraj/miraj
+               ;;                                        (merge mrj# {:miraj/pagespace true :foo :bar}})))
+               (alter-meta! *ns* update-in [:miraj/miraj]
+                            (fn [old#] (merge old# {:miraj/pagespace true :foo :bar})))
+               ;; (log/info (format "ns meta: %s" (meta *ns*)))
                ~page-var)
              ;; else *ns* is our page var
              (do ;; (log/info (format "ALTERING NS METADATA %s\n" *ns*))
-                 (alter-meta! *ns* (fn [old#]
-                                     (merge old#
-                                            {:miraj/miraj (merge {:miraj/defpage true
-                                                                  :doc ~docstring
-                                                                  :miraj/codom codom#}
-                                                                 ~html-meta
-                                                                 )})))))
+               (alter-meta! *ns* update-in [:miraj/miraj]
+                            (fn [old#] (merge old#
+                                              {:miraj/defpage true
+                                               :doc ~docstring
+                                               :miraj/codom codom#}
+                                              ~html-meta)))
+               ;; (alter-meta! *ns* (fn [old#]
+               ;;                       (merge old#
+               ;;                              {:miraj/miraj (merge {:miraj/defpage true
+               ;;                                                    :doc ~docstring
+               ;;                                                    :miraj/codom codom#}
+               ;;                                                   ~html-meta
+               ;;                                                   )})))
+                 ))
            )))))
 
 (defn make-resource-fns

@@ -213,7 +213,7 @@
 (defn get-component-nss-for-lib
   "get the component spaces for a deflibrary form"
   [deflib-var & verbose]
-  (log/debug "get-component-nss-for-lib for deflib var: " deflib-var)
+  ;; (log/debug "get-component-nss-for-lib for deflib var: " deflib-var)
   ;; (log/debug "link-component-cljs deflib requires: " (-> deflib-var deref))
   ;; (if *verbose* (log/info "Generating component cljs: " ))
   (let [component-nss (map first (-> deflib-var deref :miraj/require))
@@ -321,13 +321,13 @@
         libvars (if (empty? nss)
                 var-syms
                 (let [vs (flatten (get-deflib-vars nss))]
-                  (log/trace "lib VS:" vs)
+                  ;; (log/trace "lib VS:" vs)
                   (concat var-syms
                           (map #(utils/var->varsym %) vs))))
         ;; libvars (if (empty? nss)
         ;;           var-syms
         ;;           (concat var-syms (get-deflib-vars nss)))
-        _ (log/trace "Deflib vars:" libvars)
+        ;; _ (log/trace "Deflib vars:" libvars)
 
         lib-refs (if (empty? nss)
                          var-syms
@@ -335,10 +335,10 @@
         ;; lib-refs (if (empty? nss)
         ;;            var-syms
         ;;            (map #(utils/var->varsym %) (flatten libvars)))
-        _ (log/debug "Lib refs: " lib-refs)
+        ;; _ (log/debug "Lib refs: " lib-refs)
 
         lib-nss (into '() (set (map #(symbol (namespace %)) lib-refs)))
-        _ (log/trace "Lib ns syms:" lib-nss)
+        ;; _ (log/trace "Lib ns syms:" lib-nss)
         ]
     (apply clojure.core/require lib-nss)
 
@@ -366,7 +366,7 @@
                   (if (= :miraj/elements (-> deflib-var meta :miraj/miraj :miraj/deflibrary))
                     (do
                       ;; (link-component-cljs deflib-var *verbose*)
-                      (if *verbose* (log/info "Generating component library: " component-lib-ns-sym))
+                      ;; (if *verbose* (log/info "Generating component library: " component-lib-ns-sym))
                       (if-let [ns-vectors (-> deflib-var deref :miraj/require)]
                         (let [component-maps (flatten (for [ns-vector ns-vectors]
                                                         (do
@@ -375,7 +375,7 @@
                                                           (clojure.core/require (first ns-vector))
                                                           (get-component-maps-for-ns-sym
                                                            (first ns-vector)))))]
-                          (log/info "COMPONENT-MAPS: " component-maps)
+                          ;; (log/info "COMPONENT-MAPS: " component-maps)
                           ;;(doseq [component-map component-maps]
                           (let [lib-clj-path (utils/sym->path component-lib-ns-sym)
                                 ;; _ (log/debug "LIB-CLJ-PATH: " lib-clj-path)
@@ -394,7 +394,7 @@
                                 component-out-path (str (str/join "/" [*compile-path* lib-clj-file]))
                                 component-out-file (doto (io/file component-out-path) io/make-parents)
                                 ]
-                            (if *verbose* (log/debug (format "Emitting lib %s" lib-clj-file)))
+                            (if *verbose* (log/info (format "Emitting lib %s" lib-clj-file)))
                             (spit component-out-file component-defns)
                             ))
                         (do (log/debug (format "this is a 3rd party wrapper" ))
@@ -473,7 +473,7 @@
 
 (defn- write-deps-html
   [page-sym codom-maps]
-  (log/trace "FN: write-deps-html" page-sym codom-maps)
+  ;; (log/trace "FN: write-deps-html" page-sym codom-maps)
   (let [page-ns-sym (if-let [pns (namespace page-sym)] (symbol pns) page-sym)
         pagelib-path (utils/sym->path page-sym)
         pagespace-sym page-sym ;; (-> page-ns ns-name)
@@ -488,20 +488,20 @@
 
         ;; a. get external imports from source file <ns>/deps.edn
         external-deps (get-external-deps-map pagelib-path)
-        _ (log/trace "EXTERNAL DEPS: " external-deps)
+        ;; _ (log/trace "EXTERNAL DEPS: " external-deps)
 
         ;; from normalize: get lexical deps
         ;; first: user-defined component spaces
         miraj-vars (get-miraj-vars-for-pagespace page-ns)
-        _ (log/debug "MIRAJ-vars: " miraj-vars)
+        ;; _ (log/debug "MIRAJ-vars: " miraj-vars)
 
         miraj-nss (set (map (fn [r] (-> r meta :ns)) miraj-vars))
-        _ (log/debug (format "Miraj NSs %s" miraj-nss))
+        ;; _ (log/debug (format "Miraj NSs %s" miraj-nss))
 
         ;; miraj-built user-defined libs have non-empty :miraj/nss, link import
         ;; href will be constructed from ns
         miraj-libs (set (filter (fn [e]
-                                  (log/trace "NS::" e (-> e meta))
+                                  ;; (log/trace "NS::" e (-> e meta))
                                   ;; (log/debug (format "MIRAJ LIB NSS %s %s"
                                   ;;                    e (-> e meta :miraj/miraj :miraj/nss)))
                                   (and
@@ -510,7 +510,7 @@
                                        (-> e meta :miraj/miraj :miraj/styles))
                                    #_(-> e meta :miraj/miraj :miraj/assets :miraj/impl-nss)))
                                 miraj-nss))
-        _ (log/debug "MIRAJ LIBS: " miraj-libs)
+        ;; _ (log/debug "MIRAJ LIBS: " miraj-libs)
 
         vendor-libs (set (filter (fn [e] #_(log/debug (format "MIRAJ LIB NSS %s %s"
                                                               e (-> e meta :miraj/miraj :miraj/nss)))
@@ -530,7 +530,7 @@
         lex-deps (into [] (for [miraj-var miraj-vars]
                             {:href (str (-> miraj-var meta
                                                 :miraj/miraj :miraj/assets :miraj/href))}))
-        _ (log/debug (format "LEX DEPS %s" (seq lex-deps)))
+        ;; _ (log/debug (format "LEX DEPS %s" (seq lex-deps)))
 
         ;; if this is a mixed ns (both defpages and defcomponents)
         ;; get defcomponents from page
@@ -562,7 +562,7 @@
         ;;  :js lib-js-file})
         html-loader-path (str (str/join "/" [*compile-path* html-loader-file]))
         html-loader-out-file (doto (io/file html-loader-path) io/make-parents)]
-    (log/debug (format "Emitting %s" html-loader-file))
+    (log/info (format "Emitting %s" html-loader-file))
     (spit html-loader-out-file html-loader)))
 
 ;; one html loader file per pagespace. all pages defpaged in one
@@ -574,17 +574,17 @@
   (if *verbose* (log/info "link-pages: " opts))
   (let [nss-syms (:pages opts)]
     (doseq [pagespace-sym nss-syms]
-      (log/trace "Processing ns:" pagespace-sym)
+      ;; (log/trace "Processing ns:" pagespace-sym)
       (clojure.core/require (if (namespace pagespace-sym)
                               (symbol (namespace pagespace-sym))
                               pagespace-sym))
       (let [pagespace-ns (if-let [pns (namespace pagespace-sym)]
                            (find-ns (symbol pns))
                            (find-ns pagespace-sym))]
-        (if (-> pagespace-ns meta :miraj/miraj :miraj/defpage)
-          (log/trace "Found defpage ns:" pagespace-ns))
-        (if (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
-          (log/trace "FOUND pagespace ns:" pagespace-ns))
+        ;; (if (-> pagespace-ns meta :miraj/miraj :miraj/defpage)
+        ;;   (log/trace "Found defpage ns:" pagespace-ns))
+        ;; (if (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
+        ;;   (log/trace "FOUND pagespace ns:" pagespace-ns))
         (if (or (-> pagespace-ns meta :miraj/miraj :miraj/pagespace)
                 (-> pagespace-ns meta :miraj/miraj :miraj/defpage))
           (do
@@ -606,7 +606,7 @@
                                                    ;; assume pagespace is not also componentspace?
                                                    #_(not= % pagespace-ns))
                                              all-nss))
-                  _ (log/debug "COMPONENT NSs for pagespace: " component-nss)
+                  ;; _ (log/debug "COMPONENT NSs for pagespace: " component-nss)
 
                   ;; 1. iterate over component-nss, pulling out the :miraj/nss and converting to hrefs
                   ;;    NB: :miraj/nss lists the cljs implementation nss for each component lib
@@ -615,15 +615,15 @@
                                          (for [component-ns component-nss]
                                            (do (clojure.core/require
                                                 [(-> component-ns ns-name)])
-                                               (log/debug (format "NS %s" component-ns))
-                                               (log/debug (format "META: %s"
-                                                                  (-> component-ns meta
-                                                                      :miraj/miraj
-                                                                      keys)))
+                                               ;; (log/debug (format "NS %s" component-ns))
+                                               ;; (log/debug (format "META: %s"
+                                               ;;                    (-> component-ns meta
+                                               ;;                        :miraj/miraj
+                                               ;;                        keys)))
                                                (let [nss (-> component-ns meta
                                                              :miraj/miraj :miraj/nss)]
                                                  (if (empty? nss) nil nss))))))
-                  _ (log/debug (format "CLJS_IMPL_NSS %s" (seq cljs-impl-nss)))
+                  ;; _ (log/debug (format "CLJS_IMPL_NSS %s" (seq cljs-impl-nss)))
 
                   pagelib-path (utils/sym->path pagespace-sym)
                   ;; _ (log/debug "PAGELIB-PATH: " pagelib-path)
@@ -650,7 +650,7 @@
                   codom-maps (vec (map (fn [ns]
                                          {:loader (str "/" (utils/sym->path ns) ".html")})
                                        cljs-impl-nss))
-                  _ (log/debug "CODOM-MAPS: " codom-maps)
+                  ;; _ (log/debug "CODOM-MAPS: " codom-maps)
 
                   pagelib-file (str pagelib-path ".clj")
                   pagelib-js-file (str pagelib-path ".js")]
@@ -766,7 +766,7 @@
                 ;;  :js lib-js-file})
                 html-loader-path (str (str/join "/" [*compile-path* html-loader-file]))
                 html-loader-out-file (doto (io/file html-loader-path) io/make-parents)]
-            (log/debug (format "Emitting %s" html-loader-path))
+            (log/info (format "Emitting %s" html-loader-path))
             (spit html-loader-out-file html-loader))
           ;; 2. write cljs.edn file
           (let [js-path (str pagelib-path "/js")
@@ -833,7 +833,7 @@
                   {:demos page-links})
         demopage-path (str (str/join "/" [*compile-path* demopage-filename]))
         demopage-out-file (doto (io/file demopage-path) io/make-parents)]
-    (if *verbose* (log/debug (format "Emitting %s" demopage-path)))
+    (if *verbose* (log/info (format "Emitting %s" demopage-path)))
     (spit demopage-out-file demopage)))
 
 #_(defn create-lib-test-pages
@@ -985,36 +985,36 @@
   the component vars in the ns.  So the user can pass any combination
   of ns and var syms; the latter will override the former."
   [opts]
-  (log/trace "get-defcomponent-syms: " opts)
+  ;; (log/trace "get-defcomponent-syms: " opts)
   (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
-        _ (log/trace "NS SYMS:" ns-syms)
+        ;; _ (log/trace "NS SYMS:" ns-syms)
 
         var-syms (set (filter #(namespace %) (:components opts)))
-        _ (log/trace "VAR SYMS:" var-syms)
+        ;; _ (log/trace "VAR SYMS:" var-syms)
 
         var-nss (set (map #(symbol (namespace %)) var-syms))
-        _ (log/trace "VAR NSs:" var-nss)
+        ;; _ (log/trace "VAR NSs:" var-nss)
 
         ;; we'll want vars for nss, except where a var in that ns was passed
         nss (clojure.set/difference ns-syms var-nss)
-        _ (log/trace "Filtered NS SYMS:" nss)
+        ;; _ (log/trace "Filtered NS SYMS:" nss)
 
         cvars (if (empty? nss)
                 var-syms
                 (let [vs (flatten (get-defcomponent-vars-for-nss nss))]
-                  (log/trace "VS:" vs)
+                  ;; (log/trace "VS:" vs)
                   (concat var-syms
                           (map #(utils/var->varsym %) vs))))
-        _ (log/trace "CVARS:" cvars)
+        ;; _ (log/trace "CVARS:" cvars)
 
         component-refs (if (empty? nss)
                          var-syms
                          cvars)
                          ;; (map #(utils/var->varsym %) (flatten cvars)))
-        _ (log/debug "Component refs: " component-refs)
+        ;; _ (log/debug "Component refs: " component-refs)
         ;; component-nss (set (map #(namespace %) component-refs))
         component-nss (into '() (set (map #(symbol (namespace %)) component-refs)))
-        _ (log/trace "Component NS syms:" component-nss)
+        ;; _ (log/trace "Component NS syms:" component-nss)
         ]
     (apply clojure.core/require component-nss)
     component-refs))
@@ -1082,7 +1082,7 @@
                         :components components})
             demopage-path (str (str/join "/" [*compile-path* "index.html"]))
             demopage-out-file (doto (io/file demopage-path) io/make-parents)]
-          (log/debug (format "Emitting %s" demopage-path))
+          (log/info (format "Emitting %s" demopage-path))
           (spit demopage-out-file demopage))
       ;; we're give syms for componentspaces and their defcomponents
       ;; we need to get the component names and interpret them in the library ns
@@ -1113,7 +1113,7 @@
                            :components components})
                 demopage-path (str (str/join "/" [*compile-path* "index.html"]))
                 demopage-out-file (doto (io/file demopage-path) io/make-parents)]
-            (log/debug (format "Emitting index.html"))
+            (log/info (format "Emitting index.html"))
             (spit demopage-out-file demopage))
           )))
 
@@ -1172,7 +1172,7 @@
                         :component-lib ns-sym})
           testpage-path (str (str/join "/" [*compile-path* testpage-filename]))
           testpage-out-file (doto (io/file testpage-path) io/make-parents)]
-      (log/debug (format "Emitting %s" testpage-filename))
+      (log/info (format "Emitting %s" testpage-filename))
       (spit testpage-out-file testpage))))
 
 (defn add-polyfill
@@ -1211,7 +1211,7 @@
 (defn compile-polymer-components
   "Compile required web components."
    []
-  (println "    COMPILE-POLYMER-COMPONENTS")
+  ;; (println "    COMPILE-POLYMER-COMPONENTS")
   (let [refsets (get-miraj-vars-all-nss)
         _ (log/info "  REFS: " refsets)
         _ (doseq [refs refsets] (doseq [ref refs] (println (first ref) ": "
@@ -1228,8 +1228,8 @@
 (defn- compile-polymer-component
   "Compile required web component forms."
    [import imports-config-map cache & verbose]
-  (println "    COMPILE-POLYMER-COMPONENT: " import)
-  (println "    IMPORTS-config-map: " imports-config-map)
+  ;; (println "    COMPILE-POLYMER-COMPONENT: " import)
+  ;; (println "    IMPORTS-config-map: " imports-config-map)
   (let [pns (first import)
         items (apply hash-map (next import))
         segs (str/split (str pns) #"\.")
@@ -1400,7 +1400,7 @@
 (defn compile-webcomponent-vars-html
   "Compile all webcomponents in namespaces to html."
   [opts] ;; pprint verbose]
-  (if (:verbose opts) (log/debug (format "compile-webcomponent-vars-html %s" (:components opts))))
+  ;; (if (:verbose opts) (log/debug (format "compile-webcomponent-vars-html %s" (:components opts))))
   ;;  (let [nss (into '() (set (map #(symbol (namespace %)) (:components opts))))]
   (let [component-refs (get-defcomponent-syms opts)]
   ;; (let [ns-syms (set (filter #(not (namespace %)) (:components opts)))
@@ -1526,18 +1526,20 @@
 (defn compile-page-ref
   "Compile pageref to html+js and write to *compile-path*."
   [page-ref]
-  ;; (if *verbose* (log/debug "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
+  ;; (if *verbose* (log/info "COMPILE-PAGE-REF: " page-ref (var? page-ref)))
   ;; (if *verbose* (log/debug "COMPILE-PAGE-REF meta: " (-> page-ref meta)))
 
   ;; inject polyfill, so imports will work
   ;; inject link import page/imports.html, unless compile-only is specified
 
-  ;; 3 possibilities for page-ref: ns with defpage, ns containing defpages, and defpage var
+  ;; 3 possibilities for page-ref: ns with anon defpage, ns with named defpages, and defpage var
   (let [[page-ref-name page-ref-ns]
         (if (var? page-ref)
-          [(str (-> page-ref meta :name)) (-> page-ref meta :ns)]
+          (do ;; (log/info "page-ref is var")
+              [(str (-> page-ref meta :name)) (-> page-ref meta :ns)])
           ;; must be an ns?
-          [(str (-> page-ref ns-name)) page-ref])
+          (do ;; (log/info "page-ref is NOT var")
+              [(str (-> page-ref ns-name)) page-ref]))
         html-path (utils/ns->path page-ref-ns)
         page-html-name (if (var? page-ref)
                          (str html-path "/" page-ref-name ".html")
@@ -1559,7 +1561,10 @@
   ;; (log/trace  (format "mcc %s" opts))
   ;; (let [pagespaces (or pagespaces (if (and page (nil? pages)) nil :all))
   ;;       pages (or pages (if (and page (nil? pagespaces)) nil :all))]
+
   (if pages
+    ;; pages syms may be either ns syms or var syms
+    ;; if they are ns syms, find all defcomponents in the ns
     (doseq [page pages]
       ;; (log/trace "Compiling Page:" page (-> page type))
       ;; we need to reload for repl development - FIXME: put this in the boot task
@@ -1591,11 +1596,12 @@
                   (instance? clojure.lang.Namespace page) (do [page page nil (-> page ns-name)]))]
         ;; (log/trace "Page Ref: " page-ref)
         ;; (log/trace "Page ns: " page-ns)
-        ;; (log/trace "Page ns meta: " (meta page-ns))
+        ;; ;; (log/trace "Page ns meta: " (meta page-ns))
         ;; (log/trace "Page var: " page-var)
         ;; (log/trace "Page var meta: " (meta page-var))
         ;; (log/trace "Page sym: " page-sym)
         ;; (log/trace "Page meta: " (-> page-sym meta))
+
         (if (and (nil? page-ref) (nil? page-var))
           (throw (Exception. (format "Page not found: %s" page))))
         ;; reloading page is client responsibility - boot task or repl
@@ -1614,15 +1620,16 @@
         (compile-page-ref page-ref))))
   (if pagespaces
     (doseq [pagespace-sym pagespaces]
-      (log/trace (format "Compiling pagespace %s" pagespace-sym))
+      ;; (log/trace (format "Compiling pagespace %s" pagespace-sym))
       (clojure.core/require [pagespace-sym]) ;; :reload)
       ;; first compile all defpage vars in ns
       (let [pages (get-page-vars-for-ns pagespace-sym)]
         (doseq [page pages]
-          (log/trace (format "Compiling pagevar %s" page))
-          ;; compile page
+          ;; (log/trace (format "Compiling pagevar %s" page))
+          (compile-page-ref page)
           ))
       ;; then compile the ns, if there is a lambda defpage
+      ;; (log/trace "pagesym meta:" (-> pagespace-sym find-ns meta :miraj/miraj))
       (if (-> pagespace-sym find-ns meta :miraj/miraj :miraj/defpage)
         (let [ps (-> pagespace-sym find-ns)]
           (if polyfill (add-polyfill ps polyfill))
@@ -1633,7 +1640,7 @@
             (alter-meta! ps (fn [old new]
                               (assoc-in old [:miraj/miraj :miraj/deps] new))
                          [(str "/" (utils/sym->path pagespace-sym) "/deps.html")]))
-          (log/trace (format "Compiling lambda-page %s" pagespace-sym))
+          ;; (log/trace (format "Compiling lambda-page %s" pagespace-sym))
           (compile-page-ref ps))))))
 
 (defn webdeps
