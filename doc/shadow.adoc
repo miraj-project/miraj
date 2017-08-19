@@ -1,0 +1,5 @@
+= shadow dom
+
+Resources:
+
+https://hayato.io/2016/shadowdomv1/#insertion-points-v0-vs-slots-v1[What's New in Shadow DOM v1 (by examples)] (Hayato Ito)

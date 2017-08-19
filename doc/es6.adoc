@@ -1,0 +1,18 @@
+= es 6 in clojurescript
+
+JS docs:
+
+* https://scotch.io/tutorials/better-javascript-with-es6-pt-ii-a-deep-dive-into-classes[Better JavaScript with ES6, Pt. II: A Deep Dive into Classes]
+
+* https://github.com/addyosmani/es6-equivalents-in-es5#classes[ECMAScript 6 equivalents in ES5]
+
+* https://www.accelebrate.com/blog/javascript-es6-classes-and-prototype-inheritance-part-1-of-2/[JavaScript ES2015 Classes and Prototype Inheritance]
+
+* https://www.sitepoint.com/object-oriented-javascript-deep-dive-es6-classes/[Object-Oriented JavaScript — A Deep Dive into ES6 Classes]
+
+* https://esdiscuss.org/topic/extending-an-es6-class-using-es5-syntax[extending an ES6 class using ES5 syntax?]
+
+
+CLJS docs:
+
+* https://github.com/clojure/clojurescript/wiki/Working-with-Javascript-classes[Working with Javascript classes]
