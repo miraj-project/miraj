@@ -424,6 +424,7 @@
                                                      meta :miraj/miraj :miraj/assets :miraj/href))}))
         ;; _ (log/debug (format "VENDOR LINKS %s" (seq vendor-links)))
 
+        ;; FIXME: only create deps.html if has-deps-edn is true
         ;; href must match html-loader path in compiler/link-pages
         miraj-links (for [lib miraj-libs]
                       (codom/element :link
@@ -3058,7 +3059,7 @@
    :added "1.0"}
   [name as html-tag & references]
   (if (not= as :html) (throw (Exception. (format "Second argument must be :html, not %s" as))))
-  (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
+  ;; (log/debug "DEFCOMPONENT: " html-tag " as " name " in ns " *ns*)
   ;; (log/debug "    REFS: " references)
   (let [component-var (intern *ns* name)
         ;; _ (log/debug "component var: " component-var)
